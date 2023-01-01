@@ -1,0 +1,9 @@
+# Default ignored files
+.idea/
+__pycache__/
+forsave/
+programs_ml/
+tests/
+venv/
+tokens.py
+SAMPLE_BasicFormats.py
