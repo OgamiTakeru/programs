@@ -354,16 +354,18 @@ def renzoku_gap_compare(oldest_ans, latest_ans):
                                    "type": "STOP", "trail_range": 0.08, "direction": 1}
                     # order_res = oa.OrderCreate_exe(10000, 1, target_price, 0.05, lc_pips, "STOP", 0, "remark")  # 順思想（順張・現より低い位置に注文入れたい）
                     # order_res_r = oa.OrderCreate_exe(10000, -1, target_price_r, 0.05, lc_pips_r, "STOP", 0, "remark")  #逆思想（順張り・現より高い位置に注文入れたい）
+                return {"forward": for_order, "reverse": for_order_r}
             else:
-                print(" 幅のみみたさず", latest_ans['direction'], latest_ans['latest_price'])
-                for_order = {"direction": 0}
-                for_order_r = {"direction": 0}
-            return {"forward": for_order, "reverse":for_order_r}
+                # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
+                #  これ、意外と使える可能性も、、、
+                # for_order = {"direction": 0}
+                # for_order_r = {"direction": 0}
+                return 0
         else:
-            print(" 行数未達")
+            # print(" 行数未達")
             return 0
     else:
-        print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
+        # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
         return 0
 
 

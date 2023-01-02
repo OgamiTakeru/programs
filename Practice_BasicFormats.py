@@ -44,6 +44,9 @@ math.isnan()　　#Nanの場合
 datetime.datetime.strptime(now_cross5_time, '%Y/%m/%d %H:%M:%S')
 # 日付の差分を求める
 
+# 辞書配列をデータフレームにする
+pd.DataFrame(dic_list)
+
 
 
 # ループでのDataFrameの中の書き換え

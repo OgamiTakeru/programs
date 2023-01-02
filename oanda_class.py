@@ -189,9 +189,17 @@ class Oanda:
 
     def InstrumentsCandles_exe(self, instrument, params):
         """
-        過去情報（ローソク）の取得
+        過去情報（ローソク）の取得 （これが基本的にAPIを叩く関数）
         呼び出し:oa.InstrumentsCandles_exe("USD_JPY",{"granularity": "M15","count": 30})　Countは最大5000。
         返却値:Dataframe[time,open.close,high,low,time_jp]の4列
+        :param instrument:"USD_JPY"
+        :param params:引数はそのままAPIに渡される。辞書形式となる。
+            granularity:足幅。M1,M5,M15等。最小はS5（五秒足）
+            count: 何行とるか。以下のtoを指定しない場合、直近からcount行を取得する
+            price: 指定なし可。指定なしの場合AskとBidの中央価格（Mid）を取得。"A"でAsk価格、"B"でBid価格を取得
+            to:2023-01-02T10:30:00.000000000Z の形式で指定。この時間"まで"のcount行のデータを取得する。
+            from:2023-01-02T10:30:00.000000000Z の形式で指定。この時間"から"のcount行のデータを取得する。
+        :return:ここではmid列が辞書形式のままのデータフレーム
         """
         ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
         res_json = self.api.request(ep)  # 結果をjsonで取得
@@ -200,15 +208,31 @@ class Oanda:
         # 返却
         return data_df
 
+    def InstrumentsCandles_each_exe(self, instrument, params):
+        """
+        過去情報（ローソク）の取得（基本的にはInstrumentsCandles_exeと同じ。）
+        時間で取りたい場合にこっちがいいかもしれない。
+        """
+        ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
+        res_json = self.api.request(ep)  # 結果をjsonで取得
+        data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
+        data_df['time_jp'] = data_df.apply(lambda x: self.iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
+        data_df = self.add_basic_data(data_df)  # 【関数/必須】基本項目を追加する
+        # 返却
+        return data_df
+
     def InstrumentsCandles_multi_exe(self, pair, params, roop):
         """
         過去情報をまとめて持ってくる【基本的にはこれを呼び出して過去の情報を取得する。InstrumentsCandles_exeとセット利用】
-        呼び出し例 :oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50}, roop(何セットか))
-                ↑取れる行数は、50×roop行
         なお、基本的にはMidの価格を取得する。AskやBidがほしい場合、
          oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50, "price": "B" }
          のように、priceで指定する（指定なし＝mid B＝bid A=ask ただし、221030日時点、Mid前提のクラスの為注意）
         返却値:Dataframe[time,open.close,high,low,time_jp]　＋　add_information関数達で情報追加
+        :param pair: "USD_JPY" のような形式
+        :param params:{"granularity": 'M5', "count": 5000}のように、足単位と何行取得するか(Max5000)。
+                        デフォルトではmidlle価格（askとbidの中間）を取得。Ask/Bidを取得する場合、"price":"B"or"A"を追加。
+        :param roop: 上記情報が何セット欲しいか(5000行以上欲しい場合に有効。5000以下は、この数は１の方が当然動きが早い）
+        :return:
         """
         candles = None  # dataframeの準備
         for i in range(roop):
@@ -219,7 +243,7 @@ class Oanda:
         # 取得した情報をtime_jpで並び替える
         candles.sort_values('time_jp', inplace=True)  # 時間順に並び替え
         temp_df = candles.reset_index()  # インデックスをリセットし、ML用のデータフレームへ
-        temp_df.drop(['index'], axis=1, inplace=True)  # 不要項目の削除（volumeってなに）
+        temp_df.drop(['index'], axis=1, inplace=True)  # 不要項目の削除
         # 解析用の列を追加する（不要な場合はここは削除する。機械学習等で利用する）
         data_df = self.add_basic_data(temp_df)  # 【関数/必須】基本項目を追加する
         data_df = self.add_ema_data(data_df)
@@ -387,8 +411,8 @@ class Oanda:
     def OrderCreate_exe(self, units, ask_bid, price, tp_range, lc_range, type, tr_range, remark):
         """
         オーダーを発行する。
-        :param units: 購入するユニット数。大体
-        :param ask_bid: 1の場合買い、-1の場合売り
+        :param units: 購入するユニット数。大体1万とか。
+        :param ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid)
         :param price: 130.150のような小数点三桁で指定。（メモ：APIで渡す際は小数点３桁のStr型である必要がある。本関数内で自動変換）
         :param tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。
         :param lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。
@@ -409,7 +433,7 @@ class Oanda:
                 "units": 100000,
                 "type": "",  # "STOP(逆指)" or "LIMIT"
                 "positionFill": "DEFAULT",
-                "price": "999",
+                "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
             }
         }
         data['order']['units'] = str(units * ask_bid)  # 必須　units数。基本10000 askはマイナス、bidはプラス値

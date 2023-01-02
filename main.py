@@ -209,6 +209,8 @@ def make_position():
                                          0.1, ans['reverse']['lc_range'], "STOP", 0.08,
                                          "remark")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
+        tk.line_send("３６直前が中途半端な折り返しの可能性！！！", latest_ans['direction'], datetime.datetime.now().replace(microsecond=0))
+
         # print(" 該当あり", ans)
         # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
@@ -285,10 +287,11 @@ def main():
         print("    ◇未確定注文有", gl['now'])
         past_time = pending_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
         print("  orderあり（保持中）", past_time)
-        # if past_time.seconds > 60 * gl["order_limit_minute"]:
-        #     # 12分以上経過している場合、オーダーをキャンセルする
-        #     oa.OrderCancel_All_exe()
-        #     tk.line_send("12分以上のオーダーを解除します")
+        limit_time_min = 20
+        if past_time > 60 * limit_time_min:  # 60*指定の分
+            # 12分以上経過している場合、オーダーをキャンセルする
+            oa.OrderCancel_All_exe()
+            tk.line_send(str(limit_time_min), "以上のオーダーを解除します")
     # ★メインとなる分岐
     if len(position_df) != 0:
         # ★ポジションがある場合（ポジション解消検討処理へ）
@@ -365,7 +368,7 @@ gl = {
     "now_s": 0,
     'now': datetime.datetime.now().replace(microsecond=0),
     "latest_get": datetime.datetime.now() + datetime.timedelta(minutes=-20),  # 初期値は現時刻ー２０分
-    "spread": 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
+    "spread": 0.8, # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
     "tp": 0.035,
     "lc": 0.02,
     "p_order": 2,  # 極値の判定幅

@@ -19,8 +19,8 @@ def main_peak():
     mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": gl['candle_unit'], "count": gl['candle_num']}, gl['num'])
     mid_df = f.add_peak(mid_df, pv_order)
     mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
-    print("tttt")
-    print(mid_df)
+    # print("tttt")
+    # print(mid_df)
     # 読み込み
     # mid_df = pd.read_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', sep=",", encoding="utf-8")  # test
     # mid_df = pd.read_csv('C:/Users/taker/Desktop/viewtest_data.csv', sep=",", encoding="utf-8")  # 読み込み
@@ -178,107 +178,115 @@ def main_peak():
 
 
     # 折り返し未遂判定（直近を「含まない」３足が、連続上昇している、かつ、その３足目が極値となるようなVじを描いている場合
-    inspection_range = 15  # 実際はそれより一つ多いDFが取得される（９の場合１０行）
     # 計算用の列を追加する
     # mid_df['middle_price'] = round(mid_df['inner_low'] + (mid_df['body_abs'] / 2), 3)
     mid_df['middle_price_gap'] = mid_df['middle_price'] - mid_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
     mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
     mid_df['return_half'] = None
     mid_df['return_half_all'] = None
+    inspection_range = 15  # 実際はそれより一つ多いDFが取得される（９の場合１０行）
+    TEST_range = 10
+    TEST_ans_arr = []
     for i in range(len(mid_df)):
-        d = mid_df[len(mid_df)-inspection_range-i : len(mid_df)-i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。最大３０行
+        d = mid_df[len(mid_df)-inspection_range-i: len(mid_df)-i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。最大３０行
+        TEST_df = mid_df[len(mid_df)-i: len(mid_df)-i + TEST_range]  # ■検証用！！（条件がそろった後、どう動くかの検証）
+
         # 対象の範囲を調査する (実際ではdが取得された範囲）
         if len(d) >= inspection_range:
             index_graph = d.index.values[-1]  # インデックスを確認
-            dr = d.sort_index(ascending=False)
-            dr_latest_n = 3
-            dr_oldest_n = 10
+            dr = d.sort_index(ascending=False)  # ★dが毎回の取得と同義⇒それを逆にする（逆を意味するrをつける）
+
+            dr_latest_n = 3  # 直近、何連続で同一方向への変化か（InnerHighとInnerLowの中央値の推移で検証）
+            dr_oldest_n = 10  # その前に何連続で同方向への変化があるかの最大値。この中で最長何連続で同方向に行くかが大事。
             latest_df = dr[1: dr_latest_n+1] # 直近の３個を取得
             oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
-            # print(" All")
-            # print(dr)
-            print(dr.iloc[0]['time_jp'])
-            # print(latest_df)
-            # print(oldest_df)
-
-            latest_ans = f.renzoku_gap_pm(latest_df)
-            oldest_ans = f.renzoku_gap_pm(oldest_df)
-            ans = f.renzoku_gap_compare(latest_ans, oldest_ans)
+            latest_ans = f.renzoku_gap_pm(latest_df)  # 直近何連続で同方向に行くかの結果を取得
+            oldest_ans = f.renzoku_gap_pm(oldest_df)  # その後何連続で同じ方向に行くのかの結果を取得
             ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
             if ans == 0:
-                print("0")
+                # print("　該当なし", dr.iloc[0]['time_jp'])
+                pass
             else:
-                print(" 該当有", ans['forward']['direction'], ans)
-                # print(" 該当あり", ans)
+                # print("　該当有", dr.iloc[0]['time_jp'], ans['forward']['direction'], ans)
+                print(d.iloc[-1]['time_jp'], "■■")
+                print("　該当有")
                 mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
+                # ■以下検証用
+                if len(TEST_df) >= TEST_range:  # 検証可能な場合、ざっくりとした検証を実施する
+                    print(" [検証時刻:", dr.iloc[0]['time_jp'], "終了", TEST_df.iloc[-1]["time_jp"], dr.iloc[0]['time'])
+                    # 検証範囲のデータフレームを取得（S5）
+                    # print(dr.iloc[0]['time'])
+                    mid_s5_df = oa.InstrumentsCandles_each_exe("USD_JPY",
+                                                            {"granularity": 'S5', "count": 1000,
+                                                             "from": dr.iloc[0]['time']})
+                    print(mid_s5_df.head(1))
+                    # 検証用の変数
+                    f_flag = r_flag = position_flag = 0
+                    fl_flag = 0
+                    position_time = 0
+                    for index, item in mid_s5_df.iterrows():
+                        if position_flag == 0: # ■ポジションを持っていない場合
+                            if item['low'] < ans['forward']['target_price'] < item['high']:
+                                print(" 順方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
+                                f_flag = 1
+                                fr_flag = 1
+                                lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
+                                tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
+                            if item['low'] < ans['reverse']['target_price'] < item['high']:
+                                r_flag = 1
+                                fr_flag = -1
+                                print(" 逆方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
+                                lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス方向
+                                tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
+                            # ポジション条件のいずれかを満たしている場合、ポジションフラグを立てて次の行へ。
+                            if f_flag == 1 or r_flag == 1:
+                                position_flag = 1
+                                print(" Po", item['time_jp'], fr_flag, ans['forward']['target_price'], lc_price, tp_price)
+                                # 自身の行でロスカ利確に行っているかの判断（ここはやむなく５分足・・？）
+                        else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
+                            # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
+                            if item['low'] < lc_price < item['high']:
+                                print(" LC")
+                                TEST_ans_arr.append(
+                                    {
+                                    "jd_time": dr.iloc[0]['time_jp'],
+                                    "flag": fr_flag,
+                                    "posi_time": item['time_jp'],
+                                    "posi_price": ans['forward']['target_price'],
+                                    "lc_price": lc_price,
+                                    "tp_price":tp_price,
+                                    "res": "LC",
+                                    "res_gap": ans['forward']['lc_range'] * -1
+                                    }
+                                )
+                                print(TEST_ans_arr)
+                                break
+                            if item['low'] < tp_price < item['high']:
+                                print(" TP")
+                                TEST_ans_arr.append(
+                                    {
+                                        "jd_time": dr.iloc[0]['time_jp'],
+                                        "flag": fr_flag,
+                                        "posi_time": item['time_jp'],
+                                        "posi_price": ans['forward']['target_price'],
+                                        "lc_price": lc_price,
+                                        "tp_price": tp_price,
+                                        "res": "TP",
+                                        "res_gap": ans['forward']['tp_range']
+                                    }
+                                )
+                                print(TEST_ans_arr)
+                                break
+    # 結果の表示
+    print(TEST_ans_arr)
+    res_df = pd.DataFrame(TEST_ans_arr)
+    print(res_df)
+    res_df.to_csv(tk.folder_path + 'inspection.csv', index=False, encoding="utf-8")
 
-    ###
-    ### クロスポイントの位置から、戻りを取得するプログラム
-    # 前回のクロスポイントと極値の関係を確認する(クロス一回につき１回となるのかな？）
-    # c = 0
-    # counter = 0
-    # vacant_flag = 0
-    # mid_df['test_target_price'] = None  # 項目の追加
-    # mid_df['test_target_price_v'] = None  # 項目の追加
-    # for i in range(len(mid_df)):
-    #     d = mid_df[:i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。⇒模擬テスト情報
-    #     print(" ")
-    #     if len(d) >= 2:
-    #         # 模擬テスト（ここのDは、ある一回分のデータ）　元々TOPが旧、Bottomが新のデータ。新から見て最新のCrossを見つけるところから
-    #         cross_df = d[d['cross'] != 0]  # 空欄以外を抽出（フィルタ）
-    #         cross_r_df = cross_df.sort_index(ascending=False)  # 逆向きのデータフレームを取得し、調査する
-    #         # print(d)
-    #         # クロスタイムの更新があれば
-    #         if gl_cross['b_time'] != cross_r_df.iloc[0]['time_jp']:
-    #             print(" Cross点更新有")
-    #             gl_cross['b_price'] = cross_r_df.iloc[0]['ema_l']
-    #             gl_cross['b_cross'] = cross_r_df.iloc[0]['cross']
-    #             gl_cross['b_time'] = cross_r_df.iloc[0]['time_jp']
-    #             if gl_cross['b_cross'] == 1:
-    #                 # goldenの場合
-    #                 target_price = gl_cross['b_price'] + 0.06  # この価格を二回通過したら（往復）
-    #             elif gl_cross['b_cross'] == -1:
-    #                 # dead
-    #                 target_price = gl_cross['b_price'] - 0.06  # この価格を二回通過したら（往復）
-    #             else:
-    #                 # 0の場合
-    #                 target_price = 0
-    #                 print("nazo",gl_cross['b_price'],gl_cross['b_time'],gl_cross['b_cross'])
-    #             # 共通
-    #             mid_df.loc[i - 1, 'test_target_price'] = target_price  # グラフ用
-    #             counter = 0  # カウンターのリセット
-    #             vacant_flag = 0  # 空白（何もない期間のカウント。連続ではカウントされない）
-    #             print("Target", target_price, gl_cross['b_cross'], gl_cross['b_price'], gl_cross['b_time'], counter)
-    #         else:
-    #             # print(" Cross更新無し")
-    #             # 通過したのかを確認（本番ではリアルタイムだが、練習で足の中に入っているかどうか）
-    #             print(d.iloc[-1]["time_jp"], d.iloc[-1]["low"], target_price, d.iloc[-1]["high"])
-    #             if d.iloc[-1]["low"] <= target_price <= d.iloc[-1]["high"]:
-    #                 if counter >= 1:
-    #                     # 二回目の通貨の場合（取引開始） インクリメントのタイミング上、1の場合２回通過って感じ
-    #                     if gl_cross['b_cross'] == 1:
-    #                         # 前回がゴールデンの場合、上にいって帰ってきたところを取る⇒ショート方向に入れる
-    #                         print(" 取引開始（ショート）", target_price, d.iloc[-1]["time_jp"])
-    #                         position = 1  # 解消しないと
-    #                     elif gl_cross['b_cross'] == -1:
-    #                         # 前回がデッドの場合、下に行って帰ってきたところを取る⇒ロング方向に入れる
-    #                         print(" 取引開始（ロング）", target_price, d.iloc[-1]["time_jp"])
-    #                         position = 1  # 解消しないと。。
-    #                     counter = 0  # ここでリセット？
-    #                 else:
-    #                     # 二かいい目以前の場合（最大１回だけど）
-    #                     counter += 1
-    #                     print(" 通貨", counter)
-    #             else:
-    #                 # 価格を含まない場合
-    #                 if counter > 0:
-    #                     # すでに範囲のカウントが始まってるばあい、
-    #                     vacant_flag = 1  # 対象の行が、価格を含まない場合は空きフラグを立てておく。（範囲関係なく）
 
 
 
     # ★結果表示等
-
     #  通常より伸びた足を取得する（通常の３倍程度の足の後は、戻しが強いので、そこを取りたい）
     mid_df['big_foot'] = mid_df['body_abs'].apply(lambda x: '1' if x>=0.025 else '0')
     mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
@@ -337,7 +345,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 150,
+    "candle_num": 1000,
     "num": 1,
     "candle_unit": "M5",
 }
