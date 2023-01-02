@@ -498,8 +498,8 @@ class Oanda:
             for index, row in open_df.iterrows():
                 if row['type'] == 'LIMIT' or row['type'] == 'STOP':
                     pass
-                    # res_df = self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする　　不要なの？
-                # close_df = pd.concat([close_df , res_df])#新決済情報を縦結合
+                    res_df = self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする　　不要なの？
+                    # close_df = pd.concat([close_df , res_df])#新決済情報を縦結合
             return close_df
 
     # (5) 注文（単品）確認
