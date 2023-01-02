@@ -128,7 +128,7 @@ def draw_graph(mid_df):
     col_name = "return_half_all"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
-                               marker={"size": 10, "color": "red", "symbol": "diamond"}, name=col_name)
+                               marker={"size": 10, "color": "black", "symbol": "diamond"}, name=col_name)
         fig.add_trace(add_graph, secondary_y=True)
 
     fig.show()

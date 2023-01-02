@@ -125,56 +125,56 @@ def main_peak():
     #         else:
     #             print(" time", dr.iloc[0]['time_jp'], range_ratio)
 
-    #Range判定４
-    inspection_range = 10
-    mid_df['range_haba'] = None
-    for i in range(len(mid_df)):
-        print(i, len(mid_df))
-        d = mid_df[len(mid_df)-inspection_range-i : len(mid_df)-i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。最大３０行
-        print(i-inspection_range, i+1)
-        # print(d)
-        if len(d) >= inspection_range:
-            # 対象の範囲を調査する (実際ではdが取得された範囲）
-            index_graph = d.index.values[-1]
-            dr = d.sort_index(ascending=False).copy()
-            max_price = 0
-            min_price = 999
-            max_price_temp = min_price_temp = 0
-            range_count = 0
-            latest_time = dr.iloc[0]['time_jp']  # 逆順にしたとき、[0]だと最終行が取れてしまう。。やむおえず[-1]に。
-            # print(dr.iloc[-1]['time_jp'])
-            # print(dr.iloc[0]['time_jp'])
-            for index, e in dr.iterrows():  # 範囲
-                # まず最高値と最低値を更新する
-                if e['inner_high'] > max_price:  # 最高値を更新する場合
-                    max_price_temp = e['inner_high']
-                if e['inner_low'] < min_price:  # 最低値を更新する場合
-                    min_price_temp = e['inner_low']
-
-                # 更新値（最高最低）の差が0.15以内の場合、レンジとする
-                if max_price_temp - min_price_temp <= 0.15:  # 継続する場合
-                    # print(" レンジ継続", max_price - min_price, e['time_jp'])
-                    max_price = max_price_temp  # 最高値を更新する
-                    min_price = min_price_temp
-                    range_count += 1
-                else:  # それ以外
-                    break
-
-            # 結果
-            if range_count <= 4:  # レンジに入っているのが４個以下の場合⇒レンジとはみなさない
-                print(" レンジに至らず", latest_time, max_price - min_price, e['time_jp'], range_count, max_price, min_price)
-            else:
-                print(" レンジ可能性", latest_time, max_price - min_price, e['time_jp'], range_count, max_price, min_price)
-                # 繰り返しがあるかを判定
-                middle_price = round(min_price + ((max_price - min_price)/2),3)
-                ans_num = f.range_base(dr, middle_price)
-                # print(dr, ans_num['MVcount'])
-                # 一回でもうねり、同価格帯が続く事がレンジ条件
-                if ans_num['MVcount'] >= 1 or ans_num['data'][0]['SameCount']>=3:
-                    mid_df.loc[index_graph, 'range_haba'] = 1
-                    print(" レンジ確定", ans_num['MVcount'], index_graph)
-                else:
-                    print(" レンジならず", ans_num['MVcount'], ans_num)
+    # #Range判定４
+    # inspection_range = 10
+    # mid_df['range_haba'] = None
+    # for i in range(len(mid_df)):
+    #     print(i, len(mid_df))
+    #     d = mid_df[len(mid_df)-inspection_range-i : len(mid_df)-i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。最大３０行
+    #     print(i-inspection_range, i+1)
+    #     # print(d)
+    #     if len(d) >= inspection_range:
+    #         # 対象の範囲を調査する (実際ではdが取得された範囲）
+    #         index_graph = d.index.values[-1]
+    #         dr = d.sort_index(ascending=False).copy()
+    #         max_price = 0
+    #         min_price = 999
+    #         max_price_temp = min_price_temp = 0
+    #         range_count = 0
+    #         latest_time = dr.iloc[0]['time_jp']  # 逆順にしたとき、[0]だと最終行が取れてしまう。。やむおえず[-1]に。
+    #         # print(dr.iloc[-1]['time_jp'])
+    #         # print(dr.iloc[0]['time_jp'])
+    #         for index, e in dr.iterrows():  # 範囲
+    #             # まず最高値と最低値を更新する
+    #             if e['inner_high'] > max_price:  # 最高値を更新する場合
+    #                 max_price_temp = e['inner_high']
+    #             if e['inner_low'] < min_price:  # 最低値を更新する場合
+    #                 min_price_temp = e['inner_low']
+    #
+    #             # 更新値（最高最低）の差が0.15以内の場合、レンジとする
+    #             if max_price_temp - min_price_temp <= 0.15:  # 継続する場合
+    #                 # print(" レンジ継続", max_price - min_price, e['time_jp'])
+    #                 max_price = max_price_temp  # 最高値を更新する
+    #                 min_price = min_price_temp
+    #                 range_count += 1
+    #             else:  # それ以外
+    #                 break
+    #
+    #         # 結果
+    #         if range_count <= 4:  # レンジに入っているのが４個以下の場合⇒レンジとはみなさない
+    #             print(" レンジに至らず", latest_time, max_price - min_price, e['time_jp'], range_count, max_price, min_price)
+    #         else:
+    #             print(" レンジ可能性", latest_time, max_price - min_price, e['time_jp'], range_count, max_price, min_price)
+    #             # 繰り返しがあるかを判定
+    #             middle_price = round(min_price + ((max_price - min_price)/2),3)
+    #             ans_num = f.range_base(dr, middle_price)
+    #             # print(dr, ans_num['MVcount'])
+    #             # 一回でもうねり、同価格帯が続く事がレンジ条件
+    #             if ans_num['MVcount'] >= 1 or ans_num['data'][0]['SameCount']>=3:
+    #                 mid_df.loc[index_graph, 'range_haba'] = 1
+    #                 print(" レンジ確定", ans_num['MVcount'], index_graph)
+    #             else:
+    #                 print(" レンジならず", ans_num['MVcount'], ans_num)
 
 
     # 折り返し未遂判定（直近を「含まない」３足が、連続上昇している、かつ、その３足目が極値となるようなVじを描いている場合
@@ -204,68 +204,13 @@ def main_peak():
             latest_ans = f.renzoku_gap_pm(latest_df)
             oldest_ans = f.renzoku_gap_pm(oldest_df)
             ans = f.renzoku_gap_compare(latest_ans, oldest_ans)
-            print(ans)
-            if latest_ans['direction'] != oldest_ans['direction']:  # 同違う方向だった場合
-                if latest_ans['count'] == len(latest_df) and oldest_ans['count'] >= 5:  # len(oldest_df):  # 個数を満たしている
-                    # 戻しの度合いを確認（長い方の移動幅の最大３分の２以内の戻しであるかを確認
-                    # 戻し量の設定（old区間移動量の、３分の２戻しの場合、partition_ratio=3 , return_ratio=2と設定）
-                    partition_ratio = 2
-                    return_ratio = 1
-                    # 戻り量判定の基準作成する（分母に相当する部分）
-                    unit = abs((oldest_ans['oldest_price'] - oldest_ans['latest_price']) / partition_ratio)
-                    # 戻り基準価格を求め、比較を行う
-                    if oldest_ans['direction'] == 1:  # oldが上り方向の場合（山形状）
-                        # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                        border_line = round(latest_ans['oldest_price'] - (unit * return_ratio), 3)
-                        if latest_ans['latest_price'] > border_line:
-                            return_flag = 1  # 折り返しが中途半端な場合
-                        else:
-                            return_flag = 0  # 幅が未完成の場合
-                    elif oldest_ans['direction'] == -1:  # oldが下り方向の場合（谷形状）
-                        # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                        border_line = round(latest_ans['oldest_price'] + (unit * return_ratio), 3)
-                        if latest_ans['latest_price'] < border_line:
-                            return_flag = 1  # 折り返しが中途半端な場合
-                        else:
-                            return_flag = 0  # 幅が未完成の場合
-
-                    print(oldest_ans['oldest_price'], oldest_ans['latest_price'], latest_ans['oldest_price'], latest_ans['latest_price'])
-                    print(border_line, unit)
-                    if return_flag == 1:
-                        print(" 両方満たし", latest_ans['direction'], latest_ans['latest_price'], latest_ans['count'], oldest_ans['count'])
-                        mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
-                        # 本番用
-                        if latest_ans['direction'] == 1:
-                            # 折り返しがプラス方向（谷の形)、middle_priceでショート(順方向）！　ロスカはlatestにする？
-                            target_price = oldest_ans['latest_price']
-                            lc_price = oldest_ans['middle_price']
-                            lc_pips = round(lc_price - target_price, 3)  # 谷形状で、下に行くポジションの場合、LC価格がTargetよりも上にある
-                            order = "TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                            # 折り返しがプラス方向（谷の形)、middle_priceでショート！（逆方向）！
-                            target_price_r = oldest_ans['middle_price']
-                            lc_price_r = latest_ans['oldest_price']
-                            lc_pips_r = round(target_price_r - lc_price_r, 3)  # 谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
-                            # ORDER
-                            # oa.OrderCreate_exe(10000, ask_bid, price, tp_range, lc_range, type, tr_range, remark):
-                        elif latest_ans['direction'] == -1:
-                            # 折り返しがマイナス方向（山の形)、middle_priceでロング(順方向）！　ロスカはLatestにする？
-                            target_price = oldest_ans['latest_price']
-                            lc_price = oldest_ans['middle_price']
-                            lc_pips = round(target_price - lc_price, 3)  # 山形状で、上に行くポジションの場合、Target価格がLC価格より上にある
-                            order = "TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                            # 折り返しがプラス方向（山の形)、middle_priceでショート！（逆方向）！
-                            target_price_r = oldest_ans['middle_price']
-                            lc_price_r = latest_ans['oldest_price']
-                            lc_pips_r = round(lc_price_r - target_price_r, 3)  # 山形状で、下(思想と逆)に行くポジションの場合、LC価格がTargetよりも上にある
-
-                        print("順Entry",target_price,lc_pips,"逆Entry", target_price_r, lc_pips_r)
-
-                    else:
-                        print(" 幅のみみたさず", latest_ans['direction'], latest_ans['latest_price'], latest_ans['count'], oldest_ans['count'])
+            ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
+            if ans == 0:
+                print("0")
             else:
-                print(" 満たしポイント", latest_ans['count'], oldest_ans['count'])
-
-
+                print(" 該当有", ans['forward']['direction'], ans)
+                # print(" 該当あり", ans)
+                mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
     ###
     ### クロスポイントの位置から、戻りを取得するプログラム
@@ -394,7 +339,7 @@ gl = {
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
     "candle_num": 150,
     "num": 1,
-    "candle_unit": "M1",
+    "candle_unit": "M5",
 }
 
 oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")

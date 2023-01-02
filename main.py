@@ -197,69 +197,20 @@ def make_position():
     oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
     latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
     oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+    ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
     print(" 折返判定", latest_ans['count'], oldest_ans['count'])
-    if latest_ans['direction'] != oldest_ans['direction']:  # 同違う方向だった場合
-        if latest_ans['count'] == len(latest_df) and oldest_ans['count'] >= 5:  # 個数を満たしている(old区間は４以上でOK）
-            # 戻しの度合いを確認（長い方の移動幅の最大３分の２以内の戻しであるかを確認
-            # 戻し量の設定（old区間移動量の、３分の２戻しの場合、partition_ratio=3 , return_ratio=2と設定）
-            partition_ratio = 2
-            return_ratio = 1
-            # 戻り量判定の基準作成する（分母に相当する部分）
-            unit = abs((oldest_ans['oldest_price'] - oldest_ans['latest_price']) / partition_ratio)
-            # 戻り基準価格を求め、比較を行う
-            if oldest_ans['direction'] == 1:  # oldが上り方向の場合（山形状）
-                # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] - (unit * return_ratio), 3)
-                if latest_ans['latest_price'] > border_line:
-                    return_flag = 1  # 折り返しが中途半端な場合
-                else:
-                    return_flag = 0  # 幅が未完成の場合
-            elif oldest_ans['direction'] == -1:  # oldが下り方向の場合（谷形状）
-                # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] + (unit * return_ratio), 3)
-                if latest_ans['latest_price'] < border_line:
-                    return_flag = 1  # 折り返しが中途半端な場合
-                else:
-                    return_flag = 0  # 幅が未完成の場合
-
-            if return_flag == 1:
-                print(" ★両方満たし", latest_ans['direction'], latest_ans['latest_price'], border_line)
-                if latest_ans['direction'] == 1:
-                    # 折り返しがプラス方向（谷の形)、middle_priceでショート！　ロスカはlatestにする？
-                    target_price = oldest_ans['latest_price']
-                    lc_price = oldest_ans['middle_price']
-                    lc_pips = round(lc_price - target_price, 3)  # 谷形状で、下に行くポジションの場合、LC価格がTargetよりも上にある
-                    order = "谷TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                    # ORDER
-                    # 折り返しがプラス方向（谷の形)、middle_priceでショート！（逆方向）！
-                    target_price_r = oldest_ans['middle_price']
-                    lc_price_r = latest_ans['oldest_price']
-                    lc_pips_r = round(target_price_r - lc_price_r, 3)  # 谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
-                    # #　注文実施
-                    order_res = oa.OrderCreate_exe(10000, -1, target_price, 0.1, lc_pips, "STOP", 0.08, "remark")  # 順思想（順張・現より低い位置に注文入れたい）
-                    order_res_r = oa.OrderCreate_exe(10000, 1, target_price_r, 0.1, lc_pips_r, "STOP", 0.08, "remark")  # 逆思想（順張・現より高い位置に注文入れたい）
-                elif latest_ans['direction'] == -1:
-                    # 折り返しがマイナス方向（山の形)、middle_priceでロング！　ロスカはLatestにする？
-                    target_price = oldest_ans['latest_price']
-                    lc_price = oldest_ans['middle_price']
-                    lc_pips = round(target_price - lc_price, 3)  # 山形状で、上に行くポジションの場合、Target価格がLC価格より上にある
-                    order = "山TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                    # order
-                    # 折り返しがプラス方向（山の形)、middle_priceでショート！（逆方向）！
-                    target_price_r = oldest_ans['middle_price']
-                    lc_price_r = latest_ans['oldest_price']
-                    lc_pips_r = round(lc_price_r - target_price_r, 3)  # 山形状で、下(思想と逆)に行くポジションの場合、LC価格がTargetよりも上にある
-                    # 注文実施
-                    order_res = oa.OrderCreate_exe(10000, 1, target_price, 0.05, lc_pips, "STOP", 0, "remark")  # 順思想（順張・現より低い位置に注文入れたい）
-                    order_res_r = oa.OrderCreate_exe(10000, -1, target_price_r, 0.05, lc_pips_r, "STOP", 0, "remark")  #逆思想（順張り・現より高い位置に注文入れたい）
-                f.draw_graph(d5_df)
-                print(order_res, order_res_r)
-                tk.line_send("３６直前が中途半端な折り返しの可能性！！！", latest_ans['direction'], datetime.datetime.now().replace(microsecond=0), ",", order)
-
-            else:
-                print(" 幅のみみたさず", latest_ans['direction'], latest_ans['latest_price'])
+    if ans == 0:
+        print("0")
     else:
-        print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
+        order_res = oa.OrderCreate_exe(10000, -1, ans['forward']['target_price'],
+                                       0.1, ans['forward']['tp_range'], "STOP",
+                                       0.08, "")  # 順思想（順張・現より低い位置に注文入れたい）
+        order_res_r = oa.OrderCreate_exe(10000, 1, ans['reverse']['target_price'],
+                                         0.1, ans['reverse']['lc_range'], "STOP", 0.08,
+                                         "remark")  # 逆思想（順張・現より高い位置に注文入れたい）
+        print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
+        # print(" 該当あり", ans)
+        # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
 
 def close_position():
