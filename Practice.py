@@ -247,7 +247,7 @@ def main_peak():
                             if item['low'] < ans['forward']['target_price'] < item['high']:
                                 print(" 順方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
                                 f_flag = 1  # 順方向への持ちがあるフラグ
-                                fr_flag = "順思想の" + str(ans['forward']['direction'])  # 順方向であることを示すフラグ
+                                fr_flag = "forward &" + str(ans['forward']['direction'])  # 順方向であることを示すフラグ
                                 if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
                                     lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
                                     tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
@@ -257,7 +257,7 @@ def main_peak():
                             if item['low'] < ans['reverse']['target_price'] < item['high']:
                                 print(" 逆方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
                                 r_flag = 1  # 逆方向への持ちがあるフラグ
-                                fr_flag = "逆思想の" + str(ans['forward']['direction'])  # 逆方向であることを示すフラグ
+                                fr_flag = "reverse &" + str(ans['forward']['direction'])  # 逆方向であることを示すフラグ
                                 if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
                                     lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
                                     tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
