@@ -277,17 +277,18 @@ def main_peak():
                         else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
                             ans_dic ={
-                                    "jd_time": dr.iloc[0]['time_jp'],
-                                    "flag": fr_flag,
-                                    "posi_time": position_time,
-                                    "posi_price": ans['forward']['target_price'],
-                                    "double": double_flag,
-                                    "lc_price": lc_price,
-                                    "tp_price": tp_price,
-                                    "res_time": item['time_jp'],
-                                    "res": "",
-                                    "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
-                                    "res_gap": 0
+                                "jd_time": dr.iloc[0]['time_jp'],
+                                "flag": fr_flag,
+                                "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
+                                "posi_time": position_time,
+                                "posi_price": ans['forward']['target_price'],
+                                "double": double_flag,
+                                "lc_price": lc_price,
+                                "tp_price": tp_price,
+                                "res_time": item['time_jp'],
+                                "res": "",
+                                "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
+                                "res_gap": 0
                             }
                             # ロスカにひっかかている場合
                             if item['low'] < lc_price < item['high']:
@@ -307,11 +308,13 @@ def main_peak():
                                 break
                             # 揉んでしまって、期間内にポジションを解消できていない場合
                             if index == len(detail_df)-1:
-                                print(" NoSide")
+                                print(" NoSide", index, item['time_jp'])
+                                print(detail_df.head(3))
+                                print(detail_df.tail(3))
                                 ans_dic['res'] = "NoSide"
                                 ans_dic['res_gap'] = 0
                                 TEST_ans_arr.append(ans_dic)
-                                print(TEST_ans_arr)
+                                # print(TEST_ans_arr)
     # 結果の表示
     print(TEST_ans_arr)
     res_df = pd.DataFrame(TEST_ans_arr)
@@ -380,7 +383,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 100,
+    "candle_num": 1000,
     "num": 1,
     "candle_unit": "M5",
 }
