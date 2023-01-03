@@ -184,13 +184,11 @@ def main_peak():
     mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
     mid_df['return_half'] = None
     mid_df['return_half_all'] = None
-    inspection_range = 15  # 実際はそれより一つ多いDFが取得される（９の場合１０行）
-    TEST_range = 10
-    TEST_ans_arr = []
+    inspection_range = 15  #
+    now_time_from_df = f.str_to_time(mid_df.iloc[-1]['time'][:26])  # 【検証時】今何時（英国時間）のデータが最新かを所持しておく
+    TEST_ans_arr = []  # 【検証時】
     for i in range(len(mid_df)):
         d = mid_df[len(mid_df)-inspection_range-i: len(mid_df)-i]  # 旧側(index0）を固定。新側をインクリメントしていきたい。最大３０行
-        TEST_df = mid_df[len(mid_df)-i: len(mid_df)-i + TEST_range]  # ■検証用！！（条件がそろった後、どう動くかの検証）
-
         # 対象の範囲を調査する (実際ではdが取得された範囲）
         if len(d) >= inspection_range:
             index_graph = d.index.values[-1]  # インデックスを確認
@@ -204,79 +202,116 @@ def main_peak():
             oldest_ans = f.renzoku_gap_pm(oldest_df)  # その後何連続で同じ方向に行くのかの結果を取得
             ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
             if ans == 0:
-                # print("　該当なし", dr.iloc[0]['time_jp'])
+                # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
                 pass
             else:
                 # print("　該当有", dr.iloc[0]['time_jp'], ans['forward']['direction'], ans)
                 print(d.iloc[-1]['time_jp'], "■■")
-                print("　該当有")
+                print("　折り返しの該当有")
                 mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
-                # ■以下検証用
-                if len(TEST_df) >= TEST_range:  # 検証可能な場合、ざっくりとした検証を実施する
-                    print(" [検証時刻:", dr.iloc[0]['time_jp'], "終了", TEST_df.iloc[-1]["time_jp"], dr.iloc[0]['time'])
-                    # 検証範囲のデータフレームを取得（S5）
-                    # print(dr.iloc[0]['time'])
-                    mid_s5_df = oa.InstrumentsCandles_each_exe("USD_JPY",
-                                                            {"granularity": 'S5', "count": 1000,
-                                                             "from": dr.iloc[0]['time']})
-                    print(mid_s5_df.head(1))
+                # ■折り返し後の検証用のデータを取得し、増減の結果を算出する
+                # ■（１）検証用の後続データの取得（dの直近が「8:00:00」の５分足の場合、8:05:00以降の５秒足を取得する
+                foot_minute = 5  # 元データとみなすdが何分足だったかを記録（将来的にはM5とかから５だけを抽出したい）
+                detail_range = 270  # 100行×5S の検証を行う。
+                # 折り返し調査対象の最新行の時刻(time)をdatetimeに変換する（.fromisoformatが使えずやむなく関数を用意）
+                latest_row_time_dt = f.str_to_time(dr.iloc[0]['time'][:26])
+                # 足分を加算して、検証開始時刻の取得（今回に限っては、プラス２足分！！（latestが自分を含まないため、調査開始は実質２足後）
+                detail_from_time_dt = latest_row_time_dt + datetime.timedelta(minutes=foot_minute)
+                detail_from_time_iso = str(detail_from_time_dt.isoformat()) + ".000000000Z"  # API形式の時刻へ（ISOで文字型。.0z付き）
+                # 検証範囲の取得（inspe_df)（検証開始時刻　＋　５秒×１０００）が、現時刻より前の場合（未来のデータは取得時エラーとなる為注意。）
+                if detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range) < now_time_from_df:
+                    # 正常に取得できる場合
+                    print(" 検証開始時刻:", detail_from_time_iso, " 検証必要時刻",
+                          detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range),
+                          "前回latest_exe_time", latest_row_time_dt)
+                    detail_df = oa.InstrumentsCandles_each_exe("USD_JPY",
+                                                               {"granularity": 'S5', "count": detail_range,
+                                                                "from": detail_from_time_iso})  # ★検証範囲の取得する
+                    # print(detail_df.head(5))
+                else:
+                    # detailが未来になってしまう場合
+                    print(" 未来取得不可 検証開始時刻:", detail_from_time_dt, " 検証必要時刻",
+                          detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range))
+                    detail_df = []
+                # ■（２）以下検証開始
+                if len(detail_df) >= detail_range:  # 検証可能な場合、ざっくりとした検証を実施する
+                    print(" [検証時刻:", detail_df.iloc[0]['time_jp'], "終了", detail_df.iloc[-1]["time_jp"])
+                    print(latest_df)
+                    print(detail_df.head(10))
                     # 検証用の変数
                     f_flag = r_flag = position_flag = 0
-                    fl_flag = 0
+                    fr_flag = 0
                     position_time = 0
-                    for index, item in mid_s5_df.iterrows():
+                    for index, item in detail_df.iterrows():
                         if position_flag == 0: # ■ポジションを持っていない場合
                             if item['low'] < ans['forward']['target_price'] < item['high']:
                                 print(" 順方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
-                                f_flag = 1
-                                fr_flag = 1
-                                lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
-                                tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
+                                f_flag = 1  # 順方向への持ちがあるフラグ
+                                fr_flag = "順思想の" + str(ans['forward']['direction'])  # 順方向であることを示すフラグ
+                                if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
+                                    lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
+                                    tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
+                                elif ans['forward']['direction'] == -1:  # 売り方向へのオーダーの場合
+                                    lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス！
+                                    tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
                             if item['low'] < ans['reverse']['target_price'] < item['high']:
-                                r_flag = 1
-                                fr_flag = -1
                                 print(" 逆方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
-                                lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス方向
-                                tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
+                                r_flag = 1  # 逆方向への持ちがあるフラグ
+                                fr_flag = "逆思想の" + str(ans['forward']['direction'])  # 逆方向であることを示すフラグ
+                                if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
+                                    lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
+                                    tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
+                                elif ans['forward']['direction'] == -1:  # 売り方向へのオーダーの場合
+                                    lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス！
+                                    tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
                             # ポジション条件のいずれかを満たしている場合、ポジションフラグを立てて次の行へ。
                             if f_flag == 1 or r_flag == 1:
+                                if f_flag == 1 and r_flag == 1:
+                                    double_flag = 1  # 5秒間(5S足)の間に、逆も順も取る場合（乱高下や、狭いレンジでの発生か）
+                                else:
+                                    double_flag = 0  # 大抵はこっちだと思う
                                 position_flag = 1
+                                position_time = item['time_jp']
                                 print(" Po", item['time_jp'], fr_flag, ans['forward']['target_price'], lc_price, tp_price)
                                 # 自身の行でロスカ利確に行っているかの判断（ここはやむなく５分足・・？）
                         else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
-                            if item['low'] < lc_price < item['high']:
-                                print(" LC")
-                                TEST_ans_arr.append(
-                                    {
+                            ans_dic ={
                                     "jd_time": dr.iloc[0]['time_jp'],
                                     "flag": fr_flag,
-                                    "posi_time": item['time_jp'],
+                                    "posi_time": position_time,
                                     "posi_price": ans['forward']['target_price'],
+                                    "double": double_flag,
                                     "lc_price": lc_price,
-                                    "tp_price":tp_price,
-                                    "res": "LC",
-                                    "res_gap": ans['forward']['lc_range'] * -1
-                                    }
-                                )
-                                print(TEST_ans_arr)
+                                    "tp_price": tp_price,
+                                    "res_time": item['time_jp'],
+                                    "res": "",
+                                    "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
+                                    "res_gap": 0
+                            }
+                            # ロスカにひっかかている場合
+                            if item['low'] < lc_price < item['high']:
+                                print(" LC")
+                                ans_dic['res'] = "LC"
+                                ans_dic['res_gap'] = ans['forward']['lc_range'] * -1
+                                TEST_ans_arr.append(ans_dic)
+                                # print(TEST_ans_arr)
                                 break
+                            # 利確に引っかかっている場合
                             if item['low'] < tp_price < item['high']:
                                 print(" TP")
-                                TEST_ans_arr.append(
-                                    {
-                                        "jd_time": dr.iloc[0]['time_jp'],
-                                        "flag": fr_flag,
-                                        "posi_time": item['time_jp'],
-                                        "posi_price": ans['forward']['target_price'],
-                                        "lc_price": lc_price,
-                                        "tp_price": tp_price,
-                                        "res": "TP",
-                                        "res_gap": ans['forward']['tp_range']
-                                    }
-                                )
+                                ans_dic['res'] = "TP"
+                                ans_dic['res_gap'] = ans['forward']['lc_range']
+                                TEST_ans_arr.append(ans_dic)
                                 print(TEST_ans_arr)
                                 break
+                            # 揉んでしまって、期間内にポジションを解消できていない場合
+                            if index == len(detail_df)-1:
+                                print(" NoSide")
+                                ans_dic['res'] = "NoSide"
+                                ans_dic['res_gap'] = 0
+                                TEST_ans_arr.append(ans_dic)
+                                print(TEST_ans_arr)
     # 結果の表示
     print(TEST_ans_arr)
     res_df = pd.DataFrame(TEST_ans_arr)
@@ -345,7 +380,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 1000,
+    "candle_num": 100,
     "num": 1,
     "candle_unit": "M5",
 }

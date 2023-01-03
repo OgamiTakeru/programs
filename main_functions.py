@@ -1,4 +1,5 @@
 import requests
+import datetime  # 日付関係
 from scipy.signal import argrelmin, argrelmax  # add_peaks
 import pandas as pd  # add_peaks
 from plotly.subplots import make_subplots  # draw_graph
@@ -136,6 +137,15 @@ def draw_graph(mid_df):
     # symbols = ('circle', 'circle-open', 'circle-dot', 'circle-open-dot','square', 'diamond', 'cross', 'triangle-up')
 
 
+def str_to_time(str_time):
+    time_dt = datetime.datetime(int(str_time[0:4]),
+                                int(str_time[5:7]),
+                                int(str_time[8:10]),
+                                int(str_time[11:13]),
+                                int(str_time[14:16]),
+                                int(str_time[17:19]))
+    return time_dt
+
 def add_peak(data_df, order_num):
     """
     引数として与えられたデータに、極値データを付与する。いつか、Classに移動させるべきもの。
@@ -208,7 +218,7 @@ def add_peak(data_df, order_num):
 
 def renzoku_gap_pm(data_df):
     """
-    引数のデータフレームを先頭(０行目)から確認し、何行連続で同じ方向に進んでいるかを確認。（ローソク方向ではない！）
+    引数のデータフレームを先頭(０行目)から確認し、何行連続で同じ方向に進んでいるかを確認。（ローソク方向ではないく以下の方法）
     確認方法は、各行（各足）の中央値（inner_highとinner_lowとの中央値。highとlowの中央値ではない）が、
     連続して下がっているか（or上がっているか）を確認。
     返り値は
@@ -288,29 +298,30 @@ def renzoku_gap_pm(data_df):
 def renzoku_gap_compare(oldest_ans, latest_ans):
     """
 
-    :param oldest_ans:
-    :param latest_ans:
+    :param oldest_ans:第一引数がOldestであること。直近部がどれだけ連続で同一方向に進んでいるか
+    :param latest_ans:第二引数がどれ
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 同違う方向だった場合
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 5:  # 行数確認(old区間はt直接指定！）
             # 戻しの度合いを確認（長い方の移動幅の最大３分の２以内の戻しであるかを確認
             # 戻し量の設定（old区間移動量の、３分の２戻しの場合、partition_ratio=3 , return_ratio=2と設定）
-            partition_ratio = 2
+            move_price = abs(oldest_ans['oldest_price'] - oldest_ans['latest_price'])
+            # partition_ratio = 2
             return_ratio = 1
             # 戻り量判定の基準作成する（分母に相当する部分）
-            unit = abs((oldest_ans['oldest_price'] - oldest_ans['latest_price']) / partition_ratio)
+            # unit = abs((oldest_ans['oldest_price'] - oldest_ans['latest_price']) / partition_ratio)
             # 戻り基準価格を求め、比較を行う
             if oldest_ans['direction'] == 1:  # oldが上り方向の場合（山形状）
                 # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] - (unit * return_ratio), 3)
+                border_line = round(latest_ans['oldest_price'] - (move_price*0.4), 3)  # ★編集ポイント (move_p * 0.4戻し）
                 if latest_ans['latest_price'] > border_line:
                     return_flag = 1  # 折り返しが中途半端な場合
                 else:
                     return_flag = 0  # 幅が未完成の場合
             elif oldest_ans['direction'] == -1:  # oldが下り方向の場合（谷形状）
                 # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] + (unit * return_ratio), 3)
+                border_line = round(latest_ans['oldest_price'] + (move_price*0.4), 3)
                 if latest_ans['latest_price'] < border_line:
                     return_flag = 1  # 折り返しが中途半端な場合
                 else:
