@@ -159,31 +159,31 @@ def make_position():
     # print(" 1 ", latest_cross1_time, latest_cross1, latest_cross1_price, update_flag)
 
 
-    # ５分足のクロスがある場合は、１分足も確認して直前（３分以内にあれば）そっちの方向に行くのでは、と推定する
+    # ★５分足のクロスがある場合は、１分足も確認して直前（３分以内にあれば）そっちの方向に行くのでは、と推定する
     # print(latest_cross5_time_dt, latest_cross1_time_dt)
-    # print((latest_cross5_time_dt - latest_cross1_time_dt).seconds)
-    gap_second = (latest_cross5_time_dt - latest_cross1_time_dt).seconds  # ５分足クロスと１分足クロスの時間ギャップ
-    if latest_cross5 != 0:
-        print(" 直前に５分クロスを確認")
-        # その場合、ひとつ前のクロスを確認する（クロスがくっついている場合は無効にするため）
-        confirm_time = cross5_only_df.iloc[-1]['time_jp']  # 確認用
-        second_cross = datetime.datetime.strptime(cross5_only_df.iloc[-2]['time_jp'], data_format)  # ひとつ前
-        jd_range = (latest_cross5_time_dt - second_cross).seconds  # ５分足クロスの１つ目と二つ目の間（レンジかどうかの判断）
-        print(" Range判定",confirm_time, second_cross, jd_range)
-        if gap_second < 480:  # ５分足と１分足の発生タイミングが近い
-            if latest_cross5 == latest_cross1 and jd_range > 600:  # 同じ方向のクロス、かつ、５分足がレンジではない
-                print("  理想 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
-                if glc['for_send'] == 0:
-                    tk.line_send("ポジ？", latest_cross5, gap_second, latest_cross5_time_dt,"レンジ有無", range_flag, datetime.datetime.now().replace(microsecond=0))
-                    glc['for_send'] = 1  # SnedFlag
-            else:
-                print("  No(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range)
-                # tk.line_send("NNo(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
-        else:
-            print(" 理想ではない", gap_second)
-    else:
-        print(" ５分クロス無し")
-        glc['for_send'] = 0  # SnedFlag
+    # # print((latest_cross5_time_dt - latest_cross1_time_dt).seconds)
+    # gap_second = (latest_cross5_time_dt - latest_cross1_time_dt).seconds  # ５分足クロスと１分足クロスの時間ギャップ
+    # if latest_cross5 != 0:
+    #     print(" 直前に５分クロスを確認")
+    #     # その場合、ひとつ前のクロスを確認する（クロスがくっついている場合は無効にするため）
+    #     confirm_time = cross5_only_df.iloc[-1]['time_jp']  # 確認用
+    #     second_cross = datetime.datetime.strptime(cross5_only_df.iloc[-2]['time_jp'], data_format)  # ひとつ前
+    #     jd_range = (latest_cross5_time_dt - second_cross).seconds  # ５分足クロスの１つ目と二つ目の間（レンジかどうかの判断）
+    #     print(" Range判定",confirm_time, second_cross, jd_range)
+    #     if gap_second < 480:  # ５分足と１分足の発生タイミングが近い
+    #         if latest_cross5 == latest_cross1 and jd_range > 600:  # 同じ方向のクロス、かつ、５分足がレンジではない
+    #             print("  理想 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
+    #             if glc['for_send'] == 0:
+    #                 tk.line_send("ポジ？", latest_cross5, gap_second, latest_cross5_time_dt,"レンジ有無", range_flag, datetime.datetime.now().replace(microsecond=0))
+    #                 glc['for_send'] = 1  # SnedFlag
+    #         else:
+    #             print("  No(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range)
+    #             # tk.line_send("NNo(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
+    #     else:
+    #         print(" 理想ではない", gap_second)
+    # else:
+    #     print(" ５分クロス無し")
+    #     glc['for_send'] = 0  # SnedFlag
 
 
     # ##### 折り返し判定

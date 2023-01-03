@@ -206,8 +206,8 @@ def main_peak():
                 pass
             else:
                 # print("　該当有", dr.iloc[0]['time_jp'], ans['forward']['direction'], ans)
-                print(d.iloc[-1]['time_jp'], "■■")
-                print("　折り返しの該当有")
+                print(" ", d.iloc[-1]['time_jp'], "↑")
+                print("　検証開始")
                 mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
                 # ■折り返し後の検証用のデータを取得し、増減の結果を算出する
                 # ■（１）検証用の後続データの取得（dの直近が「8:00:00」の５分足の場合、8:05:00以降の５秒足を取得する
@@ -221,9 +221,10 @@ def main_peak():
                 # 検証範囲の取得（inspe_df)（検証開始時刻　＋　５秒×１０００）が、現時刻より前の場合（未来のデータは取得時エラーとなる為注意。）
                 if detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range) < now_time_from_df:
                     # 正常に取得できる場合
-                    print(" 検証開始時刻:", detail_from_time_iso, " 検証必要時刻",
-                          detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range),
-                          "前回latest_exe_time", latest_row_time_dt)
+                    print(" 検証可能（検証データ取得可能）")
+                    # print(" 検証開始時刻:", detail_from_time_iso, " 検証必要時刻",
+                    #       detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range),
+                    #       "前回latest_exe_time", latest_row_time_dt)
                     detail_df = oa.InstrumentsCandles_each_exe("USD_JPY",
                                                                {"granularity": 'S5', "count": detail_range,
                                                                 "from": detail_from_time_iso})  # ★検証範囲の取得する
@@ -236,8 +237,8 @@ def main_peak():
                 # ■（２）以下検証開始
                 if len(detail_df) >= detail_range:  # 検証可能な場合、ざっくりとした検証を実施する
                     print(" [検証時刻:", detail_df.iloc[0]['time_jp'], "終了", detail_df.iloc[-1]["time_jp"])
-                    print(latest_df)
-                    print(detail_df.head(10))
+                    # print(latest_df)
+                    # print(detail_df.head(10))
                     # 検証用の変数
                     f_flag = r_flag = position_flag = 0
                     fr_flag = 0
@@ -245,7 +246,7 @@ def main_peak():
                     for index, item in detail_df.iterrows():
                         if position_flag == 0: # ■ポジションを持っていない場合
                             if item['low'] < ans['forward']['target_price'] < item['high']:
-                                print(" 順方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
+                                print(" 順方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
                                 f_flag = 1  # 順方向への持ちがあるフラグ
                                 fr_flag = "forward &" + str(ans['forward']['direction'])  # 順方向であることを示すフラグ
                                 if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
@@ -255,7 +256,7 @@ def main_peak():
                                     lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス！
                                     tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
                             if item['low'] < ans['reverse']['target_price'] < item['high']:
-                                print(" 逆方向へのポジションを取得", print(item['time_jp'], item['low'], item['high']))
+                                print(" 逆方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
                                 r_flag = 1  # 逆方向への持ちがあるフラグ
                                 fr_flag = "reverse &" + str(ans['forward']['direction'])  # 逆方向であることを示すフラグ
                                 if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
@@ -270,14 +271,14 @@ def main_peak():
                                     double_flag = 1  # 5秒間(5S足)の間に、逆も順も取る場合（乱高下や、狭いレンジでの発生か）
                                 else:
                                     double_flag = 0  # 大抵はこっちだと思う
-                                position_flag = 1
+                                position_flag = 1  # ポジションフラグ成立
                                 position_time = item['time_jp']
-                                print(" Po", item['time_jp'], fr_flag, ans['forward']['target_price'], lc_price, tp_price)
-                                # 自身の行でロスカ利確に行っているかの判断（ここはやむなく５分足・・？）
+                                print(" Po", item['time_jp'], fr_flag, ans['forward']['target_price'],
+                                      round(lc_price, 3), round(tp_price, 3))
                         else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
                             ans_dic ={
-                                "jd_time": dr.iloc[0]['time_jp'],
+                                "order_time": dr.iloc[0]['time_jp'],
                                 "flag": fr_flag,
                                 "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
                                 "posi_time": position_time,
@@ -285,6 +286,8 @@ def main_peak():
                                 "double": double_flag,
                                 "lc_price": lc_price,
                                 "tp_price": tp_price,
+                                "lc_pips": ans['forward']['lc_range'],
+                                "tp_range": ans['forward']['tp_range'],
                                 "res_time": item['time_jp'],
                                 "res": "",
                                 "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
@@ -302,7 +305,7 @@ def main_peak():
                             if item['low'] < tp_price < item['high']:
                                 print(" TP")
                                 ans_dic['res'] = "TP"
-                                ans_dic['res_gap'] = ans['forward']['lc_range']
+                                ans_dic['res_gap'] = ans['forward']['tp_range']
                                 TEST_ans_arr.append(ans_dic)
                                 print(TEST_ans_arr)
                                 break
@@ -366,7 +369,7 @@ def main_peak():
     #         else:
     #             print("何もなし")
 
-    f.draw_graph(mid_df)
+    # f.draw_graph(mid_df)
 
 
 gl_cross = {
@@ -383,8 +386,8 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 1000,
-    "num": 1,
+    "candle_num": 300,
+    "num": 1,  # candle
     "candle_unit": "M5",
 }
 
