@@ -204,9 +204,9 @@ def make_position():
     else:
         order_res = oa.OrderCreate_exe(10000, -1, ans['forward']['target_price'],
                                        0.1, ans['forward']['tp_range'], "STOP",
-                                       0.08, "")  # 順思想（順張・現より低い位置に注文入れたい）
+                                       0, "")  # 順思想（順張・現より低い位置に注文入れたい）
         order_res_r = oa.OrderCreate_exe(10000, 1, ans['reverse']['target_price'],
-                                         0.1, ans['reverse']['lc_range'], "STOP", 0.08,
+                                         0.05, 0.025, "STOP", 0,
                                          "remark")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
         tk.line_send("３６直前が中途半端な折り返しの可能性！！！", latest_ans['direction'], datetime.datetime.now().replace(microsecond=0))

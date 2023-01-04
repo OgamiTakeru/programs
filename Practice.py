@@ -212,7 +212,7 @@ def main_peak():
                 # ■折り返し後の検証用のデータを取得し、増減の結果を算出する
                 # ■（１）検証用の後続データの取得（dの直近が「8:00:00」の５分足の場合、8:05:00以降の５秒足を取得する
                 foot_minute = 5  # 元データとみなすdが何分足だったかを記録（将来的にはM5とかから５だけを抽出したい）
-                detail_range = 270  # 100行×5S の検証を行う。
+                detail_range = 360  # N行×5S の検証を行う。 30分の場合360
                 # 折り返し調査対象の最新行の時刻(time)をdatetimeに変換する（.fromisoformatが使えずやむなく関数を用意）
                 latest_row_time_dt = f.str_to_time(dr.iloc[0]['time'][:26])
                 # 足分を加算して、検証開始時刻の取得（今回に限っては、プラス２足分！！（latestが自分を含まないため、調査開始は実質２足後）
@@ -222,9 +222,6 @@ def main_peak():
                 if detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range) < now_time_from_df:
                     # 正常に取得できる場合
                     print(" 検証可能（検証データ取得可能）")
-                    # print(" 検証開始時刻:", detail_from_time_iso, " 検証必要時刻",
-                    #       detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range),
-                    #       "前回latest_exe_time", latest_row_time_dt)
                     detail_df = oa.InstrumentsCandles_each_exe("USD_JPY",
                                                                {"granularity": 'S5', "count": detail_range,
                                                                 "from": detail_from_time_iso})  # ★検証範囲の取得する
@@ -246,25 +243,27 @@ def main_peak():
                     for index, item in detail_df.iterrows():
                         if position_flag == 0: # ■ポジションを持っていない場合
                             if item['low'] < ans['forward']['target_price'] < item['high']:
+                                base_info = ans['forward']  # 順方向のデータ（コード短縮化のための置き換え）
                                 print(" 順方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
                                 f_flag = 1  # 順方向への持ちがあるフラグ
-                                fr_flag = "forward &" + str(ans['forward']['direction'])  # 順方向であることを示すフラグ
-                                if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
-                                    lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
-                                    tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
-                                elif ans['forward']['direction'] == -1:  # 売り方向へのオーダーの場合
-                                    lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス！
-                                    tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
+                                fr_flag = "forward &" + str(base_info['direction'])  # 順方向であることを示す履歴
+                                if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
+                                    lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
+                                    tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
+                                elif base_info['direction'] == -1:  # 売り方向へのオーダーの場合
+                                    lc_price = round(base_info['target_price'] + base_info['lc_range'], 3)  # LCはプラス！
+                                    tp_price = round(base_info['target_price'] - base_info['tp_range'], 3)
                             if item['low'] < ans['reverse']['target_price'] < item['high']:
                                 print(" 逆方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
+                                base_info = ans['reverse']  # 逆方向のデータ（コード短縮化のための置き換え）
                                 r_flag = 1  # 逆方向への持ちがあるフラグ
-                                fr_flag = "reverse &" + str(ans['forward']['direction'])  # 逆方向であることを示すフラグ
-                                if ans['forward']['direction'] == 1:  # 買い方向へのオーダーの場合
-                                    lc_price = ans['forward']['target_price'] - ans['forward']['lc_range']  # LCはマイナス！
-                                    tp_price = ans['forward']['target_price'] + ans['forward']['tp_range']
-                                elif ans['forward']['direction'] == -1:  # 売り方向へのオーダーの場合
-                                    lc_price = ans['forward']['target_price'] + ans['forward']['lc_range']  # LCはプラス！
-                                    tp_price = ans['forward']['target_price'] - ans['forward']['tp_range']
+                                fr_flag = "reverse &" + str(base_info['direction'])  # 逆方向であることを示すフラグ
+                                if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
+                                    lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
+                                    tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
+                                elif base_info['direction'] == -1:  # 売り方向へのオーダーの場合
+                                    lc_price = round(base_info['target_price'] + base_info['lc_range'], 3)  # LCはプラス！
+                                    tp_price = round(base_info['target_price'] - base_info['tp_range'], 3)
                             # ポジション条件のいずれかを満たしている場合、ポジションフラグを立てて次の行へ。
                             if f_flag == 1 or r_flag == 1:
                                 if f_flag == 1 and r_flag == 1:
@@ -273,8 +272,7 @@ def main_peak():
                                     double_flag = 0  # 大抵はこっちだと思う
                                 position_flag = 1  # ポジションフラグ成立
                                 position_time = item['time_jp']
-                                print(" Po", item['time_jp'], fr_flag, ans['forward']['target_price'],
-                                      round(lc_price, 3), round(tp_price, 3))
+                                print(" Po", item['time_jp'], fr_flag, base_info['target_price'], lc_price, tp_price)
                         else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
                             ans_dic ={
@@ -282,12 +280,12 @@ def main_peak():
                                 "flag": fr_flag,
                                 "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
                                 "posi_time": position_time,
-                                "posi_price": ans['forward']['target_price'],
+                                "posi_price": base_info['target_price'],
                                 "double": double_flag,
                                 "lc_price": lc_price,
                                 "tp_price": tp_price,
-                                "lc_pips": ans['forward']['lc_range'],
-                                "tp_range": ans['forward']['tp_range'],
+                                "lc_pips": base_info['lc_range'],
+                                "tp_range": base_info['tp_range'],
                                 "res_time": item['time_jp'],
                                 "res": "",
                                 "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
@@ -297,7 +295,7 @@ def main_peak():
                             if item['low'] < lc_price < item['high']:
                                 print(" LC")
                                 ans_dic['res'] = "LC"
-                                ans_dic['res_gap'] = ans['forward']['lc_range'] * -1
+                                ans_dic['res_gap'] = base_info['lc_range'] * -1
                                 TEST_ans_arr.append(ans_dic)
                                 # print(TEST_ans_arr)
                                 break
@@ -305,7 +303,7 @@ def main_peak():
                             if item['low'] < tp_price < item['high']:
                                 print(" TP")
                                 ans_dic['res'] = "TP"
-                                ans_dic['res_gap'] = ans['forward']['tp_range']
+                                ans_dic['res_gap'] = base_info['tp_range']
                                 TEST_ans_arr.append(ans_dic)
                                 print(TEST_ans_arr)
                                 break
@@ -386,8 +384,8 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 300,
-    "num": 1,  # candle
+    "candle_num": 5000,
+    "num": 10,  # candle
     "candle_unit": "M5",
 }
 
