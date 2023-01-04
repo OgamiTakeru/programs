@@ -273,7 +273,7 @@ def main_peak():
                                 position_flag = 1  # ポジションフラグ成立
                                 position_time = item['time_jp']
                                 print(" Po", item['time_jp'], fr_flag, base_info['target_price'], lc_price, tp_price)
-                        else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認
+                        else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認(各価格はポジション時に格納される）
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
                             ans_dic ={
                                 "order_time": dr.iloc[0]['time_jp'],
@@ -295,7 +295,7 @@ def main_peak():
                             if item['low'] < lc_price < item['high']:
                                 print(" LC")
                                 ans_dic['res'] = "LC"
-                                ans_dic['res_gap'] = base_info['lc_range'] * -1
+                                ans_dic['res_gap'] = abs(lc_price - base_info['target_price']) * -1  # base_info['lc_range'] * -1
                                 TEST_ans_arr.append(ans_dic)
                                 # print(TEST_ans_arr)
                                 break
@@ -303,7 +303,7 @@ def main_peak():
                             if item['low'] < tp_price < item['high']:
                                 print(" TP")
                                 ans_dic['res'] = "TP"
-                                ans_dic['res_gap'] = base_info['tp_range']
+                                ans_dic['res_gap'] = abs(tp_price - base_info['target_price'])
                                 TEST_ans_arr.append(ans_dic)
                                 print(TEST_ans_arr)
                                 break

@@ -337,15 +337,15 @@ def renzoku_gap_compare(oldest_ans, latest_ans):
                     order = "谷TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
                     # ORDER
                     # 折り返しがプラス方向（谷の形、思想と逆方向！）
-                    target_price_r = oldest_ans['middle_price'] + 0.015  # 足す値は余裕度
-                    lc_price_r = latest_ans['oldest_price'] + 0.025  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
-                    lc_pips_r = 0.02 #round(target_price_r - lc_price_r, 3)  # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
+                    target_price_r = latest_ans['latest_price']  # oldest_ans['middle_price'] + 0.015  # 足す値は余裕度
+                    lc_price_r = latest_ans['oldest_price'] + 0.01  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
+                    lc_pips_r = round(target_price_r - lc_price_r, 3)  # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
                     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
                     # #　注文実施(関数化したため内容のみ返却）
                     for_order = {"target_price": target_price, "tp_range": 0.1, "lc_range": lc_pips, "type": "STOP",
                                  "trail_range": 0.08, "direction": -1, "mind": 1}  # dircは購入方向、mindは思想と順かどうか
-                    for_order_r = {"target_price": target_price_r, "tp_range": 0.1, "lc_range": lc_pips_r,
-                                   "type": "STOP", "trail_range": 0.08, "direction": 1, "mind": -1}
+                    for_order_r = {"target_price": target_price_r, "tp_range": 0.03, "lc_range": lc_pips_r,
+                                   "type": "MARKET", "trail_range": 0.08, "direction": 1, "mind": -1}
                 elif latest_ans['direction'] == -1:
                     # 折り返しがマイナス方向（山の形、思想と同方向）
                     target_price = oldest_ans['latest_price'] + 0.015  # 足す値は余裕度
@@ -354,15 +354,15 @@ def renzoku_gap_compare(oldest_ans, latest_ans):
                     order = "山TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
                     # order
                     # 折り返しがプラス方向（山の形、思想と逆方向）！
-                    target_price_r = oldest_ans['middle_price'] - 0.015  # 引く値は余裕度
-                    lc_price_r = latest_ans['oldest_price']  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
-                    lc_pips_r = 0.02  # round(lc_price_r - target_price_r, 3)   # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
+                    target_price_r = latest_ans['latest_price']  #oldest_ans['middle_price'] - 0.015  # 引く値は余裕度
+                    lc_price_r = latest_ans['oldest_price'] - 0.01  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
+                    lc_pips_r = round(lc_price_r - target_price_r, 3)   # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
                     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
                     # 注文実施(関数化したため内容のみ返却）
                     for_order = {"target_price": target_price, "tp_range": 0.1, "lc_range": lc_pips, "type": "STOP",
                                  "trail_range": 0.08, "direction": 1, "mind": 1}  # dircは購入方向、mindは思想と順かどうか
-                    for_order_r = {"target_price": target_price_r, "tp_range": 0.1, "lc_range": lc_pips_r,
-                                   "type": "STOP", "trail_range": 0.08, "direction": -1, "mind": -1}
+                    for_order_r = {"target_price": target_price_r, "tp_range": 0.03, "lc_range": lc_pips_r,
+                                   "type": "MARKET", "trail_range": 0.08, "direction": -1, "mind": -1}
                 print(" @gfuncEND", for_order, for_order_r)
                 return {"forward": for_order, "reverse": for_order_r}
             else:
