@@ -81,29 +81,30 @@ def make_position():
     latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
     oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
     ans = f.renzoku_gap_compare(oldest_ans, latest_ans, price_dic['mid'])  # 引数の順番に注意！　ポジ用の価格情報を取得する。
-    print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'])
     if ans == 0:
-        print("0")
+        print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'])
     else:
+        print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'], ans['info']['return_ratio'], ans['info']['bunbo_gap'])
         # 思想と順方向は必須で入れる
-        order_res = oa.OrderCreate_exe(10000, -1, ans['forward']['target_price'],
+        order_res = oa.OrderCreate_exe(10000, ans['forward']["direction"], ans['forward']['target_price'],
                                        ans['forward']['tp_range'], ans['forward']['tp_range'], ans['forward']['type'],
                                        0, "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         # 思想と逆方向は、ほぼほぼマーケットで入れるが、すでに動いている場合があるため、少し余裕を持って入れる。
-        order_res_r = oa.OrderCreate_exe(10000, 1, ans['reverse']['target_price'],
+        order_res_r = oa.OrderCreate_exe(10000, ans['forward']["direction"], ans['reverse']['target_price'],
                                          ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
                                          0, "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
         # LINE送信用情報
         t = ans['forward']['target_price']
-        tp = float(ans['forward']['target_price']) + float(ans['forward']['tp_range'])
-        lc = float(ans['forward']['target_price']) + float(ans['forward']['lc_range'])
+        tp = round(float(ans['forward']['target_price']) + float(ans['forward']['tp_range']), 3)
+        lc = round(float(ans['forward']['target_price']) + float(ans['forward']['lc_range']), 3)
         tr = ans['reverse']['target_price']
-        tpr = float(ans['reverse']['target_price']) + float(ans['reverse']['tp_range'])
-        lcr = float(ans['reverse']['target_price']) + float(ans['reverse']['lc_range'])
+        tpr = round(float(ans['reverse']['target_price']) + float(ans['reverse']['tp_range']), 3)
+        lcr = round(float(ans['reverse']['target_price']) + float(ans['reverse']['lc_range']), 3)
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
-                     "順思想:", t, "(", tp, "-", lc, ")",
-                     "逆思想:", tr, "(", tpr, "-", lcr, ")",
+                     ",現価格:", price_dic['mid'],
+                     ",順思想:", ans['forward']['direction'], t, "(", tp, "-", lc, ")",
+                     ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "-", lcr, ")",
                      )
 
         # print(" 該当あり", ans)
