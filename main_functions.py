@@ -335,6 +335,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                         "direction": -1,  # 購入方向（１は買い、-1は売り）
                         "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                     }
+
                     # 折り返しがプラス方向（谷の形、思想と【逆】方向！）
                     target_price_r = latest_ans['latest_price']  # 基本はハーフ値。＋値でポジションしにくくなる
                     target_price_r = round(now_price + 0.017, 3)  # ＋値でポジションしにくくなる
@@ -347,7 +348,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                         "lc_range": 0.02,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
                         "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
                         "type": "STOP",
-                        "trail_range": 0.08,
+                        "trail_range": 0.05,
                         "direction": 1,  # 購入方向（１は買い、-1は売り）
                         "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                     }
@@ -375,10 +376,10 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     for_order_r = {
                         "target_price": target_price_r,  # 基本ミドル価格。－値でポジションしにくくなる方向。
                         "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
-                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
                         "lc_range": 0.02,  # round(lc_price_r - target_price_r, 3),  # 山形成からの売り。LC価(上）> target価
+                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
                         "type": "STOP",
-                        "trail_range": 0.08,
+                        "trail_range": 0.05,
                         "direction": -1,  # 購入方向（１は買い、-1は売り）
                         "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                     }
