@@ -333,9 +333,6 @@ def main_peak():
     print(res_df)
     res_df.to_csv(tk.folder_path + 'inspection.csv', index=False, encoding="utf-8")
 
-
-
-
     # ★結果表示等
     #  通常より伸びた足を取得する（通常の３倍程度の足の後は、戻しが強いので、そこを取りたい）
     mid_df['big_foot'] = mid_df['body_abs'].apply(lambda x: '1' if x>=0.025 else '0')
