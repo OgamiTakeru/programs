@@ -200,7 +200,7 @@ def main_peak():
             oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
             latest_ans = f.renzoku_gap_pm(latest_df)  # 直近何連続で同方向に行くかの結果を取得
             oldest_ans = f.renzoku_gap_pm(oldest_df)  # その後何連続で同じ方向に行くのかの結果を取得
-            ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
+            ans = f.renzoku_gap_compare(oldest_ans, latest_ans, dr.iloc[0]['open'])  # 引数の順番に注意！（左がOldest）⇒注文価格情報を取得
             if ans == 0:
                 # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
                 pass
@@ -216,7 +216,7 @@ def main_peak():
                 # 折り返し調査対象の最新行の時刻(time)をdatetimeに変換する（.fromisoformatが使えずやむなく関数を用意）
                 latest_row_time_dt = f.str_to_time(dr.iloc[0]['time'][:26])
                 # 足分を加算して、検証開始時刻の取得（今回に限っては、プラス２足分！！（latestが自分を含まないため、調査開始は実質２足後）
-                detail_from_time_dt = latest_row_time_dt + datetime.timedelta(minutes=foot_minute)
+                detail_from_time_dt = latest_row_time_dt + datetime.timedelta(minutes=0)  # (minutes=foot_minute)
                 detail_from_time_iso = str(detail_from_time_dt.isoformat()) + ".000000000Z"  # API形式の時刻へ（ISOで文字型。.0z付き）
                 # 検証範囲の取得（inspe_df)（検証開始時刻　＋　５秒×１０００）が、現時刻より前の場合（未来のデータは取得時エラーとなる為注意。）
                 if detail_from_time_dt + datetime.timedelta(seconds=5 * detail_range) < now_time_from_df:
@@ -225,7 +225,7 @@ def main_peak():
                     detail_df = oa.InstrumentsCandles_each_exe("USD_JPY",
                                                                {"granularity": 'S5', "count": detail_range,
                                                                 "from": detail_from_time_iso})  # ★検証範囲の取得する
-                    # print(detail_df.head(5))
+                    print(detail_df.head(5))
                 else:
                     # detailが未来になってしまう場合
                     print(" 未来取得不可 検証開始時刻:", detail_from_time_dt, " 検証必要時刻",
@@ -276,11 +276,16 @@ def main_peak():
                         else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認(各価格はポジション時に格納される）
                             # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
                             ans_dic ={
-                                "order_time": dr.iloc[0]['time_jp'],
+                                "find_time_ref": dr.iloc[0]['time_jp'],  # mainの実行時間の考え方次第。各分05秒実行の場合、５秒のずれ程度。
+                                "find_price_ref": dr.iloc[0]['open'],  # 参考値。13:00:00のCloseの場合、13:04:59時点価格。となってしまう。その為、Open価格がここでは適正。
+                                                                        # それにあわせ、mainのトリガーも毎分05秒に変更
+                                "find_time_sub":  detail_df.iloc[0]['time_jp'],  #
+                                "find_price_sub": detail_df.iloc[0]['open'],  # 確認用。気づいた時のM5のCloseと、調査開始5SのOpenの差（０が正）
                                 "flag": fr_flag,
                                 "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
                                 "posi_time": position_time,
                                 "posi_price": base_info['target_price'],
+                                "type": base_info['type'],
                                 "double": double_flag,
                                 "lc_price": lc_price,
                                 "tp_price": tp_price,
@@ -289,7 +294,7 @@ def main_peak():
                                 "res_time": item['time_jp'],
                                 "res": "",
                                 "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
-                                "res_gap": 0
+                                "res_gap": 0,
                             }
                             # ロスカにひっかかている場合
                             if item['low'] < lc_price < item['high']:
@@ -384,8 +389,8 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 5000,
-    "num": 10,  # candle
+    "candle_num": 200,
+    "num": 1,  # candle
     "candle_unit": "M5",
 }
 

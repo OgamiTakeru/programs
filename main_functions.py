@@ -219,6 +219,7 @@ def add_peak(data_df, order_num):
 def renzoku_gap_pm(data_df):
     """
     引数のデータフレームを先頭(０行目)から確認し、何行連続で同じ方向に進んでいるかを確認。（ローソク方向ではないく以下の方法）
+    基本的にはこのデータフレームは、先頭が最新のデータとなる「リバースデータ」であること。
     確認方法は、各行（各足）の中央値（inner_highとinner_lowとの中央値。highとlowの中央値ではない）が、
     連続して下がっているか（or上がっているか）を確認。
     返り値は
@@ -285,8 +286,11 @@ def renzoku_gap_pm(data_df):
         middle_price = round(oldest_price + (latest_price - oldest_price) / 2, 3)  # oldが低いところにいる
 
     return({
+        # "final_time": data_df.iloc[0]["time_jp"],
+        # "final_close_price": data_df.iloc[0]["close"],
         "oldest_price": oldest_price,
         "latest_price": latest_price,
+        "gap": abs(oldest_price - latest_price),
         "middle_price": middle_price,
         "direction": ans,
         "count": ans_count,
@@ -295,76 +299,93 @@ def renzoku_gap_pm(data_df):
     print(oldest_price, "-", latest_price, ans, ans_count)
 
 
-def renzoku_gap_compare(oldest_ans, latest_ans):
+def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     """
 
-    :param oldest_ans:第一引数がOldestであること。直近部がどれだけ連続で同一方向に進んでいるか
-    :param latest_ans:第二引数がどれ
+    :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
+    :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
+    :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
     :return:
     """
-    if latest_ans['direction'] != oldest_ans['direction']:  # 同違う方向だった場合
+    if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 5:  # 行数確認(old区間はt直接指定！）
-            # 戻しの度合いを確認（長い方の移動幅の最大３分の２以内の戻しであるかを確認
-            # 戻し量の設定（old区間移動量の、３分の２戻しの場合、partition_ratio=3 , return_ratio=2と設定）
-            move_price = abs(oldest_ans['oldest_price'] - oldest_ans['latest_price'])
-            # partition_ratio = 2
-            return_ratio = 1
-            # 戻り量判定の基準作成する（分母に相当する部分）
-            # unit = abs((oldest_ans['oldest_price'] - oldest_ans['latest_price']) / partition_ratio)
-            # 戻り基準価格を求め、比較を行う
-            if oldest_ans['direction'] == 1:  # oldが上り方向の場合（山形状）
-                # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] - (move_price*0.4), 3)  # ★編集ポイント (move_p * 0.4戻し）
-                if latest_ans['latest_price'] > border_line:
-                    return_flag = 1  # 折り返しが中途半端な場合
-                else:
-                    return_flag = 0  # 幅が未完成の場合
-            elif oldest_ans['direction'] == -1:  # oldが下り方向の場合（谷形状）
-                # 折り返し価格を計算（山形状の場合、この価格以上で戻り範囲が収まっていれば）
-                border_line = round(latest_ans['oldest_price'] + (move_price*0.4), 3)
-                if latest_ans['latest_price'] < border_line:
-                    return_flag = 1  # 折り返しが中途半端な場合
-                else:
-                    return_flag = 0  # 幅が未完成の場合
+            # 戻しのパーセンテージを確認
+            return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
+            info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
+            # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
+            if return_ratio < 40:
+                return_flag = 1
+            else:
+                return_flag = 0
 
+            # エントリーポイントを発見した場合の処理！
             if return_flag == 1:
-                print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], border_line)
+                print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'])
                 if latest_ans['direction'] == 1:
                     # 折り返しがプラス方向（谷の形、思想の同方向）
-                    target_price = oldest_ans['latest_price'] - 0.015  # 引く値は余裕度。
-                    lc_price = oldest_ans['middle_price']# - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
-                    lc_pips = round(lc_price - target_price, 3)  # 谷形状で、下に行くポジションの場合、LC価格がTargetよりも上
-                    order = "谷TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                    # ORDER
-                    # 折り返しがプラス方向（谷の形、思想と逆方向！）
-                    target_price_r = latest_ans['latest_price']  # oldest_ans['middle_price'] + 0.015  # 足す値は余裕度
+                    target_price = oldest_ans['latest_price'] - 0.015  # 基本ボトム価格。－値でポジションしにくくなる方向。
+                    lc_price = oldest_ans['middle_price']  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
+                    for_order = {
+                        "target_price": target_price,  # 基本はボトム価格。－値でポジションしにくくなる
+                        "lc_price": lc_price,  # 参考情報（渡し先では使わない）
+                        "lc_range": round(lc_price - target_price, 3),  # 谷形成からの売りポジ。LC価(上がり）>target価
+                        "tp_range": 0.1,
+                        "type": "STOP",
+                        "trail_range": 0.05,
+                        "direction": -1,  # 購入方向（１は買い、-1は売り）
+                        "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                    }
+                    # 折り返しがプラス方向（谷の形、思想と【逆】方向！）
+                    target_price_r = latest_ans['latest_price']  # 基本はハーフ値。＋値でポジションしにくくなる
+                    target_price_r = now_price + 0.01  # ＋値でポジションしにくくなる
+                    # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
                     lc_price_r = latest_ans['oldest_price'] + 0.01  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
-                    lc_pips_r = round(target_price_r - lc_price_r, 3)  # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
                     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
-                    # #　注文実施(関数化したため内容のみ返却）
-                    for_order = {"target_price": target_price, "tp_range": 0.1, "lc_range": lc_pips, "type": "STOP",
-                                 "trail_range": 0.08, "direction": -1, "mind": 1}  # dircは購入方向、mindは思想と順かどうか
-                    for_order_r = {"target_price": target_price_r, "tp_range": 0.03, "lc_range": lc_pips_r,
-                                   "type": "MARKET", "trail_range": 0.08, "direction": 1, "mind": -1}
+                    for_order_r = {
+                        "target_price": target_price_r,  # 基本はハーフ値。＋値でポジションしにくくなる
+                        "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
+                        "lc_range": 0.02,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
+                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
+                        "type": "STOP",
+                        "trail_range": 0.08,
+                        "direction": 1,  # 購入方向（１は買い、-1は売り）
+                        "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                    }
+
                 elif latest_ans['direction'] == -1:
                     # 折り返しがマイナス方向（山の形、思想と同方向）
-                    target_price = oldest_ans['latest_price'] + 0.015  # 足す値は余裕度
+                    target_price = oldest_ans['latest_price'] + 0.015  # 基本ピーク価格。＋値でポジションしにくくなる方向。
                     lc_price = oldest_ans['middle_price']  # + 0.025  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
-                    lc_pips = round(target_price - lc_price, 3)  # 山形状で、上に行くポジションの場合、Target価格がLC価格より上にある
-                    order = "山TGT:" + str(oldest_ans['latest_price']) + "ロスカ" + str(oldest_ans['middle_price']) + "," + str(lc_pips)
-                    # order
-                    # 折り返しがプラス方向（山の形、思想と逆方向）！
-                    target_price_r = latest_ans['latest_price']  #oldest_ans['middle_price'] - 0.015  # 引く値は余裕度
+                    for_order_r = {
+                        "target_price": target_price,  # 基本ピーク価格。＋値でポジションしにくくなる方向。
+                        "lc_price": lc_price,  # 参考情報（渡し先では使わない）
+                        "tp_range": 0.1,
+                        "lc_range": round(target_price - lc_price, 3),  # 山形成からの買いポジ。LC価(下げ）< target価
+                        "type": "STOP",
+                        "trail_range": 0.08,
+                        "direction": 1,  # 購入方向（１は買い、-1は売り）
+                        "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                    }
+
+                    # 折り返しがプラス方向（山の形、思想と【逆】方向）！
+                    target_price_r = latest_ans['latest_price']  # 初期ミドル価格。－値でポジションしにくくなる方向。
+                    target_price_r = now_price - 0.01  # －値でポジションしにくくなる。
+                    # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
                     lc_price_r = latest_ans['oldest_price'] - 0.01  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
-                    lc_pips_r = round(lc_price_r - target_price_r, 3)   # 思想逆の場合は、LC狭い(0.02)くらいがいいかも
+                    for_order = {
+                        "target_price": target_price_r,  # 基本ミドル価格。－値でポジションしにくくなる方向。
+                        "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
+                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
+                        "lc_range": 0.02,  # round(lc_price_r - target_price_r, 3),  # 山形成からの売り。LC価(上）> target価
+                        "type": "STOP",
+                        "trail_range": 0.08,
+                        "direction": -1,  # 購入方向（１は買い、-1は売り）
+                        "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                    }
                     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
-                    # 注文実施(関数化したため内容のみ返却）
-                    for_order = {"target_price": target_price, "tp_range": 0.1, "lc_range": lc_pips, "type": "STOP",
-                                 "trail_range": 0.08, "direction": 1, "mind": 1}  # dircは購入方向、mindは思想と順かどうか
-                    for_order_r = {"target_price": target_price_r, "tp_range": 0.03, "lc_range": lc_pips_r,
-                                   "type": "MARKET", "trail_range": 0.08, "direction": -1, "mind": -1}
+
                 print(" @gfuncEND", for_order, for_order_r)
-                return {"forward": for_order, "reverse": for_order_r}
+                return {"forward": for_order, "reverse": for_order_r, "info": info}
             else:
                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
                 #  これ、意外と使える可能性も、、、
@@ -377,6 +398,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans):
     else:
         # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
         return 0
+
 
 
 def range_base(data_df, base_price):  # 引数 データ、基準価格

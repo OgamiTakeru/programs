@@ -9,8 +9,9 @@ import pandas as pd
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
-# import programs.mp_functions as mp  # MakePositionに関する関数群
 
+
+# import programs.mp_functions as mp  # MakePositionに関する関数群
 
 
 def make_position():
@@ -18,7 +19,6 @@ def make_position():
     ポジション取得のメイン
     """
     global gl
-
 
     # ■現在価格を取得（スプレッド異常の場合は強制終了）
     price_dic = oa.NowPrice_exe("USD_JPY")
@@ -30,133 +30,17 @@ def make_position():
     # ■直近の検討データの取得
     data_format = '%Y/%m/%d %H:%M:%S'
     # 5分足データの取得
-    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1 )
+    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
     d5_df = f.add_peak(d5_df, gl['p_order'])
     d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")
     # d5_df = pd.read_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', sep=",", encoding="utf-8")  # test
 
     # print(d5_df.head(2))
     # 1分足データの取得
-    d1_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M1", "count": 150}, 1 )
+    d1_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M1", "count": 150}, 1)
     d1_df = f.add_peak(d1_df, gl['p_order'])
     d1_df.to_csv(tk.folder_path + 'main_data1.csv', index=False, encoding="utf-8")
     # d1_df = pd.read_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', sep=",", encoding="utf-8")  # test
-
-    # print(d1_df.head(2))
-
-    # # 直近の極値関係のデータを取得する(ただし直近の極値が、２足以内の場合は無視する（変わる可能性があるため）
-    # pv_order = gl['p_order']  # 極値算出の幅
-    # pv_df = mid_df[mid_df['pv_flag' + str(pv_order)].notna()]  # 空欄以外を抽出（フィルタ）
-    # pv_r_df = pv_df.sort_index(ascending=False)  # 逆向きのデータフレームを取得し、調査する
-    #
-    # # 前回確認時の直近の極値が消えていないか（変更されていないか）を確認する
-    # if glp['before_latest_pv'] == pv_r_df.iloc[0]['time_jp']:
-    #     # 前回の極値と、今回の極値が同一の場合
-    #     print(" 極値の変更なし")
-    # else:
-    #     # 異なる場合（消えたor新しく直近の極値が出来た場合）
-    #     if glp['before_latest_pv'] > pv_r_df.iloc[0]['time_jp']:
-    #         # 極値が超滅している場合（前回の極値時間が22時、今回それが21時となっているような場合。前回＞今回となっている）
-    #         # より、前回極値の方向に進んでいることを意味する（peak消滅であれば上昇、valley消滅であれば下落）
-    #         print("　極値の消滅")
-    #         tk.line_send("極値消滅:", glp['before_latest_pv'], "NOW:", gl["now"] )
-    #     else:
-    #         # それ以外は、新たな極値
-    #         print(" 新規極値の発生")
-    #         # tk.line_send("極値発生:", pv_r_df.iloc[0]['time_jp'], "NOW:", gl["now"])
-    #
-    #     # 共通処理
-    #     glp['before_latest_pv'] = pv_r_df.iloc[0]['time_jp']
-
-    # レンジ確認
-
-
-    # ■RangeをBBから求める
-    dr = d5_df.sort_index(ascending=False)
-    # print(dr)
-    range_bb = 0  # フラグ
-    range_gap = 0.28  # アプリだと0.25くらいにしたいけど、少し広め。原因不明。
-    if dr.iloc[0]['bb_upper'] - dr.iloc[0]['bb_lower'] < range_gap:
-        # print(" BB確認！！", dr.iloc[0]['time_jp'], dr.iloc[0]['bb_upper'] - dr.iloc[0]['bb_lower'])
-        # 最新行がボリバン的にレンジと判断されたばあい
-        for index, e in dr.iterrows():  # 現在のボリバンが狭い場合、ボリバンが狭い範囲を求める
-            if e['bb_upper'] - e['bb_lower'] < range_gap:
-                # BBレンジの成立
-                d5_df.loc[index, 'range'] = dr.iloc[0]['high']
-                range_bb = 1
-                range_bb_gap = e['bb_upper'] - e['bb_lower']
-    if range_bb == 1:
-        print("　BB的レンジあり")
-        # tk.line_send(" BBレンジ判定", dr.iloc[0]['time_jp'], "直前BB幅", range_bb_gap)
-        gl_bb['range'] = 1
-    else:
-        print(" BB的レンジ無し")
-        if gl_bb['range'] == 1:
-            pass
-            # もし前回がBBレンジじゃなかった場合（BBレンジ抜けタイミングとなる）
-            # tk.line_send(" BBレンジ解消タイミング判定", dr.iloc[0]['time_jp'], "直前BB幅")
-
-
-    # ■クロスを利用した部分
-    print(" クロス確認")
-    # ①直近のクロスwを確認(クロスというより、Long線を超えているか）
-    # 5分足のデータを取得（最新部と）
-    # cross5_df = d5_df[d5_df['cross'] != 0]  # クロスだけのデータフレーム（直近のクロスを拾いたい場合）
-    cross5_df = d5_df.copy()
-    cross5_only_df = d5_df[d5_df['cross'] != 0]
-    latest_cross5 = cross5_df.iloc[-1]['cross']  #
-    latest_cross5_time = cross5_df.iloc[-1]['time_jp']
-    latest_cross5_time_dt = datetime.datetime.strptime(latest_cross5_time, data_format)  # %Y/%m/%d %H:%M:%S'
-    latest_cross5_price = cross5_df.iloc[-1]['cross_price']
-    # print(" 5 ", latest_cross5_time, latest_cross5, latest_cross5_price)
-    # 1分足のデータを取得（上の５分足の一つ手前のクロス部）
-    cross1_r_df = d1_df[d1_df['cross'] != 0].sort_index(ascending=False)  # 空欄以外を抽出（フィルタ）
-    latest_cross1 = cross1_r_df.iloc[1]['cross']  # とりあえず初期値を取得
-    latest_cross1_time = cross1_r_df.iloc[1]['time_jp']  # とりあえず初期値を取得
-    latest_cross1_time_dt = datetime.datetime.strptime(latest_cross1_time, data_format)
-    latest_cross1_price = cross1_r_df.iloc[1]['cross_price']  # とりあえず初期値を取得
-    update_flag = 0
-    # Rangeかどうかを判定する
-    range_flag = 0
-    if latest_cross5 != 0:
-        c = ans = 0
-        r = cross5_only_df.sort_index(ascending=False)
-        # print(r['time_jp'])
-        for index, e in r.iterrows():  # クロスのみを確認する（直近３個のクロスがレンジ判定化を確認する）
-            if c == 0:
-                before_cross_index = index
-                # print(" f", e['time_jp'])
-            else:
-                # ６足以内でクロスが来ている場合、レンジの可能性
-                if abs(before_cross_index - index) <= 7:
-                    ans += 1
-                    # print(abs(before_cross_index - index), before_cross_index, index)
-                else:
-                    # print(" e", e['time_jp'])
-                    break
-            c += 1
-        if ans >= 2:
-            range_flag = 1
-            print(" ★レンジ相場です",r.iloc[0]['time_jp'], ans)
-        else:
-            print(" レンジ相場とは言えない", ans)
-
-    # 5分足の直前にある１分足を求める
-    for i in range(len(cross1_r_df)):
-        if datetime.datetime.strptime(cross1_r_df.iloc[i]['time_jp'], data_format) < latest_cross5_time_dt:
-            # 5分足でのクロスの直前（何足前からはさておき）であれば、それで更新する
-            latest_cross1 = cross1_r_df.iloc[i]['cross']
-            latest_cross1_time = cross1_r_df.iloc[i]['time_jp']
-            latest_cross1_time_dt = datetime.datetime.strptime(latest_cross1_time, data_format)
-            latest_cross1_price = cross1_r_df.iloc[i]['cross_price']
-            update_flag = 1
-            break
-        else:
-            pass
-            # print(" oute ", datetime.datetime.strptime(cross1_r_df.iloc[i]['time_jp'], '%Y/%m/%d %H:%M:%S'),
-            #       latest_cross5_time_dt)
-            # update_flag = 99
-    # print(" 1 ", latest_cross1_time, latest_cross1, latest_cross1_price, update_flag)
 
 
     # ★５分足のクロスがある場合は、１分足も確認して直前（３分以内にあれば）そっちの方向に行くのでは、と推定する
@@ -185,7 +69,6 @@ def make_position():
     #     print(" ５分クロス無し")
     #     glc['for_send'] = 0  # SnedFlag
 
-
     # ##### 折り返し判定
     d5_df['middle_price_gap'] = d5_df['middle_price'] - d5_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
     dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
@@ -197,19 +80,31 @@ def make_position():
     oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
     latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
     oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    ans = f.renzoku_gap_compare(oldest_ans, latest_ans)  # 引数の順番に注意！（左がOldest）
-    print(" 折返判定", latest_ans['count'], oldest_ans['count'])
+    ans = f.renzoku_gap_compare(oldest_ans, latest_ans, price_dic['mid'])  # 引数の順番に注意！　ポジ用の価格情報を取得する。
+    print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'])
     if ans == 0:
         print("0")
     else:
+        # 思想と順方向は必須で入れる
         order_res = oa.OrderCreate_exe(10000, -1, ans['forward']['target_price'],
-                                       0.1, ans['forward']['tp_range'], "STOP",
-                                       0, "")  # 順思想（順張・現より低い位置に注文入れたい）
-        # order_res_r = oa.OrderCreate_exe(10000, 1, ans['reverse']['target_price'],
-        #                                  0.05, 0.025, "STOP", 0,
-        #                                  "remark")  # 逆思想（順張・現より高い位置に注文入れたい）
-        print(" 該当有", ans['forward']['direction'], ans, order_res)  # , order_res_r)
-        tk.line_send("３６直前が中途半端な折り返しの可能性！！！", latest_ans['direction'], datetime.datetime.now().replace(microsecond=0))
+                                       ans['forward']['tp_range'], ans['forward']['tp_range'], ans['forward']['type'],
+                                       0, "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
+        # 思想と逆方向は、ほぼほぼマーケットで入れるが、すでに動いている場合があるため、少し余裕を持って入れる。
+        order_res_r = oa.OrderCreate_exe(10000, 1, ans['reverse']['target_price'],
+                                         ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
+                                         0, "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
+        print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
+        # LINE送信用情報
+        t = ans['forward']['target_price']
+        tp = float(ans['forward']['target_price']) + float(ans['forward']['tp_range'])
+        lc = float(ans['forward']['target_price']) + float(ans['forward']['lc_range'])
+        tr = ans['reverse']['target_price']
+        tpr = float(ans['reverse']['target_price']) + float(ans['reverse']['tp_range'])
+        lcr = float(ans['reverse']['target_price']) + float(ans['reverse']['lc_range'])
+        tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
+                     "順思想:", t, "(", tp, "-", lc, ")",
+                     "逆思想:", tr, "(", tpr, "-", lcr, ")",
+                     )
 
         # print(" 該当あり", ans)
         # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
@@ -268,6 +163,7 @@ def close_position():
         #     else:
         #         print("　　　CD済(tp_func済フラグ有）")
 
+
 def main():
     global gl
     gl["main_counter"] += 1
@@ -322,7 +218,7 @@ def schedule(interval, f, wait=True):
             # ★基本的な実行関数。基本的にgl['schedule_freq']は１秒で実行を行う。（〇〇分〇秒に実行等）
             if gl["exe_mode"] == 0:
                 # [2の倍数分、15秒に処理に定期処理実施
-                if time_min % 1 == 0 and time_sec == 55:
+                if time_min % 1 == 0 and time_sec == 5:
                     t = threading.Thread(target=f)
                     t.start()
                     if wait:  # 時間経過待ち処理？
@@ -368,7 +264,7 @@ gl = {
     "now_s": 0,
     'now': datetime.datetime.now().replace(microsecond=0),
     "latest_get": datetime.datetime.now() + datetime.timedelta(minutes=-20),  # 初期値は現時刻ー２０分
-    "spread": 0.8, # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
+    "spread": 0.8,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
     "tp": 0.035,
     "lc": 0.02,
     "p_order": 2,  # 極値の判定幅
@@ -378,4 +274,3 @@ gl = {
 # ■出発！
 main()
 schedule(gl['schedule_freq'], main)
-
