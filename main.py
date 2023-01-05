@@ -90,19 +90,20 @@ def make_position():
                                        ans['forward']['tp_range'], ans['forward']['tp_range'], ans['forward']['type'],
                                        0, "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         # 思想と逆方向は、ほぼほぼマーケットで入れるが、すでに動いている場合があるため、少し余裕を持って入れる。
-        order_res_r = oa.OrderCreate_exe(10000, ans['forward']["direction"], ans['reverse']['target_price'],
+        order_res_r = oa.OrderCreate_exe(10000, ans['reverse']["direction"], ans['reverse']['target_price'],
                                          ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
                                          0, "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
-        # LINE送信用情報
-        t = ans['forward']['target_price']
-        tp = round(float(ans['forward']['target_price']) + float(ans['forward']['tp_range']), 3)
-        lc = round(float(ans['forward']['target_price']) + float(ans['forward']['lc_range']), 3)
-        tr = ans['reverse']['target_price']
-        tpr = round(float(ans['reverse']['target_price']) + float(ans['reverse']['tp_range']), 3)
-        lcr = round(float(ans['reverse']['target_price']) + float(ans['reverse']['lc_range']), 3)
+        # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
+        t = float(ans['forward']['target_price'])
+        tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['direction']), 3)
+        lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['direction']), 3)
+        tr = float(ans['reverse']['target_price'])
+        tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['forward']['direction']), 3)
+        lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['forward']['direction']), 3)
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
+                     ",基本方向", ans['forward']['mind'],
                      ",順思想:", ans['forward']['direction'], t, "(", tp, "-", lc, ")",
                      ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "-", lcr, ")",
                      )
