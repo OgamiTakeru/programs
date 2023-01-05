@@ -337,7 +337,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     }
                     # 折り返しがプラス方向（谷の形、思想と【逆】方向！）
                     target_price_r = latest_ans['latest_price']  # 基本はハーフ値。＋値でポジションしにくくなる
-                    target_price_r = now_price + 0.01  # ＋値でポジションしにくくなる
+                    target_price_r = now_price + 0.017  # ＋値でポジションしにくくなる
                     # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
                     lc_price_r = latest_ans['oldest_price'] + 0.01  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
                     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
@@ -369,7 +369,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
 
                     # 折り返しがプラス方向（山の形、思想と【逆】方向）！
                     target_price_r = latest_ans['latest_price']  # 初期ミドル価格。－値でポジションしにくくなる方向。
-                    target_price_r = now_price - 0.01  # －値でポジションしにくくなる。
+                    target_price_r = now_price - 0.017  # －値でポジションしにくくなる。
                     # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
                     lc_price_r = latest_ans['oldest_price'] - 0.01  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
                     for_order_r = {

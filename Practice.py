@@ -242,11 +242,15 @@ def main_peak():
                     position_time = 0
                     for index, item in detail_df.iterrows():
                         if position_flag == 0: # ■ポジションを持っていない場合
+                            # Position候補（順思想と逆思想）を所持
+                            position_price = ans['forward']['target_price']
+                            position_price_r = ans['reverse']['target_price']
                             if item['low'] < ans['forward']['target_price'] < item['high']:
                                 base_info = ans['forward']  # 順方向のデータ（コード短縮化のための置き換え）
                                 print(" 順方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
                                 f_flag = 1  # 順方向への持ちがあるフラグ
                                 fr_flag = "forward &" + str(base_info['direction'])  # 順方向であることを示す履歴
+                                target_price = base_info['target_price']
                                 if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
                                     lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
                                     tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
@@ -258,6 +262,7 @@ def main_peak():
                                 base_info = ans['reverse']  # 逆方向のデータ（コード短縮化のための置き換え）
                                 r_flag = 1  # 逆方向への持ちがあるフラグ
                                 fr_flag = "reverse &" + str(base_info['direction'])  # 逆方向であることを示すフラグ
+                                target_price = base_info['target_price']
                                 if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
                                     lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
                                     tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
@@ -284,7 +289,8 @@ def main_peak():
                                 "flag": fr_flag,
                                 "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
                                 "posi_time": position_time,
-                                "posi_price": base_info['target_price'],
+                                "posi_price": position_price,
+                                "posi_price_r": position_price_r,
                                 "type": base_info['type'],
                                 "double": double_flag,
                                 "lc_price": lc_price,
