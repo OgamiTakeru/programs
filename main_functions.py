@@ -138,6 +138,12 @@ def draw_graph(mid_df):
 
 
 def str_to_time(str_time):
+    """
+    時刻（文字列）をDateTimeに変換する。
+    何故かDFないの日付を扱う時、isoformat関数系が使えない。。なぜだろう。
+    :param str_time:
+    :return:
+    """
     time_dt = datetime.datetime(int(str_time[0:4]),
                                 int(str_time[5:7]),
                                 int(str_time[8:10]),
@@ -333,36 +339,39 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 #         利確　　　　　　＋で利確しにくい
 
                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
-                # ■順思想（谷方向基準[売りポジを取る]の式）
-                direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1
+                # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
+                direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
                 f_entry_price = round(oldest_ans['latest_price'] + 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
                 f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # 直接指定でも可(direction関係しない）
+                f_lc_range = 0.05  # round(abs(f_entry_price - f_lc_price), 3)  # 直接指定でも可(direction関係しない）
                 f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                f_tp_range = 0.1  # 直接指定でも可(direction関係しない）
+                f_tp_range = 0.08  # 直接指定でも可(direction関係しない）
+                f_trail_range = 0.05
                 for_order = {
                     "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
                     "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
                     "lc_range": f_lc_range,  # 谷形成からの売りポジ。LC価(上がり）>target価
                     "tp_range": f_tp_range,
                     "type": "STOP",
-                    "trail_range": 0.05,
+                    "trail_range": f_trail_range,
                     "direction": -1 * direction_l,  # 購入方向。１は買い(山の順思想)、-1は売り(谷の順思想[式基準])
                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
-                # ■逆思想（谷方向[買いポジを取る]基準の式）
+                # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
                 r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
-                r_lc_range = 0.02  # round(abs(r_entry_inhabit - r_lc_price), 3)  # 直接指定でも可(direction関係しない）
+                # r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
+                r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
+                r_lc_range = 0.05  # round(abs(r_entry_price - r_lc_price), 3)  # 直接指定でも可(direction関係しない）
                 r_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                r_tp_range = 0.03  # 直接指定でも可(direction関係しない）
+                r_tp_range = 0.04  # 直接指定でも可(direction関係しない）
+                r_trail_range = 0
                 for_order_r = {
                     "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
                     "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
                     "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
                     "tp_range": r_tp_range,  # 思想と逆（逆張り）は少し狭い目で。。
                     "type": "STOP",
-                    "trail_range": 0.05,
+                    "trail_range": r_trail_range,
                     "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
                     "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }

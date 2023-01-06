@@ -88,24 +88,27 @@ def make_position():
         # 思想と順方向は必須で入れる
         order_res = oa.OrderCreate_exe(10000, ans['forward']["direction"], ans['forward']['target_price'],
                                        ans['forward']['tp_range'], ans['forward']['tp_range'], ans['forward']['type'],
-                                       0, "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
+                                       ans['forward']['trail_range'], "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         # 思想と逆方向は、ほぼほぼマーケットで入れるが、すでに動いている場合があるため、少し余裕を持って入れる。
         order_res_r = oa.OrderCreate_exe(10000, ans['reverse']["direction"], ans['reverse']['target_price'],
                                          ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
-                                         0, "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
+                                         ans['reverse']['trail_range'], "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
         # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
         t = round(float(ans['forward']['target_price']), 3)
-        tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['direction']), 3)
+        tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['direction']), 3)  # ans['forward']['lc_price']と同義？
+
         lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['direction']), 3)
         tr = round(float(ans['reverse']['target_price']), 3)
         tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['direction']), 3)
         lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['direction']), 3)
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
-                     ",基本方向", ans['forward']['mind'],
-                     ",順思想:", ans['forward']['direction'], t, "(", tp, "-", lc, ")",
-                     ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "-", lcr, ")",
+                     ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
+                     ",順思想:", ans['forward']['direction'], t, "(", tp, "[", ans['forward']['tp_range'], "]-",
+                     lc, "[", ans['forward']['lc_range'], "]", ")",
+                     ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "[", ans['reverse']['tp_range'], "]-",
+                     lcr, "[", ans['reverse']['lc_range'], "]", ")",
                      "参考", oldest_ans['high_price'], oldest_ans['low_price'],
                      latest_ans['high_price'], latest_ans['low_price']
                      )

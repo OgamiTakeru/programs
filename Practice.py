@@ -300,6 +300,10 @@ def main_peak():
                                 "res_time": item['time_jp'],
                                 "res": "",
                                 "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
+                                "latest_high": latest_ans['high_price'],
+                                "latest_low": latest_ans['low_price'],
+                                "oldest_high": oldest_ans['high_price'],
+                                "oldest_low": oldest_ans['low_price'],
                                 "res_gap": 0,
                             }
                             # ロスカにひっかかている場合
@@ -331,6 +335,7 @@ def main_peak():
     print(TEST_ans_arr)
     res_df = pd.DataFrame(TEST_ans_arr)
     print(res_df)
+    print("結果", res_df['res_gap'].sum(), "取引回数", len(res_df))
     res_df.to_csv(tk.folder_path + 'inspection.csv', index=False, encoding="utf-8")
 
     # ★結果表示等
@@ -392,7 +397,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 200,
+    "candle_num": 5000,
     "num": 1,  # candle
     "candle_unit": "M5",
 }
