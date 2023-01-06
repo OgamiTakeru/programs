@@ -106,6 +106,8 @@ def make_position():
                      ",基本方向", ans['forward']['mind'],
                      ",順思想:", ans['forward']['direction'], t, "(", tp, "-", lc, ")",
                      ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "-", lcr, ")",
+                     "参考", oldest_ans['high_price'], oldest_ans['low_price'],
+                     latest_ans['high_price'], latest_ans['low_price']
                      )
 
         # print(" 該当あり", ans)

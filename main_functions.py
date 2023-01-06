@@ -227,7 +227,7 @@ def renzoku_gap_pm(data_df):
     ・どっちの方向に進んでいるか
     ・値段の動き　等
     を辞書形式で返却する
-    :param data_df:
+    :param data_df: 調査したい範囲のデータフレーム。230101時点では、3足分、６足分がそれぞれ呼ばれる
     :return:
     """
     # 中央値（Inner高値とInner低値の）の動きを確認、何連続で同じ方向に行っているかを確認する（植木算的に、３行の場合は２個）
@@ -290,6 +290,8 @@ def renzoku_gap_pm(data_df):
         # "final_close_price": data_df.iloc[0]["close"],
         "oldest_price": oldest_price,
         "latest_price": latest_price,
+        "high_price":   data_df["high"].max(),  # 範囲の最高価格(innerではない）（将来的にLC/利確価格になるかも）
+        "low_price": data_df["low"].min(),  # 範囲の最高価格(innerではない）（将来的にLC/利確価格になるかも）
         "gap": round(abs(oldest_price - latest_price), 3),
         "middle_price": middle_price,
         "direction": ans,
@@ -364,7 +366,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
                     "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
-                             
+
                 # if latest_ans['direction'] == 1:
                 #     # 折り返しがプラス方向（谷の形、思想の同方向）
                 #     target_price = round(oldest_ans['latest_price'] - 0.015, 3)  # 基本ボトム価格。－値でポジションしにくくなる方向。
