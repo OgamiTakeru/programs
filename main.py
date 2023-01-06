@@ -95,12 +95,12 @@ def make_position():
                                          0, "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
         # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
-        t = float(ans['forward']['target_price'])
+        t = round(float(ans['forward']['target_price']), 3)
         tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['direction']), 3)
         lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['direction']), 3)
-        tr = float(ans['reverse']['target_price'])
-        tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['forward']['direction']), 3)
-        lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['forward']['direction']), 3)
+        tr = round(float(ans['reverse']['target_price']), 3)
+        tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['direction']), 3)
+        lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['direction']), 3)
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
                      ",基本方向", ans['forward']['mind'],

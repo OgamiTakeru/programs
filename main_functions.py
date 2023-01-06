@@ -318,72 +318,116 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
             else:
                 return_flag = 0
 
-            # エントリーポイントを発見した場合の処理！
             if return_flag == 1:
                 print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], )
-                if latest_ans['direction'] == 1:
-                    # 折り返しがプラス方向（谷の形、思想の同方向）
-                    target_price = round(oldest_ans['latest_price'] - 0.015, 3)  # 基本ボトム価格。－値でポジションしにくくなる方向。
-                    lc_price = oldest_ans['middle_price']  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
-                    for_order = {
-                        "target_price": target_price,  # 基本はボトム価格。－値でポジションしにくくなる
-                        "lc_price": lc_price,  # 参考情報（渡し先では使わない）
-                        "lc_range": round(lc_price - target_price, 3),  # 谷形成からの売りポジ。LC価(上がり）>target価
-                        "tp_range": 0.1,
-                        "type": "STOP",
-                        "trail_range": 0.05,
-                        "direction": -1,  # 購入方向（１は買い、-1は売り）
-                        "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
-                    }
+                # エントリーポイントを発見した場合の処理！
+                # ★各種のTPやLCの方向感覚まとめ
+                # 　　　　　　　　　　　　　谷形状(直近微↑、大局↓推定)　　　　 山形状(直近微↓、大局↑推定)　　　統一
+                # 順思想　　エントリー　　　ーでポジションしにくい(下降狙い)　　＋でポジションしにくい　　
+                #         ロスカット　　　＋でロスカしにくい　　　　　　　　　 ーでロスカしにくい
+                #         利確　　　　　　
+                # 逆思想   エントリー　　　＋でポジションしにくい(上昇狙い)　　－でポジションしにくい　　
+                #         ロスカット　　　－でロスカしにくい　　　　　　　　　 ＋でロスカしにくい
+                #         利確　　　　　　＋で利確しにくい
 
-                    # 折り返しがプラス方向（谷の形、思想と【逆】方向！）
-                    target_price_r = latest_ans['latest_price']  # 基本はハーフ値。＋値でポジションしにくくなる
-                    target_price_r = round(now_price + 0.017, 3)  # ＋値でポジションしにくくなる
-                    # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
-                    lc_price_r = latest_ans['oldest_price'] + 0.01  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
-                    #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
-                    for_order_r = {
-                        "target_price": target_price_r,  # 基本はハーフ値。＋値でポジションしにくくなる
-                        "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
-                        "lc_range": 0.02,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
-                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
-                        "type": "STOP",
-                        "trail_range": 0.05,
-                        "direction": 1,  # 購入方向（１は買い、-1は売り）
-                        "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
-                    }
-
-                elif latest_ans['direction'] == -1:
-                    # 折り返しがマイナス方向（山の形、思想と同方向）
-                    target_price = oldest_ans['latest_price'] + 0.015  # 基本ピーク価格。＋値でポジションしにくくなる方向。
-                    lc_price = oldest_ans['middle_price']  # + 0.025  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
-                    for_order = {
-                        "target_price": target_price,  # 基本ピーク価格。＋値でポジションしにくくなる方向。
-                        "lc_price": lc_price,  # 参考情報（渡し先では使わない）
-                        "tp_range": 0.1,
-                        "lc_range": round(target_price - lc_price, 3),  # 山形成からの買いポジ。LC価(下げ）< target価
-                        "type": "STOP",
-                        "trail_range": 0.08,
-                        "direction": 1,  # 購入方向（１は買い、-1は売り）
-                        "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
-                    }
-
-                    # 折り返しがプラス方向（山の形、思想と【逆】方向）！
-                    target_price_r = latest_ans['latest_price']  # 初期ミドル価格。－値でポジションしにくくなる方向。
-                    target_price_r = now_price - 0.017  # －値でポジションしにくくなる。
-                    # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
-                    lc_price_r = latest_ans['oldest_price'] - 0.01  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
-                    for_order_r = {
-                        "target_price": target_price_r,  # 基本ミドル価格。－値でポジションしにくくなる方向。
-                        "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
-                        "lc_range": 0.02,  # round(lc_price_r - target_price_r, 3),  # 山形成からの売り。LC価(上）> target価
-                        "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
-                        "type": "STOP",
-                        "trail_range": 0.05,
-                        "direction": -1,  # 購入方向（１は買い、-1は売り）
-                        "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
-                    }
-                    #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
+                # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
+                # ■順思想（谷方向基準[売りポジを取る]の式）
+                direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1
+                f_entry_price = round(oldest_ans['latest_price'] + 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+                f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
+                f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # 直接指定でも可(direction関係しない）
+                f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
+                f_tp_range = 0.1  # 直接指定でも可(direction関係しない）
+                for_order = {
+                    "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
+                    "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
+                    "lc_range": f_lc_range,  # 谷形成からの売りポジ。LC価(上がり）>target価
+                    "tp_range": f_tp_range,
+                    "type": "STOP",
+                    "trail_range": 0.05,
+                    "direction": -1 * direction_l,  # 購入方向。１は買い(山の順思想)、-1は売り(谷の順思想[式基準])
+                    "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                }
+                # ■逆思想（谷方向[買いポジを取る]基準の式）
+                r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+                r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
+                r_lc_range = 0.02  # round(abs(r_entry_inhabit - r_lc_price), 3)  # 直接指定でも可(direction関係しない）
+                r_tp_price = oldest_ans['middle_price']  # 今後使うかも？
+                r_tp_range = 0.03  # 直接指定でも可(direction関係しない）
+                for_order_r = {
+                    "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
+                    "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
+                    "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
+                    "tp_range": r_tp_range,  # 思想と逆（逆張り）は少し狭い目で。。
+                    "type": "STOP",
+                    "trail_range": 0.05,
+                    "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
+                    "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                }
+                             
+                # if latest_ans['direction'] == 1:
+                #     # 折り返しがプラス方向（谷の形、思想の同方向）
+                #     target_price = round(oldest_ans['latest_price'] - 0.015, 3)  # 基本ボトム価格。－値でポジションしにくくなる方向。
+                #     lc_price = oldest_ans['middle_price']  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
+                #     for_order = {
+                #         "target_price": target_price,  # 基本はボトム価格。－値でポジションしにくくなる
+                #         "lc_price": lc_price,  # 参考情報（渡し先では使わない）
+                #         "lc_range": round(lc_price - target_price, 3),  # 谷形成からの売りポジ。LC価(上がり）>target価
+                #         "tp_range": 0.1,
+                #         "type": "STOP",
+                #         "trail_range": 0.05,
+                #         "direction": -1,  # 購入方向（１は買い、-1は売り）
+                #         "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                #     }
+                #
+                #     # 折り返しがプラス方向（谷の形、思想と【逆】方向！）
+                #     target_price_r = latest_ans['latest_price']  # 基本はハーフ値。＋値でポジションしにくくなる
+                #     target_price_r = round(now_price + 0.017, 3)  # ＋値でポジションしにくくなる
+                #     # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
+                #     lc_price_r = latest_ans['oldest_price'] + 0.01  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
+                #     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
+                #     for_order_r = {
+                #         "target_price": target_price_r,  # 基本はハーフ値。＋値でポジションしにくくなる
+                #         "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
+                #         "lc_range": 0.02,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
+                #         "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
+                #         "type": "STOP",
+                #         "trail_range": 0.05,
+                #         "direction": 1,  # 購入方向（１は買い、-1は売り）
+                #         "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                #     }
+                #
+                # elif latest_ans['direction'] == -1:
+                #     # 折り返しがマイナス方向（山の形、思想と同方向）
+                #     target_price = oldest_ans['latest_price'] + 0.015  # 基本ピーク価格。＋値でポジションしにくくなる方向。
+                #     lc_price = oldest_ans['middle_price']  # + 0.025  # ー値は余裕度（ロスカしにくくなる）、＋値は早期LC
+                #     for_order = {
+                #         "target_price": target_price,  # 基本ピーク価格。＋値でポジションしにくくなる方向。
+                #         "lc_price": lc_price,  # 参考情報（渡し先では使わない）
+                #         "tp_range": 0.1,
+                #         "lc_range": round(target_price - lc_price, 3),  # 山形成からの買いポジ。LC価(下げ）< target価
+                #         "type": "STOP",
+                #         "trail_range": 0.08,
+                #         "direction": 1,  # 購入方向（１は買い、-1は売り）
+                #         "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                #     }
+                #
+                #     # 折り返しがプラス方向（山の形、思想と【逆】方向）！
+                #     target_price_r = latest_ans['latest_price']  # 初期ミドル価格。－値でポジションしにくくなる方向。
+                #     target_price_r = now_price - 0.017  # －値でポジションしにくくなる。
+                #     # ↑ほぼ成り行きレベルのオーダーを入れたい（数秒の差で、すでにロスカ価格超えているケースあるため、再度価格取得）
+                #     lc_price_r = latest_ans['oldest_price'] - 0.01  # - 0.025  # ＋値は余裕度（ロスカしにくくなる）、マイナス値は早期LC
+                #     for_order_r = {
+                #         "target_price": target_price_r,  # 基本ミドル価格。－値でポジションしにくくなる方向。
+                #         "lc_price": lc_price_r,  # 参考情報（渡し先では使わない）
+                #         "lc_range": 0.02,  # round(lc_price_r - target_price_r, 3),  # 山形成からの売り。LC価(上）> target価
+                #         "tp_range": 0.03,  # 思想と逆（逆張り）は少し狭い目で。。
+                #         "type": "STOP",
+                #         "trail_range": 0.05,
+                #         "direction": -1,  # 購入方向（１は買い、-1は売り）
+                #         "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+                #     }
+                #     #  ↑谷形状で、上(思想と逆)に行くポジションの場合、TargetがLC価格よりも上にある
 
                 print(" @gfuncEND", for_order, for_order_r)
                 return {"forward": for_order, "reverse": for_order_r, "info": info}
@@ -391,9 +435,6 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 print(" 戻し幅満たさず（カウントは達成）[率,gap]", return_ratio, oldest_ans['gap']
                       ," 開始位置", oldest_ans['oldest_price'])
                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
-                #  これ、意外と使える可能性も、、、
-                # for_order = {"direction": 0}
-                # for_order_r = {"direction": 0}
                 return 0
         else:
             # print(" 行数未達")
