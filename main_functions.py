@@ -367,7 +367,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 r_entry_price = temp  # 数字部プラス値でエントリーしにくい方向
                 # r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
                 r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
-                r_lc_range = 0.04  # round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+                r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
                 r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
                 r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
                 r_trail_range = 0
