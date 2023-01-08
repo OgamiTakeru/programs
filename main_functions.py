@@ -341,11 +341,12 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
                 # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
                 direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
-                f_entry_price = round(oldest_ans['latest_price'] + 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+                # f_entry_price = round(oldest_ans['latest_price'] + 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+                f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
                 f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                f_lc_range = 0.05  # round(abs(f_entry_price - f_lc_price), 3)  # 直接指定でも可(direction関係しない）
+                f_lc_range = 0.07  # round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定でも可(direction関係しない）
                 f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                f_tp_range = 0.08  # 直接指定でも可(direction関係しない）
+                f_tp_range = 0.04  # ★直接指定でも可(direction関係しない）
                 f_trail_range = 0.05
                 for_order = {
                     "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
@@ -358,12 +359,17 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
                 # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
-                r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+                if direction_l == 1:  # 谷形状
+                    temp = oldest_ans['high_price'] - oldest_ans['gap'] * 0.4  # 60%戻し部が逆思想トリガ
+                elif direction_l == -1:  #山形状
+                    temp = oldest_ans['low_price'] + oldest_ans['gap'] * 0.4  # 60%戻し部が逆思想トリガ
+                # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+                r_entry_price = temp  # 数字部プラス値でエントリーしにくい方向
                 # r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
                 r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
-                r_lc_range = 0.05  # round(abs(r_entry_price - r_lc_price), 3)  # 直接指定でも可(direction関係しない）
-                r_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                r_tp_range = 0.04  # 直接指定でも可(direction関係しない）
+                r_lc_range = 0.04  # round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+                r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
+                r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
                 r_trail_range = 0
                 for_order_r = {
                     "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
