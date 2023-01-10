@@ -316,7 +316,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
-        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 5:  # 行数確認(old区間はt直接指定！）
+        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
             info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
@@ -328,26 +328,17 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
 
             if return_flag == 1:
                 print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], )
-                # エントリーポイントを発見した場合の処理！
-                # ★各種のTPやLCの方向感覚まとめ
-                # 　　　　　　　　　　　　　谷形状(直近微↑、大局↓推定)　　　　 山形状(直近微↓、大局↑推定)　　　統一
-                # 順思想　　エントリー　　　ーでポジションしにくい(下降狙い)　　＋でポジションしにくい　　
-                #         ロスカット　　　＋でロスカしにくい　　　　　　　　　 ーでロスカしにくい
-                #         利確　　　　　　
-                # 逆思想   エントリー　　　＋でポジションしにくい(上昇狙い)　　－でポジションしにくい　　
-                #         ロスカット　　　－でロスカしにくい　　　　　　　　　 ＋でロスカしにくい
-                #         利確　　　　　　＋で利確しにくい
 
                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
                 # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
                 direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
-                # f_entry_price = round(oldest_ans['latest_price'] + 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
-                f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
+                f_entry_price = round(oldest_ans['latest_price'] + 0.005 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+                # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
                 f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                f_lc_range = 0.07  # round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+                f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
                 f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                f_tp_range = 0.04  # ★直接指定でも可(direction関係しない）
-                f_trail_range = 0.05
+                f_tp_range = 0.09  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
+                f_trail_range = 0
                 for_order = {
                     "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
                     "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
@@ -360,13 +351,13 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 }
                 # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
                 if direction_l == 1:  # 谷形状
-                    temp = oldest_ans['high_price'] - oldest_ans['gap'] * 0.4  # 60%戻し部が逆思想トリガ
+                    temp_entry = oldest_ans['high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
                 elif direction_l == -1:  #山形状
-                    temp = oldest_ans['low_price'] + oldest_ans['gap'] * 0.4  # 60%戻し部が逆思想トリガ
+                    temp_entry = oldest_ans['low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
                 # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                r_entry_price = temp  # 数字部プラス値でエントリーしにくい方向
-                # r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
-                r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
+                r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+                r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
+                # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
                 r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
                 r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
                 r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
@@ -459,7 +450,6 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     else:
         # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
         return 0
-
 
 
 def range_base(data_df, base_price):  # 引数 データ、基準価格

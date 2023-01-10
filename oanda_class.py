@@ -625,6 +625,21 @@ class Oanda:
 
     # (10) トレードの変更等
     def TradeCRCDO_exe(self, trade_id, data):
+        '''
+        data = {
+            "takeProfit": {
+                "price": str(round(line, 3)),
+                "timeInForce": "GTC",
+            },
+            "stopLoss": {
+                "price": str(round(line, 3)),
+                "timeInForce": "GTC",
+                },
+            }
+        :param trade_id:
+        :param data:
+        :return:
+        '''
         ep = TradeCRCDO(accountID=self.accountID, tradeID=trade_id, data=data)
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         return res_json

@@ -42,33 +42,6 @@ def make_position():
     d1_df.to_csv(tk.folder_path + 'main_data1.csv', index=False, encoding="utf-8")
     # d1_df = pd.read_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', sep=",", encoding="utf-8")  # test
 
-
-    # ★５分足のクロスがある場合は、１分足も確認して直前（３分以内にあれば）そっちの方向に行くのでは、と推定する
-    # print(latest_cross5_time_dt, latest_cross1_time_dt)
-    # # print((latest_cross5_time_dt - latest_cross1_time_dt).seconds)
-    # gap_second = (latest_cross5_time_dt - latest_cross1_time_dt).seconds  # ５分足クロスと１分足クロスの時間ギャップ
-    # if latest_cross5 != 0:
-    #     print(" 直前に５分クロスを確認")
-    #     # その場合、ひとつ前のクロスを確認する（クロスがくっついている場合は無効にするため）
-    #     confirm_time = cross5_only_df.iloc[-1]['time_jp']  # 確認用
-    #     second_cross = datetime.datetime.strptime(cross5_only_df.iloc[-2]['time_jp'], data_format)  # ひとつ前
-    #     jd_range = (latest_cross5_time_dt - second_cross).seconds  # ５分足クロスの１つ目と二つ目の間（レンジかどうかの判断）
-    #     print(" Range判定",confirm_time, second_cross, jd_range)
-    #     if gap_second < 480:  # ５分足と１分足の発生タイミングが近い
-    #         if latest_cross5 == latest_cross1 and jd_range > 600:  # 同じ方向のクロス、かつ、５分足がレンジではない
-    #             print("  理想 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
-    #             if glc['for_send'] == 0:
-    #                 tk.line_send("ポジ？", latest_cross5, gap_second, latest_cross5_time_dt,"レンジ有無", range_flag, datetime.datetime.now().replace(microsecond=0))
-    #                 glc['for_send'] = 1  # SnedFlag
-    #         else:
-    #             print("  No(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range)
-    #             # tk.line_send("NNo(別方向) 5分クロス:", latest_cross5, "1分クロス:", latest_cross1, "5分-1分", gap_second, "5分Range", jd_range, "RangeBB:",range_bb, "BBRange2", gl_bb['range'])
-    #     else:
-    #         print(" 理想ではない", gap_second)
-    # else:
-    #     print(" ５分クロス無し")
-    #     glc['for_send'] = 0  # SnedFlag
-
     # ##### 折り返し判定
     d5_df['middle_price_gap'] = d5_df['middle_price'] - d5_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
     dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
@@ -86,11 +59,11 @@ def make_position():
     else:
         print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'], ans['info']['return_ratio'], ans['info']['bunbo_gap'])
         # 思想と順方向は必須で入れる
-        order_res = oa.OrderCreate_exe(10000, ans['forward']["direction"], ans['forward']['target_price'],
-                                       ans['forward']['tp_range'], ans['forward']['tp_range'], ans['forward']['type'],
+        order_res = oa.OrderCreate_exe(gl['order_num'], ans['forward']["direction"], ans['forward']['target_price'],
+                                       ans['forward']['tp_range'], ans['forward']['lc_range'], ans['forward']['type'],
                                        ans['forward']['trail_range'], "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         # 思想と逆方向は、ほぼほぼマーケットで入れるが、すでに動いている場合があるため、少し余裕を持って入れる。
-        order_res_r = oa.OrderCreate_exe(10000, ans['reverse']["direction"], ans['reverse']['target_price'],
+        order_res_r = oa.OrderCreate_exe(gl['order_num'], ans['reverse']["direction"], ans['reverse']['target_price'],
                                          ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
                                          ans['reverse']['trail_range'], "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
         print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
@@ -102,15 +75,17 @@ def make_position():
         tr = round(float(ans['reverse']['target_price']), 3)
         tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['direction']), 3)
         lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['direction']), 3)
+        gl['position_f_direction'] = ans['forward']['direction']  # 順方向のポジションがどっち方向かを記録する
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
+                     "順方向:", ans['forward']['direction'],
                      ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
                      ",順思想:", ans['forward']['direction'], t, "(", tp, "[", ans['forward']['tp_range'], "]-",
                      lc, "[", ans['forward']['lc_range'], "]", ")",
                      ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "[", ans['reverse']['tp_range'], "]-",
                      lcr, "[", ans['reverse']['lc_range'], "]", ")",
-                     "参考", oldest_ans['high_price'], oldest_ans['low_price'],
-                     latest_ans['high_price'], latest_ans['low_price']
+                     "参考", oldest_ans['high_price'], oldest_ans['low_price'], oldest_ans['middle_price'],
+                     "," , latest_ans['high_price'], latest_ans['low_price'], latest_ans['middle_price']
                      )
 
         # print(" 該当あり", ans)
@@ -122,10 +97,8 @@ def close_position():
 
     position_df = oa.OpenTrades_exe()  # positionを取得（ループタイミングの関係で、ここでもポジション数を確認する！）
     # ■ポジション有の場合　（解消後初回のみ、mainからこっちに入ってくるため、対策が必要）
-    if len(position_df) > 0:
+    if len(position_df) > 0:  # ポジション有
         print("　　　【ポジションあり状態】")
-        # # ■　強制的なロスカにつながる（両建て不可の為）ので、オーダーは解除する
-        # oa.OrderCancel_All_exe()  # ポジション取得検討時は、まず既存のオーダーをキャンセルする
         # ポジションを持っている場合、ポジションの情報を取得
         price = float(position_df.head(1).iloc[0]["price"])  # 取得時点の価格
         pl = float(position_df.head(1).iloc[0]["unrealizedPL"])  # 含み損益価格
@@ -133,42 +106,31 @@ def close_position():
         t = position_df.head(1).iloc[0]["order_time_jp"]  # 注文時刻
         unit = float(position_df.head(1).iloc[0]["currentUnits"])  # 保持枚数
         past_time_sec = float(position_df.head(1).iloc[0]["past_time_sec"])  # 経過時間秒
-        print("    ポジション", t, price, unit, pl, p_id)
+        pl_pips = round(pl / abs(unit), 3)  # 含み損益（0.0１円単位）名前はピップスだが、１００分の１円単位表示
+        # print("    ポジション", t, price, unit, pl, p_id, ",", pl_pips)
+
         # 分岐で表示
         if pl < 0:
-            print("　　　＠含み損ポジあり", pl, t, p_id, price)
+            print("　　　＠含み損ポジあり", pl, t, p_id, price, pl_pips)
         else:
-            print("　　　＠含み益ポジあり", pl, t, p_id, price)
+            print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips)
 
-        # ■長時間のポジションはキャンセル/条件変更する
-        print("　　　経過時間", past_time_sec, t)
-        # パータン①　取得後１5分以上経過している場合
-        if past_time_sec > 900:
-            print("　　　９００秒以上経過のポジション/キャンセルします", past_time_sec)
-            oa.TradeClose_exe(p_id, None, "cancel")
-        # パターン②　取得後２分経過時
-        # elif past_time.seconds > 480:  # 結構480は方向転換としては良いタイミングな気がする！（22/07/20)
-        #     # マイナスへ発信した場合の対処
-        #     if gl['tp_func'] == 0:
-        #         # ■マイナスであれば、ぎりぎりの利確を狙う
-        #         gl['tp_func'] = 1  # 二回目以降は処理しないようにする
-        #         # 利確ラインを「０確」にする
-        #         if unit < 0:
-        #             # 売りのポジションの場合、買いの価格で決済(0以上になった場合に利確を行ってしまう）
-        #             line = price - 0.001  # 本当はスプレッド分ほしいけど。。
-        #         else:
-        #             line = price + 0.001
-        #         data = {
-        #             "takeProfit": {
-        #                 "price": str(round(line, 3)),
-        #                 "timeInForce": "GTC",
-        #             },
-        #         }
-        #         print("CD工程", round(line, 3))
-        #         # 取得後2分以上経過している場合、最低限０で止めたい
-        #         print("　　　規定の分以上かつ利確幅を縮めます", past_time.seconds, "price", str(line))
-        #     else:
-        #         print("　　　CD済(tp_func済フラグ有）")
+        # ポジション取得後、数分（５分足2個分）は含み損を認める。それ以降、プラス域4pips以上いった場合、最低2pipsの利確のためのロスカラインをセット
+        if past_time_sec > 600 and pl_pips > 0.04 and gl['cd_flag'] == 0:
+            # プラス域の為、最低限の＋を確保（0.02) かつ、このポジションでCDしていない場合
+            if unit < 0:  # 売りポジの場合、利確はエントリープライス-0.02
+                cd_line = price - 0.002
+            else:  # 買いポジの場合、利確はエントリープライス+0.02
+                cd_line = price + 0.002
+            data = {
+                "stopLoss": {
+                    "price": str(round(cd_line, 3)),
+                    "timeInForce": "GTC",
+                },
+            }
+            oa.TradeCRCDO_exe(p_id, data)  # ポジションを変更する
+            tk.line_send("LC値底上げ", price, "⇒", cd_line)
+            gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
 
 
 def main():
@@ -180,21 +142,36 @@ def main():
     pending_new_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
     pending_df = oa.OrdersPending_exe()  # ペンディングオーダーの取得（利確注文等も含む）
 
-    # ★ポジション解除時のデータ送信。
-    if gl["exe_mode"] == 1 and len(position_df) == 0:
+    # ★ポジション解除時や取得時のデータ送信。
+    if gl["position_flag"] == 1 and len(position_df) == 0:
         # ポジション有からポジションなしに切り替わった場合、持っていた（今は解消済み）ポジションの情報を送信する
-        pass
+        tk.line_send("ポジションを解消しました")
+        gl['position_flag'] = 0  # ポジションフラグのリセット
+        gl['position_f_direction'] = 0  # 順思想のポジション方向のリセット
+    elif gl["position_flag"] == 0 and len(position_df) != 0:
+        # ポジション無しから、初めてポジションありになった時
+        unit = float(position_df.head(1).iloc[0]["currentUnits"])  # 保持枚数（ポジションの方向を確認するため）
+        d = unit / abs(unit)  # 1か-1にする
+        if gl['position_f_direction'] == d:  # ポジションの方向と、順思想のポジション方向が一致する場合⇒順方向のポジション
+            gl['position_mind'] = 1  # 1は順方向
+        else:
+            gl['position_mind'] = -1  # -1は逆方向
+        tk.line_send("ポジションを取得しました(思想方向:", gl['position_mind'], d)
+        gl['position_flag'] = 1  # ポジションフラグの成立
+        oa.OrderCancel_All_exe()  # 反対のオーダーも解除しておく（本当は残して額に行った時のリスク下げたいが、、どうしよう）
+
     # ★ペンディングは時間的に解消を実施する
     if len(pending_new_df) != 0:
         # 注文中のデータが存在する場合
         print("    ◇未確定注文有", gl['now'])
         past_time = pending_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
         print("  orderあり（保持中）", past_time)
-        limit_time_min = 20
+        limit_time_min = 35
         if past_time > 60 * limit_time_min:  # 60*指定の分
             # 12分以上経過している場合、オーダーをキャンセルする
             oa.OrderCancel_All_exe()
             tk.line_send(str(limit_time_min), "以上のオーダーを解除します")
+
     # ★メインとなる分岐
     if len(position_df) != 0:
         # ★ポジションがある場合（ポジション解消検討処理へ）
@@ -202,6 +179,7 @@ def main():
         close_position()
     elif len(position_df) == 0 and len(pending_new_df) == 0:
         # ★ポジションがない場合
+        gl['cd_flag'] = 0
         make_position()
 
 
@@ -218,8 +196,9 @@ def schedule(interval, f, wait=True):
 
         # 【時間帯による実施無し】
         if 3 <= time_hour < 8:
-            # 3時～７時の間はスプレッドを考慮していかなる場合も実行しない
-            pass
+            # 3時～７時の間はスプレッドを考慮していかなる場合も実行しない⇒ポジションや注文も全て解消
+            oa.OrderCancel_All_exe()
+            oa.TradeAllColse_exe()
         # 【実施時間】
         else:
             # ★基本的な実行関数。基本的にgl['schedule_freq']は１秒で実行を行う。（〇〇分〇秒に実行等）
@@ -247,8 +226,10 @@ def schedule(interval, f, wait=True):
 
 # 開始
 print("開始")
-# ■クラスインスタンス生成 (処理は今後opが正規で動く９
-oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
+# ■クラスインスタンス生成 (処理は今後opが正規で動く)
+mode = tk.environment
+oa = oanda_class.Oanda(tk.accountID, tk.access_token, mode)  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
+print(mode)
 
 # グローバル変数の定義
 glp = {
@@ -271,13 +252,14 @@ gl = {
     "now_s": 0,
     'now': datetime.datetime.now().replace(microsecond=0),
     "latest_get": datetime.datetime.now() + datetime.timedelta(minutes=-20),  # 初期値は現時刻ー２０分
-    "spread": 0.8,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
-    "tp": 0.035,
-    "lc": 0.02,
+    "spread": 0.012,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
     "p_order": 2,  # 極値の判定幅
-    "test_target_price": 0,
+    "position_flag": 0,  # ポジションが消えたタイミングを取得するためのフラグ
+    "position_f_direction": 0,  # ポジションが買いか売りか
+    "cd_flag": 0,  # 利確幅を途中で変えた時のフラグ
+    "order_num": 30000,
 }
 
 # ■出発！
-main()
+# main()
 schedule(gl['schedule_freq'], main)
