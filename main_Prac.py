@@ -8,7 +8,7 @@ import pandas as pd
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
-import programs.main_functions as f  # とりあえずの関数集
+import programs.main_functions_Prac as f  # とりあえずの関数集
 
 
 # import programs.mp_functions as mp  # MakePositionに関する関数群
@@ -47,7 +47,7 @@ def make_position():
     dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
     # ３：６の場合
     ignore_latest = 1  # 最初（現在を意味する）
-    dr_latest_n = 3
+    dr_latest_n = 2
     dr_oldest_n = 10
     latest_df = dr[1: dr_latest_n + 1]  # 直近の３個を取得
     oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
@@ -87,7 +87,7 @@ def make_position():
         tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['direction']), 3)
         lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['direction']), 3)
         gl['position_f_direction'] = ans['forward']['direction']  # 順方向のポジションがどっち方向かを記録する
-        tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
+        tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
                      "順方向:", ans['forward']['direction'],
                      ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
@@ -155,12 +155,13 @@ def close_position():
                             },
                         }
                         oa.TradeCRCDO_exe(p_id, data)  # ポジションを変更する
-                        tk.line_send("■LC値底上げ", price, "⇒", cd_line)
+                        tk.line_send("LC値底上げ", price, "⇒", cd_line)
                         gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
 
 
 
 def main():
+    print("Practice")
     global gl
     gl["main_counter"] += 1
     print(gl["now"])
@@ -172,7 +173,7 @@ def main():
     # ★ポジション解除時や取得時のデータ送信。
     if gl["position_flag"] == 1 and len(position_df) == 0:
         # ポジション有からポジションなしに切り替わった場合、持っていた（今は解消済み）ポジションの情報を送信する
-        tk.line_send("■ポジションを解消しました")
+        tk.line_send("ポジションを解消しました")
         gl['exe_mode'] = 0
         gl['position_flag'] = 0  # ポジションフラグのリセット
         gl['position_f_direction'] = 0  # 順思想のポジション方向のリセット
@@ -184,7 +185,7 @@ def main():
             gl['position_mind'] = 1  # 1は順方向
         else:
             gl['position_mind'] = -1  # -1は逆方向
-        tk.line_send("■ポジションを取得しました(思想方向:", gl['position_mind'], d)
+        tk.line_send("ポジションを取得しました(思想方向:", gl['position_mind'], d)
         gl['position_flag'] = 1  # ポジションフラグの成立
         oa.OrderCancel_All_exe()  # 反対のオーダーも解除しておく（本当は残して額に行った時のリスク下げたいが、、どうしよう）
 
@@ -198,7 +199,7 @@ def main():
         if past_time > 60 * limit_time_min:  # 60*指定の分
             # 12分以上経過している場合、オーダーをキャンセルする
             oa.OrderCancel_All_exe()
-            tk.line_send(str(limit_time_min), "以上のオーダーを解除します■")
+            tk.line_send(str(limit_time_min), "以上のオーダーを解除します")
 
     # ★メインとなる分岐
     if len(position_df) != 0:
@@ -229,7 +230,7 @@ def schedule(interval, f, wait=True):
             if gl['midnight_close'] == 0:  # 深夜にポジションが残っている場合は解消
                 oa.OrderCancel_All_exe()
                 oa.TradeAllColse_exe("try")
-                tk.line_send("■深夜のポジション・オーダー解消を実施")
+                tk.line_send("深夜のポジション・オーダー解消を実施")
                 gl['midnight_close'] = 1  # 解消済みフラグ
 
         # 【実施時間】
@@ -238,7 +239,7 @@ def schedule(interval, f, wait=True):
             # ★基本的な実行関数。基本的にgl['schedule_freq']は１秒で実行を行う。（〇〇分〇秒に実行等）
             if gl["exe_mode"] == 0:
                 # [2の倍数分、15秒に処理に定期処理実施
-                if time_min % 1 == 0 and time_sec == 9:
+                if time_min % 1 == 0 and time_sec == 12:
                     t = threading.Thread(target=f)
                     t.start()
                     if wait:  # 時間経過待ち処理？
@@ -247,7 +248,7 @@ def schedule(interval, f, wait=True):
             elif gl["exe_mode"] == 1:
                 # N秒ごとに実施
                 if time_min % 1 == 0 and (
-                        time_sec == 9 or time_sec == 39):
+                        time_sec == 12 or time_sec == 42):
                     # print("  2秒ごと実施",time_hour,time_min,time_sec)
                     t = threading.Thread(target=f)
                     t.start()
@@ -282,7 +283,7 @@ gl = {
 }
 
 # ■練習か本番かの分岐
-fx_mode = 1  # 0=practice, 1=Live
+fx_mode = 0  # 0=practice, 1=Live
 
 if fx_mode == 0:  # practice
     env = tk.environment

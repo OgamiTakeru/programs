@@ -237,7 +237,6 @@ def renzoku_gap_pm(data_df):
     :return:
     """
     # 中央値（Inner高値とInner低値の）の動きを確認、何連続で同じ方向に行っているかを確認する（植木算的に、３行の場合は２個）
-    # print("  Practice　")
     p_counter = m_counter = 0
     oldest_price = latest_price = 0
     counter = 0
@@ -342,7 +341,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
                     f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
                     f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
-                    f_tp_range = 0.08  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
+                    f_tp_range = 0.07  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
                     f_trail_range = 0
 
                     # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
