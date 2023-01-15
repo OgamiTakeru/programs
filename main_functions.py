@@ -247,17 +247,35 @@ def renzoku_gap_pm(data_df):
         if l <= len(data_df) - 2:  # 差分取得のため。－２のインデックスまで
             # 初回の場合
             if counter == 0:
-                counter += 1
-                if data_df.iloc[l]["middle_price_gap"] > 0:
-                    flag = 1
-                    # print("初回＋", data_df.iloc[l]["middle_price_gap"], data_df.iloc[l]["inner_high"], data_df.iloc[l]["time_jp"])
-                    latest_price = data_df.iloc[l]["inner_high"]  # 最初のスタート値（上がっていくため、最高部分）
-                    p_counter += 1
-                else:
-                    # print("初回－", data_df.iloc[l]["middle_price_gap"], data_df.iloc[l]["inner_low"], data_df.iloc[l]["time_jp"])
-                    latest_price = data_df.iloc[l]["inner_low"]  # 最初のスタート値（下がっていくため、最低部分）
-                    m_counter += 1
-                    flag = -1
+                if len(data_df) - 2 == 0:  # 二行しかない場合（指定が２つのDFの場合、一回で完結する
+                    # print(data_df)
+                    # data_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
+                    if data_df.iloc[0]["middle_price_gap"] > 0:  # 先頭の行(時系列が新)が、次行(時系列が古）との比較。
+                        # 上り方向
+                        p_counter = 1
+                        m_counter = 0
+                        oldest_price = data_df.iloc[-1]["inner_low"]  # 上がりGapなので、開始は２行目（古）のLow = 低い
+                        latest_price = data_df.iloc[0]["inner_high"]  # 上がりGapなので、終了は1行目（新）のhigh　＝高い
+                        middle_price = round(oldest_price + (latest_price - oldest_price) / 2, 3)  # oldが低いところにいる
+                    else:
+                        p_counter = 0
+                        m_counter = 1
+                        oldest_price = data_df.iloc[-1]["inner_high"]  # 下がりGapなので、開始は２行目（古）のhigh　＝　高い
+                        latest_price = data_df.iloc[0]["inner_low"]  # 下がりGapなので、終了は1行目（新）のlow　＝低い
+                        middle_price = round(oldest_price - (oldest_price - latest_price) / 2, 3)  # oldが高いところにいる
+                else: # 通常（従来の6:3方法の場合）
+                    # print("g", len(data_df))
+                    counter += 1
+                    if data_df.iloc[l]["middle_price_gap"] > 0:
+                        flag = 1
+                        # print("初回＋", data_df.iloc[l]["middle_price_gap"], data_df.iloc[l]["inner_high"], data_df.iloc[l]["time_jp"])
+                        latest_price = data_df.iloc[l]["inner_high"]  # 最初のスタート値（上がっていくため、最高部分）
+                        p_counter += 1
+                    else:
+                        # print("初回－", data_df.iloc[l]["middle_price_gap"], data_df.iloc[l]["inner_low"], data_df.iloc[l]["time_jp"])
+                        latest_price = data_df.iloc[l]["inner_low"]  # 最初のスタート値（下がっていくため、最低部分）
+                        m_counter += 1
+                        flag = -1
             # 初回以降
             else:
                 counter += 1
@@ -296,7 +314,9 @@ def renzoku_gap_pm(data_df):
         # "final_time": data_df.iloc[0]["time_jp"],
         # "final_close_price": data_df.iloc[0]["close"],
         "oldest_price": oldest_price,
+        "oldest_time": data_df.iloc[-1]["time_jp"],
         "latest_price": latest_price,
+        "latest_time": data_df.iloc[0]["time_jp"],
         "inner_high_price": data_df["inner_high"].max(),
         "inner_low_price": data_df["inner_low"].min(),
         "high_price": data_df["high"].max(),  # 範囲の最高価格(innerではない）（将来的にLC/利確価格になるかも）
@@ -331,7 +351,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 return_flag = 0
 
             if return_flag == 1:
-                print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], )
+                print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], return_ratio )
                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
                 if return_ratio < 20:  # 戻しが弱い場合⇒基本は順思想に構える
                     # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
@@ -382,6 +402,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                         temp_entry = oldest_ans['inner_low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
                     # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
                     r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+                    print(latest_ans['oldest_price'], direction_l)
                     r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
                     # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
                     r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
@@ -389,7 +410,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
                     r_tp_range = 0.15 if r_tp_range > 0.15 else r_tp_range
                     r_trail_range = 0
-                elif return_ratio < max_return_ratio:  # そこそこ戻しが強い場合、逆思想のエントリーを遅らせる。
+                elif return_ratio <= max_return_ratio:  # そこそこ戻しが強い場合、逆思想のエントリーを遅らせる。
                     # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
                     direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
                     f_entry_price = round(oldest_ans['latest_price'] + 0.008 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
@@ -441,8 +462,9 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 print(" @gfuncEND", for_order, for_order_r)
                 return {"forward": for_order, "reverse": for_order_r, "info": info}
             else:
-                print(" 戻し幅満たさず（カウントは達成）[率,gap]", return_ratio, oldest_ans['gap']
-                      ," 開始位置", oldest_ans['oldest_price'])
+                print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
+                      ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],
+                      latest_ans['latest_time'])
                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
                 return 0
         else:

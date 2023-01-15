@@ -71,7 +71,7 @@ def make_position():
                                        ans['forward']['tp_range'], ans['forward']['lc_range'], ans['forward']['type'],
                                        ans['forward']['trail_range'], "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         order_res_t = oa.OrderCreate_exe(gl['trail_num'], ans['forward']["direction"], ans['forward']['target_price'],
-                                       ans['forward']['tp_range'], ans['forward']['lc_range']/2, ans['forward']['type'],
+                                       ans['forward']['tp_range'], ans['forward']['lc_range']*0.7, ans['forward']['type'],
                                        0.05, "順思想t")  # 順思想（順張・現より低い位置に注文入れたい）
         # 逆思想
         order_res_r = oa.OrderCreate_exe(gl['order_num'], ans['reverse']["direction"], ans['reverse']['target_price'],

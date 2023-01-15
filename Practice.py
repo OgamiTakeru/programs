@@ -194,7 +194,7 @@ def main_peak():
             index_graph = d.index.values[-1]  # インデックスを確認
             dr = d.sort_index(ascending=False)  # ★dが毎回の取得と同義⇒それを逆にする（逆を意味するrをつける）
 
-            dr_latest_n = 3  # 直近、何連続で同一方向への変化か（InnerHighとInnerLowの中央値の推移で検証）
+            dr_latest_n = 2  # 直近、何連続で同一方向への変化か（InnerHighとInnerLowの中央値の推移で検証）
             dr_oldest_n = 10  # その前に何連続で同方向への変化があるかの最大値。この中で最長何連続で同方向に行くかが大事。
             latest_df = dr[1: dr_latest_n+1] # 直近の３個を取得
             oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
@@ -304,6 +304,8 @@ def main_peak():
                                 "latest_low": latest_ans['low_price'],
                                 "oldest_high": oldest_ans['high_price'],
                                 "oldest_low": oldest_ans['low_price'],
+                                "return_ratio": ans['info']['return_ratio'],
+                                "bunbo_gap": ans['info']['bunbo_gap'],
                                 "res_gap": 0,
                             }
                             # ロスカにひっかかている場合
@@ -320,7 +322,7 @@ def main_peak():
                                 ans_dic['res'] = "TP"
                                 ans_dic['res_gap'] = abs(tp_price - base_info['target_price'])
                                 TEST_ans_arr.append(ans_dic)
-                                print(TEST_ans_arr)
+                                # print(TEST_ans_arr)
                                 break
                             # 揉んでしまって、期間内にポジションを解消できていない場合
                             if index == len(detail_df)-1:
@@ -397,7 +399,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 1000,
+    "candle_num": 5000,
     "num": 1,  # candle
     "candle_unit": "M5",
 }
