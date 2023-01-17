@@ -414,6 +414,7 @@ class Oanda:
         :param units: 購入するユニット数。大体1万とか。
         :param ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid)
         :param price: 130.150のような小数点三桁で指定。（メモ：APIで渡す際は小数点３桁のStr型である必要がある。本関数内で自動変換）
+                    成り行き注文であっても、LCやTPを設定する上では必要
         :param tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。
         :param lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。
         :param type: 下記参照
@@ -485,6 +486,91 @@ class Oanda:
                       "cancel": canceled
                       }
         return order_info
+
+
+    # (3)-1-2 オーダーを発行する（辞書型で受け取る関数)
+    def OrderCreate_dic_exe(self, info):
+        """
+        オーダーを発行する。
+        :param units: 購入するユニット数。大体1万とか。
+        :param ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid)
+        :param price: 130.150のような小数点三桁で指定。（メモ：APIで渡す際は小数点３桁のStr型である必要がある。本関数内で自動変換）
+                    成り行き注文であっても、LCやTPを設定する上では必要
+        :param tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。
+        :param lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。
+        :param type: 下記参照
+        :param tr_range: トレール幅を指定。0.01単位で指定。OANDAの仕様上0.05以上必須。指定しない場合は０を渡す
+        :param remark: 今は使っていないが、引数としては残してある。何かしら文字列をテキトーに渡す。
+        :return: 上記の情報をまとめてDic形式で返却。オーダーミス発生(オーダー入らず)した場合は、辞書内cancelがTrueとなる。
+        ■オーダー種類について
+          STOP:指値。順張り（現価格より高い値段で買い、現価格より低い値段で売りの指値）、また、ロスカット
+          LIMIT:指値。逆張り（現価格より低い値段で買い、現価格より高い値段で売りの指値）、また、利確
+          MARKET:成り行き。この場合、priceは設定しても無視される（ただし引数としてはテキトーな数字を入れる必要あり）。
+        """
+        self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
+        # 念のため、初期値を入れておく。
+        data = {  # ロスカ、利確ありのオーダー
+            "order": {
+                "instrument": "USD_JPY",
+                "units": 10,
+                "type": "",  # "STOP(逆指)" or "LIMIT"
+                "positionFill": "DEFAULT",
+                "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
+            }
+        }
+        data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
+        data['order']['type'] = info['type']  # 必須
+        if info['type'] != "MARKET":
+            # 成り行き注文以外
+            data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+        if info['tp_range'] != 0:
+            # 利確設定ありの場合
+            data['order']['takeProfitOnFill'] = {}
+            data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
+                                                                   (info['tp_range'] * info['ask_bid']), 3))  # 利確
+            data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
+        if info['lc_range'] != 0:
+            # ロスカ設定ありの場合
+            data['order']['stopLossOnFill'] = {}
+            data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
+                                                                 (info['lc_range'] * info['ask_bid']), 3))  # ロスカット
+            data['order']['stopLossOnFill']['timeInForce'] = "GTC"
+        if info['tr_range'] != 0:
+            # トレールストップロス設定ありの場合
+            data['order']['trailingStopLossOnFill'] = {}
+            data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
+            data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
+
+        # 実行
+        ep = OrderCreate(accountID=self.accountID, data=data)  #
+        res_json = eval(json.dumps(self.api.request(ep), indent=2))
+        if 'orderCancelTransaction' in res_json:
+            print("   ■■■CANCELあり")
+            print(res_json)
+            canceled = True
+        else:
+            canceled = False
+
+        # res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出　不要？？？221030
+        # 実行結果の中から、約定価格を取得する（Marketの場合のみとなる）
+        # if 'orderFillTransaction' in res_json:
+        #     if 'price' in res_json['orderFillTransaction']:
+        #         act_price = res_json['orderFillTransaction']['price']
+        #     else:
+        #         act_price = 99999
+        # else:
+        #     act_price = 8888
+        # オーダー情報履歴をまとめておく
+        order_info = {"price": str(round(info['price'], 3)),
+                      "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
+                      "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
+                      "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
+                      "type": info['type'],
+                      "cancel": canceled
+                      }
+        return order_info
+
+
 
     # (4)-1 注文（単品）キャンセル
     def OrderCancel_exe(self, order_id, remark="cancel"):

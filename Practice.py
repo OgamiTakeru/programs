@@ -194,7 +194,7 @@ def main_peak():
             index_graph = d.index.values[-1]  # インデックスを確認
             dr = d.sort_index(ascending=False)  # ★dが毎回の取得と同義⇒それを逆にする（逆を意味するrをつける）
 
-            dr_latest_n = 2  # 直近、何連続で同一方向への変化か（InnerHighとInnerLowの中央値の推移で検証）
+            dr_latest_n = 3  # 直近、何連続で同一方向への変化か（InnerHighとInnerLowの中央値の推移で検証）
             dr_oldest_n = 10  # その前に何連続で同方向への変化があるかの最大値。この中で最長何連続で同方向に行くかが大事。
             latest_df = dr[1: dr_latest_n+1] # 直近の３個を取得
             oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
@@ -212,7 +212,7 @@ def main_peak():
                 # ■折り返し後の検証用のデータを取得し、増減の結果を算出する
                 # ■（１）検証用の後続データの取得（dの直近が「8:00:00」の５分足の場合、8:05:00以降の５秒足を取得する
                 foot_minute = 5  # 元データとみなすdが何分足だったかを記録（将来的にはM5とかから５だけを抽出したい）
-                detail_range = 360  # N行×5S の検証を行う。 30分の場合360
+                detail_range = 2080  # N行×5S の検証を行う。 30分の場合360
                 # 折り返し調査対象の最新行の時刻(time)をdatetimeに変換する（.fromisoformatが使えずやむなく関数を用意）
                 latest_row_time_dt = f.str_to_time(dr.iloc[0]['time'][:26])
                 # 足分を加算して、検証開始時刻の取得（今回に限っては、プラス２足分！！（latestが自分を含まないため、調査開始は実質２足後）
@@ -400,7 +400,7 @@ gl = {
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
     "candle_num": 5000,
-    "num": 1,  # candle
+    "num": 10,  # candle
     "candle_unit": "M5",
 }
 

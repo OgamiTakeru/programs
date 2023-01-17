@@ -339,12 +339,13 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
+        print(latest_ans['count'],latest_ans['data_size'])
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
             info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
             # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
-            max_return_ratio = 52
+            max_return_ratio = 45
             if return_ratio <= max_return_ratio:
                 return_flag = 1
             else:
@@ -353,110 +354,76 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
             if return_flag == 1:
                 print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], return_ratio )
                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
-                if return_ratio < 20:  # 戻しが弱い場合⇒基本は順思想に構える
-                    # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
-                    direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
-                    f_entry_price = round(oldest_ans['latest_price'] + 0.02 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
-                    # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
-                    f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                    f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
-                    f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                    f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
-                    f_tp_range = 0.08  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
-                    f_trail_range = 0
 
-                    # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
-                    if direction_l == 1:  # 谷形状
-                        # temp_entry = oldest_ans['high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                    elif direction_l == -1:  #山形状
-                        # temp_entry = oldest_ans['low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                    # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                    r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
-                    r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
-                    # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
-                    r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
-                    r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
-                    r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
-                    r_tp_range = 0.15 if r_tp_range > 0.15 else r_tp_range
-                    r_trail_range = 0
-                elif return_ratio < 44:  # 戻しが弱い場合⇒基本は順思想に構える
-                    # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
-                    direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
-                    f_entry_price = round(oldest_ans['latest_price'] + 0.01 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
-                    # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
-                    f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                    f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
-                    f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                    f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
-                    f_tp_range = 0.07  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
-                    f_trail_range = 0
+                # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
+                direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。
+                base_adjuster = 0.01
+                if direction_l == 1:  # 谷形状 底の髭より少し余裕を持った位置に！（順に行くときは、ガッツリ行くと信じて）
+                    print("谷", oldest_ans['inner_low_price'] - oldest_ans['low_price'])
+                    if oldest_ans['inner_low_price'] - oldest_ans['low_price'] < base_adjuster:
+                        # 髭が短い過ぎる場合、アジャスターに最低限の0.15を設定
+                        adjuster = oldest_ans['inner_low_price'] - oldest_ans['low_price']
+                    else:
+                        adjuster = base_adjuster
+                        print("谷", adjuster)
+                    # adjuster = 0.15
+                    temp_entry = oldest_ans['low_price'] - adjuster  # adjusterをマイナスし、ポジションしにくくする
+                elif direction_l == -1:  # 山形状
+                    print("山", oldest_ans['high_price'] - oldest_ans['inner_high_price'])
+                    if oldest_ans['high_price'] - oldest_ans['inner_high_price'] < base_adjuster:
+                        # 髭が短い過ぎる場合、アジャスターに最低限の0.15を設定
+                        adjuster = oldest_ans['high_price'] - oldest_ans['inner_high_price']
+                    else:
+                        adjuster = base_adjuster
+                    # adjuster = 0.15
+                    print("山",adjuster)
+                    temp_entry = oldest_ans['inner_high_price'] + adjuster
+                print("e?", adjuster, direction_l)
+                f_entry_price = round(temp_entry, 3)
+                # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
+                f_lc_price = latest_ans['latest_price']  # 短めのロスカ（直近価格まで程度にする 短すぎる場合、どうしよう）
+                f_lc_range = round(abs(f_entry_price - f_lc_price), 3)
+                f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
+                f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
+                f_tp_range = 0.05 # round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+                f_trail_range = 0
+                remark = "20以下順強"
 
-                    # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
-                    if direction_l == 1:  # 谷形状
-                        # temp_entry = oldest_ans['high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                    elif direction_l == -1:  #山形状
-                        # temp_entry = oldest_ans['low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                    # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                    r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
-                    print(latest_ans['oldest_price'], direction_l)
-                    r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
-                    # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
-                    r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
-                    r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
-                    r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
-                    r_tp_range = 0.15 if r_tp_range > 0.15 else r_tp_range
-                    r_trail_range = 0
-                elif return_ratio <= max_return_ratio:  # そこそこ戻しが強い場合、逆思想のエントリーを遅らせる。
-                    # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
-                    direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
-                    f_entry_price = round(oldest_ans['latest_price'] + 0.008 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
-                    # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
-                    f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
-                    f_lc_range = round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
-                    f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
-                    f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
-                    f_tp_range = 0.07  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
-                    f_trail_range = 0
+                # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
+                # if direction_l == 1:  # 谷形状
+                #     temp_entry = oldest_ans['latest_price']
+                # elif direction_l == -1:  # 山形状
+                #     temp_entry = oldest_ans['low_price']
+                # r_entry_price = round(0.01 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+                # r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+                r_entry_price = oldest_ans['latest_price']
+                r_lc_price = round(0.01 * direction_l + f_entry_price, 3)  # 数字部＋値は早期LC順思想のPrice取り入れ
+                # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
+                r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # 順思想の時の髭の長さ寄りも少し短め（＝最低0.15より少し短め）
+                r_tp_price = oldest_ans['oldest_price']  # high low 切替
+                r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
+                # r_tp_range = 0.03  # 0.15 if r_tp_range > 0.15 else r_tp_range
+                r_trail_range = 0
 
-                    # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
-                    if direction_l == 1:  # 谷形状
-                        # temp_entry = oldest_ans['high_price'] - oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_high_price'] - oldest_ans['gap'] * 0.70  # 60%戻し部が逆思想トリガ
-                    elif direction_l == -1:  #山形状
-                        # temp_entry = oldest_ans['low_price'] + oldest_ans['gap'] * 0.48  # 60%戻し部が逆思想トリガ
-                        temp_entry = oldest_ans['inner_low_price'] + oldest_ans['gap'] * 0.70  # 60%戻し部が逆思想トリガ
-                    # r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                    r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
-                    r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
-                    # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
-                    r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
-                    r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
-                    r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
-                    r_tp_range = 0.15 if r_tp_range > 0.15 else r_tp_range
-                    r_trail_range = 0
                 # 結果の格納と表示
                 for_order = {
-                    "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
-                    "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
-                    "lc_range": f_lc_range,  # 谷形成からの売りポジ。LC価(上がり）>target価
-                    "tp_range": f_tp_range,
-                    "type": "STOP",
-                    "trail_range": f_trail_range,
-                    "direction": -1 * direction_l,  # 購入方向。１は買い(山の順思想)、-1は売り(谷の順思想[式基準])
+                    "price": f_entry_price,  # 注文で直接利用
+                    "lc_price": f_lc_price,  # 参考情報
+                    "lc_range": f_lc_range,  # 注文で直接利用
+                    "tp_range": f_tp_range,  # 注文で直接利用
+                    "type": "STOP",  # 注文で直接利用
+                    "tr_range": 0,  # f_trail_range,  # 注文を直接利用
+                    "ask_bid": -1 * direction_l,  # 注文で直接利用。購入方向。１は買(山の順思想)、-1は売(谷の順思想[基準])
                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
                 for_order_r = {
-                    "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
+                    "price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
                     "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
                     "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
                     "tp_range": r_tp_range,  # 思想と逆（逆張り）は少し狭い目で。。
-                    "type": "STOP",
-                    "trail_range": r_trail_range,
-                    "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
+                    "type": "LIMIT",  # ★逆思想の取り方を変えると、ここはLIMITだ！
+                    "tr_range": r_trail_range,
+                    "ask_bid": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
                     "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
                 print(" @gfuncEND", for_order, for_order_r)
@@ -468,11 +435,95 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
                 return 0
         else:
-            # print(" 行数未達")
+            print("  行数未達")
             return 0
     else:
-        # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
+        print("  同方向", oldest_ans['count'], latest_ans['count'], latest_ans['direction'], oldest_ans['direction'])
         return 0
+
+
+# ## こちらは最大値算出用！””””
+# def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
+#     """
+#
+#     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
+#     :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
+#     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
+#     :return:
+#     """
+#     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
+#         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
+#             # 戻しのパーセンテージを確認
+#             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
+#             info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
+#             # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
+#             max_return_ratio = 40
+#             if return_ratio <= max_return_ratio:
+#                 return_flag = 1
+#             else:
+#                 return_flag = 0
+#
+#             ####   最大値算出用
+#             if return_flag == 1:
+#                 print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], return_ratio )
+#                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
+#                 # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
+#                 direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
+#                 f_entry_price = round(oldest_ans['latest_price'] - 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+#                 # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
+#                 f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
+#                 f_lc_range = 0.07  # round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
+#                 f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
+#                 f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
+#                 f_tp_range = 0.09  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
+#                 f_trail_range = 0
+#
+#                 # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
+#                 r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+#                 # r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+#                 r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
+#                 # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
+#                 r_lc_range = 0.04  # round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+#                 r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
+#                 r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
+#                 r_tp_range = 0.04  # 0.15 if r_tp_range > 0.15 else r_tp_range
+#                 r_trail_range = 0
+#
+#                 # 結果の格納と表示
+#                 for_order = {
+#                     "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
+#                     "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
+#                     "lc_range": f_lc_range,  # 谷形成からの売りポジ。LC価(上がり）>target価
+#                     "tp_range": f_tp_range,
+#                     "type": "STOP",
+#                     "trail_range": f_trail_range,
+#                     "direction": -1 * direction_l,  # 購入方向。１は買い(山の順思想)、-1は売り(谷の順思想[式基準])
+#                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+#                 }
+#                 for_order_r = {
+#                     "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
+#                     "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
+#                     "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
+#                     "tp_range": r_tp_range,  # 思想と逆（逆張り）は少し狭い目で。。
+#                     "type": "STOP",
+#                     "trail_range": r_trail_range,
+#                     "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
+#                     "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+#                 }
+#                 print(" @gfuncEND", for_order, for_order_r)
+#                 return {"forward": for_order, "reverse": for_order_r, "info": info}
+#             else:
+#                 print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
+#                       ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],
+#                       latest_ans['latest_time'])
+#                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
+#                 return 0
+#         else:
+#             # print(" 行数未達")
+#             return 0
+#     else:
+#         # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
+#         return 0
 
 
 def range_base(data_df, base_price):  # 引数 データ、基準価格

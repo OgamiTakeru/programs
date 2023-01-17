@@ -58,8 +58,7 @@ def make_position():
         strs = dr_latest_n + oldest_ans['count']
         oldest2_df = dr[strs: strs + dr_oldest_n]
         print("  エクステンション対象", oldest_ans['count'])
-        print(oldest2_df)
-
+        # print(oldest2_df)
 
     ans = f.renzoku_gap_compare(oldest_ans, latest_ans, price_dic['mid'])  # 引数の順番に注意！　ポジ用の価格情報を取得する。
     if ans == 0:
@@ -67,40 +66,41 @@ def make_position():
     else:
         print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'], ans['info']['return_ratio'], ans['info']['bunbo_gap'])
         # 順思想
-        order_res = oa.OrderCreate_exe(gl['order_num'], ans['forward']["direction"], ans['forward']['target_price'],
-                                       ans['forward']['tp_range'], ans['forward']['lc_range'], ans['forward']['type'],
-                                       ans['forward']['trail_range'], "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
-        order_res_t = oa.OrderCreate_exe(gl['trail_num'], ans['forward']["direction"], ans['forward']['target_price'],
-                                       ans['forward']['tp_range'], ans['forward']['lc_range']*0.7, ans['forward']['type'],
-                                       0.05, "順思想t")  # 順思想（順張・現より低い位置に注文入れたい）
+        ans['forward']['units'] = 1000
+        print(ans['forward'])
+        order_res = oa.OrderCreate_dic_exe(ans['forward'])
+        # order_res = oa.OrderCreate_exe(gl['order_num'], ans['forward']["direction"], ans['forward']['target_price'],
+        #                                ans['forward']['tp_range'], ans['forward']['lc_range'], ans['forward']['type'],
+        #                                ans['forward']['trail_range'], "順思想")  # 順思想（順張・現より低い位置に注文入れたい）
         # 逆思想
-        order_res_r = oa.OrderCreate_exe(gl['order_num'], ans['reverse']["direction"], ans['reverse']['target_price'],
-                                         ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
-                                         ans['reverse']['trail_range'], "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
-        print(" 該当有", ans['forward']['direction'], ans, order_res, order_res_r)
+        ans['reverse']['units'] = 500
+        print(ans['reverse'])
+        order_res_r = oa.OrderCreate_dic_exe(ans['reverse'])
+        # order_res_r = oa.OrderCreate_exe(gl['order_num'], ans['reverse']["direction"], ans['reverse']['target_price'],
+        #                                  ans['reverse']['tp_range'], ans['reverse']['lc_range'], ans['reverse']['type'],
+        #                                  ans['reverse']['trail_range'], "逆思想")  # 逆思想（順張・現より高い位置に注文入れたい）
+        print(" 該当有", ans['forward']['ask_bid'], ans, order_res, order_res_r)
         # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
-        t = round(float(ans['forward']['target_price']), 3)
-        tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['direction']), 3)  # ans['forward']['lc_price']と同義？
-
-        lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['direction']), 3)
-        tr = round(float(ans['reverse']['target_price']), 3)
-        tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['direction']), 3)
-        lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['direction']), 3)
-        gl['position_f_direction'] = ans['forward']['direction']  # 順方向のポジションがどっち方向かを記録する
+        t = round(float(ans['forward']['price']), 3)
+        tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
+        lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['ask_bid']), 3)
+        tr = round(float(ans['reverse']['price']), 3)
+        tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['ask_bid']), 3)
+        lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['ask_bid']), 3)
+        gl['position_f_direction'] = ans['forward']['ask_bid']  # 順方向のポジションがどっち方向かを記録する
         tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
-                     "順方向:", ans['forward']['direction'],
+                     "順方向:", ans['forward']['ask_bid'],
                      ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
-                     ",順思想:", ans['forward']['direction'], t, "(", tp, "[", ans['forward']['tp_range'], "]-",
+                     ",順思想:", ans['forward']['ask_bid'], t, "(", tp, "[", ans['forward']['tp_range'], "]-",
                      lc, "[", ans['forward']['lc_range'], "]", ")",
-                     ",逆思想:", ans['reverse']['direction'], tr, "(", tpr, "[", ans['reverse']['tp_range'], "]-",
+                     ",逆思想:", ans['reverse']['ask_bid'], tr, "(", tpr, "[", ans['reverse']['tp_range'], "]-",
                      lcr, "[", ans['reverse']['lc_range'], "]", ")",
                      "参考", oldest_ans['high_price'], oldest_ans['low_price'], oldest_ans['middle_price'],
                      "," , latest_ans['high_price'], latest_ans['low_price'], latest_ans['middle_price']
-                     )
+                 )
+    # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
-        # print(" 該当あり", ans)
-        # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
 
 def close_position():
@@ -126,11 +126,11 @@ def close_position():
             else:
                 print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips)
 
-            # 場合によってはCRCDOのパターンを変更する
+            # 場合によってはCRCDOのパターンを変更する（ポジションの枚数で、どのポジションかを判断する）
             if gl['cd_flag'] == 0:  # 過去の変更履歴がない場合は、以下の変更を実施する
-                if abs(unit) == gl['trail_num']:  # トレール分
-                    print(" 　　　トレール分", unit, p_id)
-                    if past_time_sec > 420 and pl_pips > 0.04:
+                if abs(unit) == gl['trail_num']:  # トレールのポジション
+                    print(" 　　　初期トレールポジを編集", unit, p_id)
+                    if past_time_sec > 180 and pl_pips > 0.01:
                         gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
                         data = {
                             "trailingStopLoss": {
@@ -141,8 +141,8 @@ def close_position():
                         print(oa.TradeCRCDO_exe(p_id, data))  # ポジションを変更する
                 else:  # 通常分（トレール無しの分)
                     # ポジション取得後、数分（５分足2個分）は含み損を認める。それ以降、プラス域4pips以上いった場合、最低2pipsの利確注文
-                    print(" 　　　通常分", unit)
-                    if past_time_sec > 420 and pl_pips > 0.04:
+                    print(" 　　　通常分ポジを編集", unit)
+                    if past_time_sec > 180 and pl_pips > 0.01:
                         # プラス域の為、最低限の＋を確保（0.02) かつ、このポジションでCDしていない場合
                         if unit < 0:  # 売りポジの場合、利確はエントリープライス-0.02
                             cd_line = price - 0.005
@@ -186,7 +186,7 @@ def main():
             gl['position_mind'] = -1  # -1は逆方向
         tk.line_send("■ポジションを取得しました(思想方向:", gl['position_mind'], d)
         gl['position_flag'] = 1  # ポジションフラグの成立
-        oa.OrderCancel_All_exe()  # 反対のオーダーも解除しておく（本当は残して額に行った時のリスク下げたいが、、どうしよう）
+        # oa.OrderCancel_All_exe()  # 反対のオーダーも解除しておく（本当は残して額に行った時のリスク下げたいが、、どうしよう）
 
     # ★ペンディングは時間的に解消を実施する
     if len(pending_new_df) != 0:
@@ -194,7 +194,7 @@ def main():
         print("    ◇未確定注文有", gl['now'])
         past_time = pending_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
         print("  orderあり（保持中）", past_time)
-        limit_time_min = 15
+        limit_time_min = 12
         if past_time > 60 * limit_time_min:  # 60*指定の分
             # 12分以上経過している場合、オーダーをキャンセルする
             oa.OrderCancel_All_exe()
@@ -246,8 +246,7 @@ def schedule(interval, f, wait=True):
             # 数秒ごとの実施要（ポジション所持時等に利用する場合有。基本は利用無しで[exe_mode=0]が基本）
             elif gl["exe_mode"] == 1:
                 # N秒ごとに実施
-                if time_min % 1 == 0 and (
-                        time_sec == 9 or time_sec == 39):
+                if time_min % 1 == 0 and time_sec % 30 == 0:  # (time_sec == 9 or time_sec == 39):
                     # print("  2秒ごと実施",time_hour,time_min,time_sec)
                     t = threading.Thread(target=f)
                     t.start()
@@ -262,6 +261,7 @@ def schedule(interval, f, wait=True):
 print("開始")
 # グローバル変数の定義
 gl = {
+    # "pending": 0,
     "main_counter": 0,
     "exe_mode": 0,  # 実行頻度モードの変更（基本的は０）
     "schedule_freq": 1,  # 間隔指定の秒数（N秒ごとにスケジュールで処理を実施する）
@@ -275,6 +275,7 @@ gl = {
     "p_order": 2,  # 極値の判定幅
     "position_flag": 0,  # ポジションが消えたタイミングを取得するためのフラグ
     "position_f_direction": 0,  # ポジションが買いか売りか
+    "position_mind": 0,  # ポジションが順思想が、逆思想が
     "cd_flag": 0,  # 利確幅を途中で変えた時のフラグ
     "midnight_close": 0,
     "order_num": 30000,  # トータルでどのくらいポジション持つか
@@ -296,5 +297,5 @@ else:
 oa = oanda_class.Oanda(acc, tok, env)  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
 print(env)
 # ■出発！
-# main()
+main()
 schedule(gl['schedule_freq'], main)
