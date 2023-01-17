@@ -365,7 +365,6 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                         adjuster = oldest_ans['inner_low_price'] - oldest_ans['low_price']
                     else:
                         adjuster = base_adjuster
-                        print("谷", adjuster)
                     # adjuster = 0.15
                     temp_entry = oldest_ans['low_price'] - adjuster  # adjusterをマイナスし、ポジションしにくくする
                 elif direction_l == -1:  # 山形状
@@ -376,9 +375,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     else:
                         adjuster = base_adjuster
                     # adjuster = 0.15
-                    print("山",adjuster)
                     temp_entry = oldest_ans['inner_high_price'] + adjuster
-                print("e?", adjuster, direction_l)
                 f_entry_price = round(temp_entry, 3)
                 # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
                 f_lc_price = latest_ans['latest_price']  # 短めのロスカ（直近価格まで程度にする 短すぎる場合、どうしよう）
@@ -397,7 +394,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 # r_entry_price = round(0.01 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
                 # r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
                 r_entry_price = oldest_ans['latest_price']
-                r_lc_price = round(0.01 * direction_l + f_entry_price, 3)  # 数字部＋値は早期LC順思想のPrice取り入れ
+                r_lc_price = round(0.01 * direction_l + f_entry_price, 3)  # 数字部＋値は早期LC 順思想のPrice取り入れ
                 # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
                 r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # 順思想の時の髭の長さ寄りも少し短め（＝最低0.15より少し短め）
                 r_tp_price = oldest_ans['oldest_price']  # high low 切替

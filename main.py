@@ -122,9 +122,16 @@ def close_position():
 
             # 情報を表示
             if pl < 0:
-                print("　　　＠含み損ポジあり", pl, t, p_id, price, pl_pips)
+                print("　　　＠含み損ポジあり", pl, t, p_id, price, pl_pips, past_time_sec)
             else:
-                print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips)
+                print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips, past_time_sec)
+
+            # 取り合えず長時間の保持は、切る。
+            if past_time_sec > 20 * 60:
+                # N分以上のポジションは、切る(本当は、オーダー時刻からの考慮である必要あり？）
+                print(" 時間によるポジション解消")
+                gl['cd_flag'] = 1
+                oa.TradeClose_exe(p_id, None, "cancel")
 
             # 場合によってはCRCDOのパターンを変更する（ポジションの枚数で、どのポジションかを判断する）
             if gl['cd_flag'] == 0:  # 過去の変更履歴がない場合は、以下の変更を実施する
