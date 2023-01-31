@@ -55,71 +55,97 @@ def make_order():
     # oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]
     latest_df = dr[ignore: dr_latest_n + ignore]  # 直近の３個を取得
     oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせて、古い期間の範囲を求める
-    # print(latest_df)
-    # print(oldest_df)
     latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-    # print(latest_ans)
     oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    # print(oldest_ans)
     ans = f.renzoku_gap_compare(oldest_ans, latest_ans, price_dic['mid'])  # 引数の順番に注意！　ポジ用の価格情報を取得する。
 
     if ans == 0:
         print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'])
     else:
         print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'], ans['info']['return_ratio'], ans['info']['bunbo_gap'])
-        # オーダーを代入しておく（よく名前が変るため。。）
-        f_order = ans["f_order"]
-        f_repeat = ans["f_repeat"]
-        r_order = ans["r_order"]
-        r_repeat = ans["r_repeat"]
 
-        # 順思想 オーダー実行
-        gl['orders'] = []  # オーダー情報記録用
-        f_res = oa.OrderCreate_dic_exe(f_order)  # オーダー実行（ロング）
-        for i in range(len(f_repeat)):  # オーダー実行（トラリピ）
-            oa.OrderCreate_dic_exe(f_repeat[i])
-        gl['orders'].append(f_order)  # 単品ロングオーダーを記録
-        gl['orders'].append(ans['f_repeat'])  # トラリピオーダーを記録
-        print(" 　順オーダー")
-        print(f_order)
-        print(f_repeat)
-        # 逆思想　オーダー実行
-        r_res = oa.OrderCreate_dic_exe(r_order)
-        for i in range(len(r_repeat)):
-            oa.OrderCreate_dic_exe(r_repeat[i])
-        print("  逆オーダー")
-        print(r_order)
-        print(r_repeat)
-        gl['orders'].append(r_order)  # 単品ロングオーダーを記録
-        gl['orders'].append(ans['r_repeat'])  # トラリピオーダーを記録
+        if ans['memo'] == 0:  # 通常の両側に入れるオーダー
+            # オーダーを代入しておく（よく名前が変るため。。）
+            f_order = ans["f_order"]
+            f_repeat = ans["f_repeat"]
+            r_order = ans["r_order"]
+            r_repeat = ans["r_repeat"]
 
-        # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
-        t = round(f_order['price'], 3)
-        tp = round(t + float(f_order['tp_range']) * float(f_order['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
-        lc = round(t - float(f_order['lc_range']) * float(f_order['ask_bid']), 3)
-        gl['position_f_direction'] = f_order['ask_bid']  # 順方向のポジションがどっち方向かを記録する
+            # 順思想 オーダー実行
+            gl['orders'] = []  # オーダー情報記録用
+            f_res = oa.OrderCreate_dic_exe(f_order)  # オーダー実行（ロング）
+            for i in range(len(f_repeat)):  # オーダー実行（トラリピ）
+                oa.OrderCreate_dic_exe(f_repeat[i])
+            gl['orders'].append(f_order)  # 単品ロングオーダーを記録
+            gl['orders'].append(ans['f_repeat'])  # トラリピオーダーを記録
+            print(" 　順オーダー")
+            print(f_order)
+            print(f_repeat)
+            # 逆思想　オーダー実行
+            r_res = oa.OrderCreate_dic_exe(r_order)
+            for i in range(len(r_repeat)):
+                oa.OrderCreate_dic_exe(r_repeat[i])
+            print("  逆オーダー")
+            print(r_order)
+            print(r_repeat)
+            gl['orders'].append(r_order)  # 単品ロングオーダーを記録
+            gl['orders'].append(ans['r_repeat'])  # トラリピオーダーを記録
 
-        tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
-                     ",現価格:", price_dic['mid'],
-                     "順方向:", f_order['ask_bid'],
-                     ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
-                     "latest範囲", latest_ans['inner_low_price'], "-", latest_ans['inner_high_price'],
-                     "oldest範囲", oldest_ans['inner_low_price'], "-", oldest_ans['inner_high_price'], oldest_ans['count'],
-                     ",順思想:", f_order['ask_bid'], t, "(", tp, "[", f_order['tp_range'], "]-",
-                     lc, "[", round(f_order['lc_range'], 3), "]", ")",
-                 )
+            # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
+            t = round(f_order['price'], 3)
+            tp = round(t + float(f_order['tp_range']) * float(f_order['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
+            lc = round(t - float(f_order['lc_range']) * float(f_order['ask_bid']), 3)
+            gl['position_f_direction'] = f_order['ask_bid']  # 順方向のポジションがどっち方向かを記録する
 
-        # オーダーIDを取得する（テスト。オーダー処理を待つため、１秒待機する）
-        sleep(1)
-        pending_new_df = oa.OrdersWaitPending_exe()
-        dummy = []
-        for i in range(len(gl['orders'])):
-            if type(gl['orders'][i]) != type(dummy):  # listじゃなかったら実行！
-                for index, item in pending_new_df.iterrows():
-                    if gl['orders'][i]["units"] == abs(int(item['units'])):  # dfはUnitにマイナスが付いている可能性あり！
-                        print(" 発見&オーダーあり")
-                        gl['orders'][i]['order_id'] = item['id']
-                        print(gl['orders'][i])
+            tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
+                         ",現価格:", price_dic['mid'],
+                         "順方向:", f_order['ask_bid'],
+                         ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
+                         "latest範囲", latest_ans['inner_low_price'], "-", latest_ans['inner_high_price'],
+                         "oldest範囲", oldest_ans['inner_low_price'], "-", oldest_ans['inner_high_price'], oldest_ans['count'],
+                         ",順思想:", f_order['ask_bid'], t, "(", tp, "[", f_order['tp_range'], "]-",
+                         lc, "[", round(f_order['lc_range'], 3), "]", ")",
+                     )
+        elif ans['memo'] == 1:
+            # オーダーを代入しておく（よく名前が変るため。。）
+            r_repeat = ans["r_repeat"]
+
+            # 順思想 オーダー実行
+            gl['orders'] = []  # オーダー情報記録用
+            # 逆思想　オーダー実行
+            for i in range(len(r_repeat)):
+                oa.OrderCreate_dic_exe(r_repeat[i])
+            print("  逆オーダー")
+            print(r_repeat)
+            gl['orders'].append(ans['r_repeat'])  # トラリピオーダーを記録
+
+            # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）　代表して最初の物
+            info_t= r_repeat[0]
+            t = round(info_t['price'], 3)
+            tp = round(t + float(info_t['tp_range']) * float(info_t['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
+            lc = round(t - float(info_t['lc_range']) * float(info_t['ask_bid']), 3)
+            gl['position_f_direction'] = info_t['ask_bid']  # 順方向のポジションがどっち方向かを記録する
+
+            tk.line_send("■戻り大。折返Position！", datetime.datetime.now().replace(microsecond=0),
+                         ",現価格:", price_dic['mid'],
+                         "順方向:", info_t['ask_bid'],
+                         ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
+                         "latest範囲", latest_ans['inner_low_price'], "-", latest_ans['inner_high_price'],
+                         "oldest範囲", oldest_ans['inner_low_price'], "-", oldest_ans['inner_high_price'], oldest_ans['count'],
+                         ",順思想:", info_t['ask_bid'], t, "(", tp, "[", info_t['tp_range'], "]-",
+                         lc, "[", round(info_t['lc_range'], 3), "]", ")",
+                     )
+        # # オーダーIDを取得する（テスト。オーダー処理を待つため、１秒待機する）
+        # sleep(1)
+        # pending_new_df = oa.OrdersWaitPending_exe()
+        # dummy = []
+        # for i in range(len(gl['orders'])):
+        #     if type(gl['orders'][i]) != type(dummy):  # listじゃなかったら実行！
+        #         for index, item in pending_new_df.iterrows():
+        #             if gl['orders'][i]["units"] == abs(int(item['units'])):  # dfはUnitにマイナスが付いている可能性あり！
+        #                 print(" 発見&オーダーあり")
+        #                 gl['orders'][i]['order_id'] = item['id']
+        #                 print(gl['orders'][i])
 
     # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
@@ -326,7 +352,7 @@ gl = {
 }
 
 # ■練習か本番かの分岐
-fx_mode = 1  # 0=practice, 1=Live
+fx_mode = 0  # 0=practice, 1=Live
 
 if fx_mode == 0:  # practice
     env = tk.environment

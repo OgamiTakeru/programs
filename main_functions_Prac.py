@@ -419,13 +419,27 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
             # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
             max_return_ratio = 99
             direction_l = latest_ans['direction']
-            if 70 <= return_ratio < max_return_ratio:
+            if 80 <= return_ratio < max_return_ratio:
                 print("  戻り大")
-                return 0
-            elif 45 < return_ratio < 70:
+                entry_price = oldest_ans['inner_high_price'] if direction_l == 1 else oldest_ans['inner_low_price']
+                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
+                       "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10 * 60,
+                       "order_edit_flag": 0, "order_id": 0, "position_id": 0, "memo": "戻り半端"
+                       }
+                r_repeat_arr = make_repeat_order(rep)
+                return {"r_repeat": r_repeat_arr[0], "info": info, "memo": 1}
+            elif 40 < return_ratio < 80:
                 print("  戻り中途半端")
-                return 0
-            elif return_ratio <= 45:
+                return_price = latest_ans['gap'] * (return_ratio + 10 / 100)  # 60%戻し
+                entry_price = latest_ans['latest_price'] + return_price if direction_l == 1 else latest_ans['latest_price'] - return_price
+                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
+                       "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10 * 60,
+                       "order_edit_flag": 0, "order_id": 0, "position_id": 0, "memo": "戻り半端"
+                       }
+                r_repeat_arr = make_repeat_order(rep)
+                return {"r_repeat": r_repeat_arr[0], "info": info, "memo": 1}
+
+            elif return_ratio <= 40:
                 # 微戻りを考える
                 moves = latest_ans['data']['moves'].mean()  # 直近の移動量
                 lcs = 0.1 if moves > 0.1 else moves
@@ -447,8 +461,8 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     print(" 差分大", t_latest_inner_high_price, t_latest_inner_low_price, t_gap, high_low_gap)
 
                 # ★①　下にいく本命用（このオーダーはまれにしか入らない。ただし入るときは勢いがあると推定する）
-                temp = t_latest_inner_low_price + 0.01 if direction_l == 1 else t_latest_inner_high_price - 0.01
-                rep = {"price": temp, "lap": -0.01, "lc": 0.05, "tp": 0.018, "num": 4,
+                temp = t_latest_inner_low_price + 0.015 if direction_l == 1 else t_latest_inner_high_price - 0.015
+                rep = {"price": temp, "lap": -0.005, "lc": 0.03, "tp": 0.018, "num": 4,
                      "ask_bid": -1 * direction_l, "units": 10010, "type": "STOP", "mind": -1, "time_out": 10*60,
                      "order_edit_flag": 0, "order_id": 0, "position_id": 0,
                      }
@@ -513,7 +527,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 }
 
                 return {"f_order": f_order, "f_repeat":f_repeat_arr[0], "r_order": r_order, "r_repeat": r_repeat_arr[0],
-                        "info": info}
+                        "info": info, "memo": 0}
             else:
                 print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
                       ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],

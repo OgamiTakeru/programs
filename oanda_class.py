@@ -611,7 +611,7 @@ class Oanda:
             for index, row in open_df.iterrows():
                 # たまに変わるため注意。23年１月現在、利確ロスカ注文はtype = STOP_LOSS TAKE_PROFIT
                 # 新規ポジション取得は、順張り逆張り問わず、MARKET_IF_TOUCHED
-                if row['type'] == 'MARKET_IF_TOUCHED':
+                if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
                     # tpyeがMARKET_IF_TOUCHEDの場合（いわゆるポジションを取るための注文）
                     res_df = self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする　　不要なの？
                     # close_df = pd.concat([close_df , res_df])#新決済情報を縦結合
