@@ -73,6 +73,7 @@ def make_position():
         ans['reverse']['units'] = 30000
         print(ans['reverse'])
         order_res_r = oa.OrderCreate_dic_exe(ans['reverse'])
+        trice=ans['reverse']['price']
         # 逆思想２
         ans['reverse']['units'] = 10000
         ans['reverse']['type'] = "MARKET"
@@ -88,12 +89,13 @@ def make_position():
         t = round(float(ans['forward']['price']), 3)
         tp = round(t + float(ans['forward']['tp_range']) * float(ans['forward']['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
         lc = round(t - float(ans['forward']['lc_range']) * float(ans['forward']['ask_bid']), 3)
-        tr = round(float(ans['reverse']['price']), 3)
+        tr = round(trice, 3)
         tpr = round(tr + float(ans['reverse']['tp_range']) * float(ans['reverse']['ask_bid']), 3)
         lcr = round(tr - float(ans['reverse']['lc_range']) * float(ans['reverse']['ask_bid']), 3)
         gl['position_f_direction'] = ans['forward']['ask_bid']  # 順方向のポジションがどっち方向かを記録する
         tk.line_send("折返Position！", datetime.datetime.now().replace(microsecond=0),
                      ",現価格:", price_dic['mid'],
+                     ",ADJ:", ans['forward']['adjuster'],
                      "順方向:", ans['forward']['ask_bid'],
                      ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
                      ",順思想:", ans['forward']['ask_bid'], t, "(", tp, "[", ans['forward']['tp_range'], "]-",
@@ -101,7 +103,8 @@ def make_position():
                      ",逆思想:", ans['reverse']['ask_bid'], tr, "(", tpr, "[", ans['reverse']['tp_range'], "]-",
                      lcr, "[", ans['reverse']['lc_range'], "]", ")",
                      "参考", oldest_ans['high_price'], oldest_ans['low_price'], oldest_ans['middle_price'],
-                     "," , latest_ans['high_price'], latest_ans['low_price'], latest_ans['middle_price']
+                     "," , latest_ans['high_price'], latest_ans['low_price'], latest_ans['middle_price'],
+                     ",パターン", latest_ans['pattern_comment']
                  )
     # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
 
@@ -131,7 +134,7 @@ def close_position():
                 print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips, past_time_sec)
 
             # 取り合えず長時間の保持は、切る。
-            if past_time_sec > 20 * 60:
+            if past_time_sec > 35 * 60:
                 # N分以上のポジションは、切る(本当は、オーダー時刻からの考慮である必要あり？）
                 print(" 時間によるポジション解消")
                 gl['cd_flag'] = 1
@@ -163,6 +166,10 @@ def close_position():
                         data = {
                             "stopLoss": {
                                 "price": str(round(cd_line, 3)),
+                                "timeInForce": "GTC",
+                            },
+                            "trailingStopLoss": {
+                                "distance": 0.05,
                                 "timeInForce": "GTC",
                             },
                         }
@@ -309,5 +316,5 @@ else:
 oa = oanda_class.Oanda(acc, tok, env)  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
 print(env)
 # ■出発！
-main()
+# main()
 schedule(gl['schedule_freq'], main)

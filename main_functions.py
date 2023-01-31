@@ -263,7 +263,7 @@ def renzoku_gap_pm(data_df):
                         oldest_price = data_df.iloc[-1]["inner_high"]  # 下がりGapなので、開始は２行目（古）のhigh　＝　高い
                         latest_price = data_df.iloc[0]["inner_low"]  # 下がりGapなので、終了は1行目（新）のlow　＝低い
                         middle_price = round(oldest_price - (oldest_price - latest_price) / 2, 3)  # oldが高いところにいる
-                else: # 通常（従来の6:3方法の場合）
+                else: # 通常（従来の6:3等、２以上の判定を使う方法の場合）
                     # print("g", len(data_df))
                     counter += 1
                     if data_df.iloc[l]["middle_price_gap"] > 0:
@@ -310,6 +310,40 @@ def renzoku_gap_pm(data_df):
         ans_count = p_counter + 1
         middle_price = round(oldest_price + (latest_price - oldest_price) / 2, 3)  # oldが低いところにいる
 
+    # ３個(or２個）の場合、ローソクの関係性を求める
+    # ３個の場合、３パターンのいずれか。谷の場合(折り返し部が＋）、古い順に1,1,1/1,-1,1/1,1,-1
+    if len(data_df) == 3:
+        if ans==1:  # プラスの連荘＝谷の場合　（折り返し部のみの話）
+            if data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] >=0:
+                pattern_comment = "afterV:all plus"
+                pattern = 10
+            elif data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] >=0:
+                pattern_comment = "afterV:middle Down"
+                pattern = 11
+            elif data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] <=0:
+                pattern_comment = "afterV:last Down"
+                pattern = 12
+            else:
+                pattern_comment = "afterV:first Down"
+                pattern = 13
+        elif ans == -1:  # マイナスの連荘＝山の場合　（折り返し部の話）
+            if data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] <=0:
+                pattern_comment = "afterM:all minus"
+                pattern = -10
+            elif data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] <=0:
+                pattern_comment = "afterM:middle Up"
+                pattern = -11
+            elif data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] >=0:
+                pattern_comment = "afterM:last Up"
+                pattern = -12
+            else:
+                pattern_comment = "afterM:first Up"
+                pattern = -13
+    else:
+        pattern = -99
+        pattern_comment = "何もなし"
+
+
     return({
         # "final_time": data_df.iloc[0]["time_jp"],
         # "final_close_price": data_df.iloc[0]["close"],
@@ -325,7 +359,9 @@ def renzoku_gap_pm(data_df):
         "middle_price": middle_price,
         "direction": ans,
         "count": ans_count,
-        "data_size": len(data_df)
+        "data_size": len(data_df),
+        "pattern": pattern,
+        "pattern_comment": pattern_comment,
     })
     print(oldest_price, "-", latest_price, ans, ans_count)
 
@@ -357,19 +393,19 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
 
                 # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
                 direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。
-                base_adjuster = 0.01
+                base_adjuster = 0.06
                 if direction_l == 1:  # 谷形状 底の髭より少し余裕を持った位置に！（順に行くときは、ガッツリ行くと信じて）
                     print("谷", oldest_ans['inner_low_price'] - oldest_ans['low_price'])
-                    if oldest_ans['inner_low_price'] - oldest_ans['low_price'] < base_adjuster:
+                    if oldest_ans['inner_low_price'] - oldest_ans['low_price'] > base_adjuster:
                         # 髭が短い過ぎる場合、アジャスターに最低限の0.15を設定
                         adjuster = oldest_ans['inner_low_price'] - oldest_ans['low_price']
                     else:
                         adjuster = base_adjuster
                     # adjuster = 0.15
-                    temp_entry = oldest_ans['low_price'] - adjuster  # adjusterをマイナスし、ポジションしにくくする
+                    temp_entry = oldest_ans['inner_low_price'] - adjuster  # adjusterをマイナスし、ポジションしにくくする
                 elif direction_l == -1:  # 山形状
                     print("山", oldest_ans['high_price'] - oldest_ans['inner_high_price'])
-                    if oldest_ans['high_price'] - oldest_ans['inner_high_price'] < base_adjuster:
+                    if oldest_ans['high_price'] - oldest_ans['inner_high_price'] >base_adjuster:
                         # 髭が短い過ぎる場合、アジャスターに最低限の0.15を設定
                         adjuster = oldest_ans['high_price'] - oldest_ans['inner_high_price']
                     else:
@@ -387,13 +423,12 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 remark = "20以下順強"
 
                 # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
-                # if direction_l == 1:  # 谷形状
-                #     temp_entry = oldest_ans['latest_price']
-                # elif direction_l == -1:  # 山形状
-                #     temp_entry = oldest_ans['low_price']
-                # r_entry_price = round(0.01 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
-                # r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
-                r_entry_price = oldest_ans['latest_price']
+                if direction_l == 1:  # 谷形状
+                    temp_entry = oldest_ans['low_price']
+                elif direction_l == -1:  # 山形状
+                    temp_entry = oldest_ans['high_price']
+                r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+                # r_entry_price = oldest_ans['latest_price']
                 r_lc_price = round(0.01 * direction_l + f_entry_price, 3)  # 数字部＋値は早期LC 順思想のPrice取り入れ
                 # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
                 r_lc_range = round(abs(r_entry_price - r_lc_price), 3)  # 順思想の時の髭の長さ寄りも少し短め（＝最低0.15より少し短め）
@@ -404,6 +439,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
 
                 # 結果の格納と表示
                 for_order = {
+                    "adjuster": round(adjuster, 3),
                     "price": f_entry_price,  # 注文で直接利用
                     "lc_price": f_lc_price,  # 参考情報
                     "lc_range": f_lc_range,  # 注文で直接利用
@@ -414,6 +450,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
                 }
                 for_order_r = {
+                    "adjuster": adjuster,
                     "price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
                     "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
                     "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価

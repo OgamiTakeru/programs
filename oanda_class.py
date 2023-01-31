@@ -267,6 +267,7 @@ class Oanda:
         data_df['inner_low'] = data_df.apply(lambda x: self.il_func(x), axis=1)  # ローソク本体で低い方（OpenかClose価格）
         data_df['body'] = data_df['close'] - data_df['open']  # 胴体の長さ（正負あり）
         data_df['body_abs'] = abs(data_df['close'] - data_df['open'])  # 胴体の長さ
+        data_df['moves'] = data_df['high'] - data_df['low']
         data_df['up_rod'] = data_df.apply(lambda x: self.for_upper(x), axis=1)  # 上髭の長さを取得
         data_df['low_rod'] = data_df.apply(lambda x: self.for_lower(x), axis=1)  # 下髭の長さを取得
         data_df['highlow'] = data_df['high'] - data_df['low']  # 最高値と再低値の長さ
@@ -605,11 +606,18 @@ class Oanda:
             print("     @NoPendingClosefunc)")
             return None
         else:
+            print("     cancel order", len(open_df))
+            print(open_df)
             for index, row in open_df.iterrows():
-                if row['type'] == 'LIMIT' or row['type'] == 'STOP':
-                    pass
+                # たまに変わるため注意。23年１月現在、利確ロスカ注文はtype = STOP_LOSS TAKE_PROFIT
+                # 新規ポジション取得は、順張り逆張り問わず、MARKET_IF_TOUCHED
+                if row['type'] == 'MARKET_IF_TOUCHED':
+                    # tpyeがMARKET_IF_TOUCHEDの場合（いわゆるポジションを取るための注文）
                     res_df = self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする　　不要なの？
                     # close_df = pd.concat([close_df , res_df])#新決済情報を縦結合
+                else:  # LIMIT注文、STOP注文の場合（ここでいうLIMITは利確、STOPはロスカ トレールもこっち
+                    pass
+
             return close_df
 
     # (5) 注文（単品）確認

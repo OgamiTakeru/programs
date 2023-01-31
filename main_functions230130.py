@@ -360,49 +360,6 @@ def renzoku_gap_pm(data_df):
     print(oldest_price, "-", latest_price, ans, ans_count)
 
 
-def make_repeat_order(order_dic):
-    """
-    :param order_dic: {"base_price": entry_price, "lap":-0.01, "lc":0.03, "tp": 0.015, "num":4,
-                     "ask_bid": 1 * direction_l, "units": 10001, "type":"STOP", "mind":-1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,"memo":"memo"
-                     }
-                     なおlapは-値の場合、TP価格とかぶる。プラスの価格で、隙間の空いた注文となる
-    :return: トラリピのオーダーを作成し、①辞書の配列と②最終的にいくらの価格でリピートを入れた（Base価格）を返却。辞書は以下の通り
-                    {"price": temp,"lc_price": 0.05,"lc_range": t_gap - 0.007, "tp_range": 0.08,
-                    "ask_bid": -1 * direction_l,"units": 10000,"type": "STOP","tr_range": 0.05,"mind": 1,
-                    "memo": "first_f","time_out": 10*60,"order_edit_flag": 0,"order_id": 0,"position_id": 0}
-                    の配列を却下
-    """
-    base_price = order_dic["price"]
-    lap = order_dic["lap"]  # 前のTPとのラップ（マイナス値でTP範囲とラップさせる）
-    lc = order_dic["lc"]
-    tp = order_dic["tp"]
-    num = order_dic["num"]
-    direction_l = order_dic["ask_bid"]  # direction_lと同義
-    order_arr = []
-    for i in range(num):
-        temp_rep = {
-            "price": base_price,
-            "lc_price": 100,
-            "lc_range": lc,  # ギリギリまで。
-            "tp_range": tp,
-            "ask_bid": 1 * order_dic["ask_bid"],
-            "units": order_dic["units"],
-            "type":  order_dic["type"],
-            "tr_range": 0,
-            "mind": order_dic["mind"],
-            "memo": "trap",
-            "time_out": order_dic["time_out"],  # 時間を過ぎたら解除するオーダー
-            "order_edit_flag": 0,  # オーダーを変更したフラグ
-            "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
-            "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
-        }
-        tp_price = round(base_price + (tp * direction_l), 3)  # 次期トラリピ用
-        base_price = round(tp_price + (lap * direction_l), 3)
-        order_arr.append(temp_rep)
-    return order_arr,base_price
-
-
 def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     """
 
@@ -412,6 +369,7 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
+        print(latest_ans['count'],latest_ans['data_size'])
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
@@ -431,13 +389,12 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                 lcs = 0.1 if moves > 0.1 else moves
                 # 4:2探索時は幅が狭いことがあるので、latestのinner_highとinner_lowの差分をエントリー価格に反映
                 high_low_gap = latest_ans['inner_high_price'] - latest_ans['inner_low_price']
-                min_gap = 0.02
-                if high_low_gap < min_gap:
+                if high_low_gap < 0.04:
                     # 差分が小さすぎる場合、元々の幅に、上下に均等にクライテリアを設定する(4pipsを超えるように）
-                    adjuster = round((min_gap - high_low_gap) / 2, 3)
+                    adjuster = round((0.04 - high_low_gap) / 2, 3)
                     t_latest_inner_high_price = latest_ans['inner_high_price'] + adjuster
                     t_latest_inner_low_price = latest_ans['inner_low_price'] - adjuster
-                    t_gap = min_gap
+                    t_gap = 0.04
                     print(" 差分小", adjuster,t_latest_inner_high_price,t_latest_inner_low_price, t_gap, high_low_gap)
                     print(" 差分小Data", latest_ans['inner_high_price'], latest_ans['inner_low_price'], adjuster)
                 else:
@@ -445,22 +402,15 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     t_latest_inner_low_price = latest_ans['inner_low_price']
                     t_gap = high_low_gap
                     print(" 差分大", t_latest_inner_high_price, t_latest_inner_low_price, t_gap, high_low_gap)
-
-                # ★①　下にいく本命用（このオーダーはまれにしか入らない。ただし入るときは勢いがあると推定する）
-                temp = t_latest_inner_low_price + 0.01 if direction_l == 1 else t_latest_inner_high_price - 0.01
-                rep = {"price": temp, "lap": -0.01, "lc": 0.05, "tp": 0.018, "num": 4,
-                     "ask_bid": -1 * direction_l, "units": 10010, "type": "STOP", "mind": -1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,
-                     }
-                f_repeat_arr = make_repeat_order(rep)
-                base_price = f_repeat_arr[1]  # 0はデータ、１はBasePrice
-                f_order = {
-                    "price": base_price,
+                # ①下にいく本命用（このオーダーはまれにしか入らない。ただし入るときは勢いがあると推定する）
+                temp = t_latest_inner_low_price if direction_l == 1 else t_latest_inner_high_price
+                first_f = {
+                    "price": temp,
                     "lc_price": 0.05,
                     "lc_range": t_gap - 0.007,  # ギリギリまで。。
                     "tp_range": 0.08,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": -1 * direction_l,
-                    "units": 10011,
+                    "units": 10000,
                     "type": "STOP",
                     "tr_range": 0.05,  # ↑ここまでオーダー
                     "mind": 1,
@@ -470,38 +420,29 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
                     "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
                 }
-
-                # ★②ちょっと上に行く（逆思想）のを取りに行く。LCの関係で
-                temp = t_latest_inner_high_price+0.01 if direction_l == 1 else t_latest_inner_low_price-0.01
+                # ②　ちょっと上に行く（逆思想）のを取りに行く。LCの関係で
+                temp = t_latest_inner_high_price if direction_l == 1 else t_latest_inner_low_price
                 if direction_l == 1:  # 谷の場合
                     if now_price > temp:
-                        entry_price = now_price
+                        entry_price = now_price + 0.005
                         print("now超え", entry_price)
                     else:
-                        entry_price = temp
+                        entry_price = temp + 0.005
                         print("now超え無し", entry_price)
                 else:  # 山の場合
                     if now_price < temp:
-                        entry_price = now_price
+                        entry_price = now_price - 0.005
                         print("now以下", entry_price)
                     else:
-                        entry_price = temp
+                        entry_price = temp - 0.005
                         print("now以下なし", entry_price)
-                # トラリピ系
-                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
-                     "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,
-                     }
-                r_repeat_arr = make_repeat_order(rep)
-                # 最後はロングのオーダーを出す
-                base_price = r_repeat_arr[1]  # 0はデータ、１はBasePrice
-                r_order = {
-                    "price": base_price,  # トラリピ後の価格を取得（トラリピは最後にインクリメントしていく）
-                    "lc_price": 0.03,
+                first_box = {
+                    "price": entry_price,
+                    "lc_price": 0.04,
                     "lc_range": t_gap - 0.007,  # ギリギリまで。
-                    "tp_range": 0.08,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                    "tp_range": 0.025,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": 1 * direction_l,
-                    "units": 10021,
+                    "units": 10001,
                     "type": "STOP",
                     "tr_range": 0.05,
                     "mind": 1,
@@ -511,9 +452,36 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
                     "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
                     "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
                 }
+                # <試し> entry_price からトラリピを仕掛ける
+                base_price = entry_price
+                lap = -0.01  # 前のTPとのラップ（マイナス値でTP範囲とラップさせる）
+                lc = 0.03
+                tp = 0.015
+                num = 4
+                rep_arr = []
+                for i in range(num):
+                    temp_rep = {
+                        "price": base_price,
+                        "lc_price": 100,
+                        "lc_range": lc,  # ギリギリまで。
+                        "tp_range": tp,
+                        "ask_bid": 1 * direction_l,
+                        "units": 10001,
+                        "type": "STOP",
+                        "tr_range": 0,
+                        "mind": 1,
+                        "memo": "trap",
+                        "time_out": 10 * 60,  # 時間を過ぎたら解除するオーダー
+                        "order_edit_flag": 0,  # オーダーを変更したフラグ
+                        "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
+                        "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
+                    }
+                    tp_price = round(base_price + (tp * direction_l), 3)  # 次期トラリピ用
+                    base_price = round(tp_price + (lap * direction_l), 3)
+                    rep_arr.append(temp_rep)
+                print("  トラリピテスト", rep_arr)
 
-                return {"f_order": f_order, "f_repeat":f_repeat_arr[0], "r_order": r_order, "r_repeat": r_repeat_arr[0],
-                        "info": info}
+                return {"first_order": first_f, "first_r_order": first_box, "info": info, "trpeat": rep_arr}
             else:
                 print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
                       ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],
@@ -526,5 +494,171 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
     else:
         print("  同方向", oldest_ans['count'], latest_ans['count'], latest_ans['direction'], oldest_ans['direction'])
         return 0
+
+
+# ## こちらは最大値算出用！””””
+# def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
+#     """
+#
+#     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
+#     :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
+#     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
+#     :return:
+#     """
+#     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
+#         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
+#             # 戻しのパーセンテージを確認
+#             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
+#             info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
+#             # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
+#             max_return_ratio = 40
+#             if return_ratio <= max_return_ratio:
+#                 return_flag = 1
+#             else:
+#                 return_flag = 0
+#
+#             ####   最大値算出用
+#             if return_flag == 1:
+#                 print(" ★両方満たし@gfunc", latest_ans['direction'], latest_ans['latest_price'], return_ratio )
+#                 # 以下谷方向の式の負号が元になっているので注意。(谷方向[直近3↑]でdirection=1、山方向[直近3↓]でdirection=-1)
+#                 # ■順思想（谷方向基準[売りポジを取る]の式）directionで負号調整あり
+#                 direction_l = latest_ans['direction']  # 谷の場合１、山の場合-1　これoldestの方が直観的だったなぁ。。
+#                 f_entry_price = round(oldest_ans['latest_price'] - 0.015 * direction_l, 3)  # 数字＋値でエントリーしにくい方向
+#                 # f_entry_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # ★
+#                 f_lc_price = oldest_ans['middle_price']  # 初期思想では、ミドルまで折り返し(direction関係しない）
+#                 f_lc_range = 0.07  # round(abs(f_entry_price - f_lc_price), 3)  # ★直接指定0.09程度でも可(direction関係無)
+#                 f_tp_price = oldest_ans['middle_price']  # 今後使うかも？
+#                 f_tp_price = 0.15 if f_tp_price > 0.15 else f_tp_price  #（最大値撤廃時以外、コメントアウト不要）ロスカの最大値を調整する
+#                 f_tp_range = 0.09  # round(abs(f_entry_price - f_tp_price), 3)  # ★直接指定でも可(direction関係しない）
+#                 f_trail_range = 0
+#
+#                 # ■逆思想（谷方向[買いポジを取る]基準の式。directionで負号調整あり）
+#                 r_entry_price = round(0.017 * direction_l + now_price, 3)  # 数字部プラス値でエントリーしにくい方向
+#                 # r_entry_price = temp_entry  # 数字部プラス値でエントリーしにくい方向
+#                 r_lc_price = round(0.01 * direction_l + latest_ans['oldest_price'], 3)  # 数字部＋値は早期LC
+#                 # r_lc_price = oldest_ans['low_price'] if direction_l == 1 else oldest_ans['high_price']  # high low 切替
+#                 r_lc_range = 0.04  # round(abs(r_entry_price - r_lc_price), 3)  # ★直接指定でも可(direction関係しない）
+#                 r_tp_price = oldest_ans['high_price'] if direction_l == 1 else oldest_ans['low_price']  # high low 切替
+#                 r_tp_range = round(abs(r_entry_price - r_tp_price), 3)  # 直接指定でも可(direction関係しない）
+#                 r_tp_range = 0.04  # 0.15 if r_tp_range > 0.15 else r_tp_range
+#                 r_trail_range = 0
+#
+#                 # 結果の格納と表示
+#                 for_order = {
+#                     "target_price": f_entry_price,  # 基本はボトム価格。－値でポジションしにくくなる
+#                     "lc_price": f_lc_price,  # 参考情報（渡し先では使わない）
+#                     "lc_range": f_lc_range,  # 谷形成からの売りポジ。LC価(上がり）>target価
+#                     "tp_range": f_tp_range,
+#                     "type": "STOP",
+#                     "trail_range": f_trail_range,
+#                     "direction": -1 * direction_l,  # 購入方向。１は買い(山の順思想)、-1は売り(谷の順思想[式基準])
+#                     "mind": 1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+#                 }
+#                 for_order_r = {
+#                     "target_price": r_entry_price,  # 基本はハーフ値。＋値でポジションしにくくなる
+#                     "lc_price": r_lc_price,  # 参考情報（渡し先では使わない）
+#                     "lc_range": r_lc_range,  # round(target_price_r - lc_price_r, 3),  # 谷形成からの買い。LC価(下）<target価
+#                     "tp_range": r_tp_range,  # 思想と逆（逆張り）は少し狭い目で。。
+#                     "type": "STOP",
+#                     "trail_range": r_trail_range,
+#                     "direction": 1 * direction_l,  # 購入方向。１は買い(谷の逆思想[式基準])、-1は売り(山の逆思想)
+#                     "mind": -1  # 思想方向（１は思想通り順張り。-1は逆張り方向）
+#                 }
+#                 print(" @gfuncEND", for_order, for_order_r)
+#                 return {"forward": for_order, "reverse": for_order_r, "info": info}
+#             else:
+#                 print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
+#                       ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],
+#                       latest_ans['latest_time'])
+#                 # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
+#                 return 0
+#         else:
+#             # print(" 行数未達")
+#             return 0
+#     else:
+#         # print(" 別方向（折り返し）", latest_ans['count'], oldest_ans['count'])
+#         return 0
+
+
+def range_base(data_df, base_price):  # 引数 データ、基準価格
+    """
+    複雑。ある指定の価格（BasePrice）の周辺を、ふらふらしているかどうかを確認する。
+    通貨回数等で確認している
+    :param data_df: 確認したい範囲のデータフレーム
+    :param base_price: 指定の価格
+    :return:
+    """
+    # 各変数の設定等
+    temp_data_df = data_df.head(50).copy()  # 範囲を指定してDFをコピーしておく（計算用）
+    colname = "close"  # 現在のclose価格を基準価格する。
+    if base_price == 999:  # 999が呼ばれた場合、データ内の最新の価格を利用する
+        now_price = temp_data_df.head(1).iloc[-1][colname]  # 現在価格の取得
+    else:  # base_priceが指定がある場合は、それを利用する
+        now_price = base_price
+
+    switch_flag = 0
+    mnt_count = vly_count = sp_count = fin_row = fin_time = 0
+    high = 0
+    low = 999
+    range_info_arr = []  # 結果格納用の変数（配列）
+    # データフレームを過去方向に巡回し、基準価格を含む足をスタート、基準価格を含まなくなるとそれ以降を山(谷）、
+    # 　　再度一度基準価格を含む足を発見したところを山(谷)の終了と考える。
+    for index, item in temp_data_df.iterrows():
+        if item['low'] <= now_price and now_price <= item['high']:  # 基準価格を含む足の場合
+            if switch_flag == 1:
+                # 山or谷からの切り替わり時（山谷情報を記録する）
+                switch_flag = 0  # 同価格モードに切り替え
+                res_dict = {"SameCount": sp_count, "MountCount": mnt_count, "High": high, "ValleyCount": vly_count,
+                            "Low": low, "fin_row": fin_row, "fin": fin_time}
+                range_info_arr.append(res_dict)
+                mnt_count = vly_count = high = 0  # 各カウンターの初期化
+                low = 999  # Low値のリセット
+            # 共通処理
+            fin_time = item['time_jp']
+            fin_row = index
+            sp_count += 1
+            if item['inner_high'] > high:
+                high = item['inner_high']
+            if item['inner_low'] < low:
+                low = item['inner_low']
+        # 現価格を含まない場合、上か下かを判定する(山または谷に相当する部分。その際の、最高or最低価格も取得する)
+        else:
+            if switch_flag == 0:
+                # 同価格の連続から、移行してきた場合(記録）
+                switch_flag = 1  # 山谷モードに切り替え
+                res_dict = {"SameCount": sp_count, "MountCount": mnt_count, "High": high, "ValleyCount": vly_count,
+                            "Low": low, "fin_row": fin_row, "fin": fin_time}
+                range_info_arr.append(res_dict)
+                sp_count = high = 0  # 各カウンターの初期化
+                low = 999
+            # 共通処理
+            fin_time = item['time_jp']
+            fin_row = index
+            if item[colname] < now_price:  # 現価格より低い価格の場合、谷としての情報を残す
+                vly_count = vly_count + 1
+                if item['inner_low'] < low:
+                    low = item['inner_low']
+            else:  # 現価格より高い場合、山としての情報を残す
+                mnt_count = mnt_count + 1
+                if item['inner_high'] > high:
+                    high = item['inner_high']
+    # print(range_info_arr)
+    # 集計値の算出
+    UpDown_count = 0
+    res2 = []
+    if len(range_info_arr) > 0:
+        # 配列が０でなければ
+        for index, item in enumerate(range_info_arr):
+            if item['MountCount'] > 45 or item['ValleyCount'] > 45:
+                # print(item['fin'],"範囲外")
+                break
+            else:
+                res2.append(item)
+                if item['MountCount'] > 0 or item['ValleyCount'] > 0:
+                    UpDown_count += 1
+    else:
+        UpDown_count = 0
+    ans_dict = {"MVcount": UpDown_count, "data": range_info_arr}
+    return ans_dict
 
 

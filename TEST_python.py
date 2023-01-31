@@ -10,8 +10,10 @@ import programs.tokens as tk  # Token等、各自環境の設定ファイル（g
 import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
 
-test= []
-test.append(1)
-print(test)
-test.append(2)
-print(test)
+test = []
+sample = []
+print(type(test))
+if type(test) == type(sample):
+    print("List")
+else:
+    print("no")

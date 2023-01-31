@@ -13,10 +13,16 @@ import plotly.graph_objects as go
 import programs.main_functions as f  # とりあえずの関数集
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
+from time import sleep
 
 # ★必須。Tokenの設定、クラスの実体化⇒これ以降、oa.関数名で呼び出し可能
 print("Start")
 oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
+oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")
+
+# オーダー全部キャンセル（必要な時あり）
+oa.OrderCancel_All_exe()
+
 
 # # ★現在価格の取得
 price_dic = oa.NowPrice_exe("USD_JPY")
@@ -27,6 +33,11 @@ mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count
 # mid_df.to_csv(tk.folder_path + 'TEST_DATA.csv', index=False, encoding="utf-8")
 f.draw_graph(mid_df)  # グラフ化
 # print(mid_df)
+
+# オーダー状況確認用
+# pending_new_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
+# print(pending_new_df)
+# pending_new_df.to_csv(tk.folder_path + 'TEST_DATA.csv', index=False, encoding="utf-8")
 
 ### データチェック用1 ⇒データフレーム各行を巡回し、「各行が最新で取得されるデータだったら(★d)」を検証出来る。
 # inspection_range = 5
