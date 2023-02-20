@@ -95,7 +95,7 @@ class order_information:
         self.order = {"id": 0, "state": 0}  # オーダー情報 (idとステートは初期値を入れておく）
         self.position = {"id": 0, "state": 0}  # ポジション情報 (idとステートは初期値を入れておく））
         self.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
-        self.reorder = 2  # ２回まで再オーダーを実施する
+        self.reorder = 1  # ２回まで再オーダーを実施する
 
     def reset(self):
         self.life = False
@@ -118,6 +118,7 @@ class order_information:
         self.life = True  # 始まったフラグ
 
     def make_order(self):
+        # Planを元にオーダーを発行する
         order_ans = oa.OrderCreate_dic_exe(self.plan)  # オーダーをセットしローカル変数に結果を格納する
         gl['exe_mode'] = 1
         # print(order_ans)
@@ -126,13 +127,26 @@ class order_information:
             "time": order_ans['order_time'],
             "cancel": order_ans['cancel'],
             "state": "PENDING",  # 強引だけど初期値にPendingを入れておく
+            "tp_price": float(order_ans['tp']),
+            "lc_price": float(order_ans['lc']),
+            "units": float(order_ans['unit']),
+            "direction": float(order_ans['unit'])/abs(float(order_ans['unit']))
         }
+        self.plan['tp_price'] = float(order_ans['tp'])  # 念のため入れておく（元々計算で入れられるけど。。）
+        self.plan['lc_price'] = float(order_ans['lc'])  # 念のため入れておく（元々計算で入れられるけど。。）
+        print(" オーダー発行確定", order_ans['order_id'])
         if order_ans['cancel'] == True:  #　キャンセルされている場合は、リセットする
             print("  Cancel発生", self.name)
             self.life = False
             self.reset()
         else:
+            self.life = True
             pass  # 送信はMainで実施
+
+    def close_order(self):
+        oa.OrderCancel_exe(self.order['id'])
+        tk.line_send("  オーダー解消", self.order['id'])
+
 
     def update_information(self):  # orderとpositionを両方更新する
         # どちらか一つでもOpenなPlanがある場合は、exemode=1を維持する！！！
@@ -155,25 +169,24 @@ class order_information:
                 self.life == False
 
             # （３）情報を更新
-            self.order = {  # オーダー情報登録
-                "id": temp['order_id'],
-                "time": temp['order_time'],
-                "time_past": float(temp['order_time_past']),
-                "units": float(temp['order_units']),
-                "price": float(temp['order_price']),  # Planの価格と同じ（はず）
-                "state": temp['order_state'],
-            }
-            self.position = {  # ポジション情報登録
-                "id": temp['position_id'],
-                "time": temp['position_time'],
-                "time_past": float(temp['position_time_past']),
-                "price": float(temp['position_price']),  # 約定時にorder価格とはずれる可能性
-                "units": 0,  # そのうち導入したい
-                "state": temp['position_state'],
-                "realizePL": float(temp['position_realizePL']),
-                "pips": float(temp['position_pips']),
-                "close_time": temp['position_close_time']
-            }
+            self.order['id'] = temp['order_id']
+            self.order['time'] = temp['order_time']
+            self.order['time_past'] = float(temp['order_time_past'])
+            self.order['units'] = float(temp['order_units'])
+            self.order['price'] = float(temp['order_price'])
+            self.order['state'] = temp['order_state']
+            self.order['id'] = temp['order_id']
+
+            self.position['id'] = temp['position_id']
+            self.position['time'] = temp['position_time']
+            self.position['time_past'] = float(temp['position_time_past'])
+            self.position['price'] = float(temp['position_time_past'])
+            self.position['units'] = 0  # そのうち導入したい
+            self.position['state'] = temp['position_state']
+            self.position['realizePL'] = float(temp['position_realizePL'])
+            self.position['pips'] = float(temp['position_pips'])
+            self.position['close_time'] = temp['position_close_time']
+
             self.print_i()  # 情報の表示
             print("   order保持時間", self.order['time_past'])
 
@@ -259,7 +272,30 @@ def main():
 
     # Next判断
     # 1 fwが利確している場合、Rvオーダーは削除
-    # 2 fwがロスカしてる場合、rvオーダーを維持し、
+    # 2 fwがロスカしてる場合、rvオーダーを維持し、リオーダーを入れる(fwのロスカ部分に逆張り?現在価格基準？）
+    if fw.position['state'] == "CLOSED" and fw.position['pips'] >= 0:
+        tk.line_send("  RVオーダー解消")
+        rv.close_order()
+    elif fw.position['state'] == "CLOSED" and fw.position['pips'] <= 0:
+        if fw.reorder != 0:  # リオーダー回数が余っている場合
+            tk.line_send("  リオーダー対象！！", fw.order['lc_price'], fw.order['direction'])
+            fw.reset()  # リセット ポジションもリセットされる⇒ここには入らなくなる(LC情報も消えるので注意）
+            fw.reorder = fw.reorder - 1
+            # 設定価格の入れ替え（LC価格をリオーダー価格に）
+            fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
+            fw.plan['units'] = 5005
+            fw.plan['tp_range'] = 0.05  # 余裕度を入れる
+            fw.plan['lc_range'] = 0.05
+            fw.plan['type'] = 'STOP'
+            print(fw.plan)
+            fw.make_order()
+        else:
+            print(" □リオーダー実施ずみ")
+
+    print("")
+
+
+
 
 
 
@@ -318,7 +354,7 @@ gl = {
     "now_m": 0,
     "now_s": 0,
     'now': datetime.datetime.now().replace(microsecond=0),
-    "spread": 0.3,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
+    "spread": 0.02,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
     "p_order": 2,  # 極値の判定幅
     "position_flag": 0,  # ポジションが消えたタイミングを取得するためのフラグ
     "position_f_direction": 0,  # ポジションが買いか売りか
@@ -356,7 +392,7 @@ price_dic = oa.NowPrice_exe("USD_JPY")
 test_f_order = {
     "price": price_dic['mid'],
     "lc_price": 0.05,
-    "lc_range": 0.012,  # ギリギリまで。。
+    "lc_range": 0.005,  # ギリギリまで。。
     "tp_range": 0.012,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
     "ask_bid": -1,
     "units": 5000,
@@ -377,10 +413,14 @@ test_r_order = {
     "mind": 1,
     "memo": "forward"
 }
+ans_info_test = {"return_ratio": 0, "bunbo_gap": 0,"oldest_old": 0, "latest_late": 0,
+            "latest_old": 0, "direction": 0,"mid_price": 0, "oldest_count": 0, "latest_count": 0}
 order_judge_test = {
     "ans": 1,
-    'order_plan':[test_f_order, test_r_order]
+    'order_plan':[test_f_order, test_r_order],
+    'jd_info': ans_info_test
 }
+
 # ■出発！
 oa.OrderCancel_All_exe()  # 露払い
 oa.TradeAllColse_exe()  # 露払い

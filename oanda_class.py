@@ -597,7 +597,7 @@ class Oanda:
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         if 'orderCancelTransaction' in res_json:
             print("   ■■■CANCELあり")
-            # print(res_json)
+            print(res_json)
             canceled = True
             order_id = 0
             order_time = 0
