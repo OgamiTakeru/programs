@@ -11,9 +11,9 @@ import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
 
 test = []
-sample = []
-print(type(test))
-if type(test) == type(sample):
-    print("List")
+sample = {"test": 1}
+
+if sample == 0:
+    print("test")
 else:
-    print("no")
+    print(" No")

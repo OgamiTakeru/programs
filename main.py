@@ -8,157 +8,34 @@ import pandas as pd
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
-import programs.main_functions_Prac as f  # とりあえずの関数集
+import programs.main_functions as f  # とりあえずの関数集
 from time import sleep
 
 
-# import programs.mp_functions as mp  # MakePositionに関する関数群
-
-
-def make_order():
+def make_order(inspection_ans):
     """
     ポジション取得のメイン
     """
     global gl
+    print(" MAKE ORDER")
 
-    # ■現在価格を取得（スプレッド異常の場合は強制終了）
-    price_dic = oa.NowPrice_exe("USD_JPY")
-    print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
-    if price_dic['spread'] > gl['spread']:
-        print("    ▲スプレッド異常")  # スプレッドによっては実行をしない
-        sys.exit()
+    # オーダーや情報の取得
+    order_dic = inspection_ans['datas']['orders']
+    info = inspection_ans['datas']['info']
 
-    # ■直近の検討データの取得
-    data_format = '%Y/%m/%d %H:%M:%S'
-    # 5分足データの取得
-    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
-    d5_df = f.add_peak(d5_df, gl['p_order'])
-    d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")
-    # d5_df = pd.read_csv(tk.folder_path + 'main_data5.csv', sep=",", encoding="utf-8")  # test
-    # print(d5_df.tail(3))
-
-    # print(d5_df.head(2))
-    # 1分足データの取得
-    d1_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M1", "count": 150}, 1)
-    d1_df = f.add_peak(d1_df, gl['p_order'])
-    d1_df.to_csv(tk.folder_path + 'main_data1.csv', index=False, encoding="utf-8")
-    # d1_df = pd.read_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', sep=",", encoding="utf-8")  # test
-
-    # ##### 折り返し判定
-    d5_df['middle_price_gap'] = d5_df['middle_price'] - d5_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
-    dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
-    # ３：６の場合
-    ignore = 1  # 最初（現在を意味する）
-    dr_latest_n = 2
-    dr_oldest_n = 10
-    # latest_df = dr[1: dr_latest_n + 1]  # 直近の３個を取得
-    # oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]
-    latest_df = dr[ignore: dr_latest_n + ignore]  # 直近の３個を取得
-    oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせて、古い期間の範囲を求める
-    latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-    oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    ans = f.renzoku_gap_compare(oldest_ans, latest_ans, price_dic['mid'])  # 引数の順番に注意！　ポジ用の価格情報を取得する。
-
-    if ans == 0:
-        print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'])
-    else:
-        print(" 折返判定o-l", oldest_ans['count'], latest_ans['count'], ans['info']['return_ratio'], ans['info']['bunbo_gap'])
-
-        if ans['memo'] == 0:  # 通常の両側に入れるオーダー
-            # オーダーを代入しておく（よく名前が変るため。。）
-            f_order = ans["f_order"]
-            f_repeat = ans["f_repeat"]
-            r_order = ans["r_order"]
-            r_repeat = ans["r_repeat"]
-
-            # 順思想 オーダー実行
-            gl['orders'] = []  # オーダー情報記録用
-            f_res = oa.OrderCreate_dic_exe(f_order)  # オーダー実行（ロング）
-            for i in range(len(f_repeat)):  # オーダー実行（トラリピ）
-                oa.OrderCreate_dic_exe(f_repeat[i])
-            gl['orders'].append(f_order)  # 単品ロングオーダーを記録
-            gl['orders'].append(ans['f_repeat'])  # トラリピオーダーを記録
-            print(" 　順オーダー")
-            print(f_order)
-            print(f_repeat)
-            # 逆思想　オーダー実行
-            r_res = oa.OrderCreate_dic_exe(r_order)
-            for i in range(len(r_repeat)):
-                oa.OrderCreate_dic_exe(r_repeat[i])
-            print("  逆オーダー")
-            print(r_order)
-            print(r_repeat)
-            gl['orders'].append(r_order)  # 単品ロングオーダーを記録
-            gl['orders'].append(ans['r_repeat'])  # トラリピオーダーを記録
-
-            # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）
-            t = round(f_order['price'], 3)
-            tp = round(t + float(f_order['tp_range']) * float(f_order['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
-            lc = round(t - float(f_order['lc_range']) * float(f_order['ask_bid']), 3)
-            gl['position_f_direction'] = f_order['ask_bid']  # 順方向のポジションがどっち方向かを記録する
-
-            tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
-                         ",現価格:", price_dic['mid'],
-                         "順方向:", f_order['ask_bid'],
-                         ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
-                         "latest範囲", latest_ans['inner_low_price'], "-", latest_ans['inner_high_price'],
-                         "oldest範囲", oldest_ans['inner_low_price'], "-", oldest_ans['inner_high_price'], oldest_ans['count'],
-                         ",順思想:", f_order['ask_bid'], t, "(", tp, "[", f_order['tp_range'], "]-",
-                         lc, "[", round(f_order['lc_range'], 3), "]", ")",
-                     )
-        elif ans['memo'] == 1:
-            # オーダーを代入しておく（よく名前が変るため。。）
-            r_repeat = ans["r_repeat"]
-
-            # 順思想 オーダー実行
-            gl['orders'] = []  # オーダー情報記録用
-            # 逆思想　オーダー実行
-            for i in range(len(r_repeat)):
-                oa.OrderCreate_dic_exe(r_repeat[i])
-            print("  逆オーダー")
-            print(r_repeat)
-            gl['orders'].append(ans['r_repeat'])  # トラリピオーダーを記録
-
-            # LINE送信用情報(表示用はLCとTPを場合分けしないと。。）　代表して最初の物
-            info_t= r_repeat[0]
-            t = round(info_t['price'], 3)
-            tp = round(t + float(info_t['tp_range']) * float(info_t['ask_bid']), 3)  # ans['forward']['lc_price']と同義？
-            lc = round(t - float(info_t['lc_range']) * float(info_t['ask_bid']), 3)
-            gl['position_f_direction'] = info_t['ask_bid']  # 順方向のポジションがどっち方向かを記録する
-
-            tk.line_send("■戻り大。折返Position！", datetime.datetime.now().replace(microsecond=0),
-                         ",現価格:", price_dic['mid'],
-                         "順方向:", info_t['ask_bid'],
-                         ",戻り率:", ans["info"]["return_ratio"], "(", ans['info']['bunbo_gap'], ")",
-                         "latest範囲", latest_ans['inner_low_price'], "-", latest_ans['inner_high_price'],
-                         "oldest範囲", oldest_ans['inner_low_price'], "-", oldest_ans['inner_high_price'], oldest_ans['count'],
-                         ",順思想:", info_t['ask_bid'], t, "(", tp, "[", info_t['tp_range'], "]-",
-                         lc, "[", round(info_t['lc_range'], 3), "]", ")",
-                     )
-        # # オーダーIDを取得する（テスト。オーダー処理を待つため、１秒待機する）
-        # sleep(1)
-        # pending_new_df = oa.OrdersWaitPending_exe()
-        # dummy = []
-        # for i in range(len(gl['orders'])):
-        #     if type(gl['orders'][i]) != type(dummy):  # listじゃなかったら実行！
-        #         for index, item in pending_new_df.iterrows():
-        #             if gl['orders'][i]["units"] == abs(int(item['units'])):  # dfはUnitにマイナスが付いている可能性あり！
-        #                 print(" 発見&オーダーあり")
-        #                 gl['orders'][i]['order_id'] = item['id']
-        #                 print(gl['orders'][i])
-
-    # mid_df.loc[index_graph, 'return_half_all'] = 1  # ★グラフ用
-
-
-def close_order(pending_new_df):
-    global gl
-
-    for index, item in pending_new_df.iterrows():
-        if item['units'] == 10000:  # and item['type'] == "STOP":
-            if item['past_time_sec'] > gl["orders"][0]["time_out"]:
-                print(" 時刻による解消！　１０分！")
-                tk.line_send("個別解消", item['units'],item['past_time_sec'], ">", gl["orders"][0]["time_out"])
-
+    # オーダーの実行
+    for i in range(len(order_dic)):  # オーダー実行（トラリピ）
+        print("各")
+        print(order_dic[i])
+        oa.OrderCreate_dic_exe(order_dic[i])
+    print("  オーダー実行")
+    tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
+                 ",現価格:", info['mid_price'],
+                 ",順方向:", info['direction'],
+                 ",戻り率:", info["return_ratio"], "(", info['bunbo_gap'], ")",
+                 "OLDEST範囲", info["oldest_old"], "-", info['latest_old'], "(COUNT", info["oldest_count"], ")"
+                 "LATEST範囲", info['latest_old'], "-", info['latest_late'], "(COUNT", info["latest_count"], ")",
+                 )
 
 
 def close_position():
@@ -196,44 +73,102 @@ def close_position():
             if gl['cd_flag'] == 0:  # 過去の変更履歴がない場合は、以下の変更を実施する
                 # ポジション取得後、数分（５分足2個分）は含み損を認める。それ以降、プラス域4pips以上いった場合、最低2pipsの利確注文
                 print(" 　　　ポジションの見直し", unit)
-                if unit == 10001:
-                    if past_time_sec > 50 and pl_pips > 0.01:
-                        print(" 　　　レンジ向けのポジション", unit)
-                        #BOX(逆思想方向）
-                        cd_line = price - 0.005 if unit < 0 else price + 0.005  # -はプラス確保、＋は容認マイナス
-                        data = {
-                            "stopLoss": {"price": str(cd_line), "timeInForce": "GTC",},
-                            "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC",},
-                        }
-                        oa.TradeCRCDO_exe(p_id, data)  # ポジションを変更する
-                        tk.line_send("■(BOX)LC値底上げ", price, "⇒", cd_line)
-                        gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
-                elif unit == 10000:
-                    print("   変種要素無し(価格違い）")
+                if pl_pips > 0.025:
+                    print(" 　　　レンジ向けのポジション", unit)
+                    #BOX(逆思想方向）
+                    cd_line = price - 0.005 if unit < 0 else price + 0.005  # -はプラス確保、＋は容認マイナス
+                    data = {
+                        "stopLoss": {"price": str(cd_line), "timeInForce": "GTC",},
+                        "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC",},
+                    }
+                    oa.TradeCRCDO_exe(p_id, data)  # ポジションを変更する
+                    tk.line_send("■(BOX)LC値底上げ", price, "⇒", cd_line)
+                    gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
 
+
+def inspection_candle():
+    """
+    オーダーを発行するかどうかの判断。
+    オーダーを発行する場合、オーダーの情報も返却する
+    返却値：辞書形式
+    inspection_ans: オーダー発行有無（０は発行無し。０以外は発行あり）
+    datas: 更に辞書形式が入っている
+            ans: ０がオーダーなし
+            orders: オーダーが一括された辞書形式
+            info: 戻り率等、共有の情報
+            memo: メモ
+    """
+    global gl
+
+    # ■現在価格を取得（スプレッド異常の場合は強制終了）
+    price_dic = oa.NowPrice_exe("USD_JPY")
+    print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
+    if price_dic['spread'] > gl['spread']:
+        print("    ▲スプレッド異常")  # スプレッドによっては実行をしない
+        sys.exit()
+
+    # ■直近の検討データの取得
+    data_format = '%Y/%m/%d %H:%M:%S'
+    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
+    d5_df = f.add_peak(d5_df, gl['p_order'])  # 念のためピーク情報を追加しておく（基本使ってないけど）
+    d5_df['middle_price_gap'] = d5_df['middle_price'] - d5_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
+    dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
+    d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")
+
+    # 直近データの解析（４：２）
+    ignore = 1  # 最初（現在を意味する）
+    dr_latest_n = 2
+    dr_oldest_n = 10
+    latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
+    oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせる。
+    latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
+    oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+    ans_42 = f.judgement_42(oldest_ans, latest_ans, price_dic['mid'])  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
+
+    # 直近のデータの解析（４：３）
+    ignore = 1  # 最初（現在を意味する）
+    dr_latest_n = 3
+    dr_oldest_n = 10
+    latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
+    oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせる。
+    latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
+    oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+    ans_43 = f.judgement_43(oldest_ans, latest_ans, price_dic['mid'])  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
+
+    # 同じ価格が過去の何分にあったかを検討する
+
+
+    # 上記のansが両方とも成立する（０じゃない）事はない!
+    if ans_42["ans"] == 0 and ans_43["ans"] == 0:
+        print(" どちらとも成立せず")
+        return {"inspection_ans": 0}
+    elif ans_42["ans"] != 0:
+        print(" 4:2が成立(最初）⇒注文価格情報を返却")
+        return {"inspection_ans": 2, "datas": ans_42}
+    elif ans_43["ans"] != 0:
+        print(" 4:3が成立（次順)⇒注文価格情報を返却")
+        return {"inspection_ans": 3, "datas": ans_43}
+    elif ans_42["ans"] != 0 and ans_43["ans"] != 0:
+        print(" エラー！！！！！両方成立")
 
 
 def main():
     global gl
-    gl["main_counter"] += 1
-    print(gl["now"])
+    print("■■■", gl["now"])
+
+    price_dic = oa.NowPrice_exe("USD_JPY") # ここでも求めておく（createOrderとは少し異なるかも）
+
     # 現状の把握
     position_df = oa.OpenTrades_exe()  # ポジション情報の取得
     pending_new_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
-    pending_df = oa.OrdersPending_exe()  # ペンディングオーダーの取得（利確注文等も含む）
+    inspection_ans = inspection_candle()  # 直近のローソクデータを解析して、注文の有無を確認する
 
-    # ★ポジション所持時は、ポジションの情報を取得する
+    # 【オーダー発生とは無関係の部分】ポジション所持時は、ポジションの情報を取得する
     if len(position_df) != 0:
         # ポジション所持時！
         if gl["position_flag"] == 0:
             # ポジション無しから、初めてポジションありになった時
-            unit = float(position_df.head(1).iloc[0]["currentUnits"])  # 保持枚数（ポジションの方向を確認するため）
-            d = unit / abs(unit)  # 1か-1にする
-            if gl['position_f_direction'] == d:  # ポジションの方向と、順思想のポジション方向が一致する場合⇒順方向のポジション
-                gl['position_mind'] = 1  # 1は順方向
-            else:
-                gl['position_mind'] = -1  # -1は逆方向
-            tk.line_send("■ポジションを取得しました(思想方向:", gl['position_mind'], d)
+            tk.line_send("■ポジションを取得しました")
             gl['position_flag'] = 1  # ポジションフラグの成立
     elif len(position_df) == 0:
         # ポジション無し時
@@ -242,39 +177,38 @@ def main():
             tk.line_send("■ポジションを解消しました", gl['latest_res_pips'])  # latest_res_pips は前回実行時の物（数秒前）
             gl['exe_mode'] = 0
             gl['position_flag'] = 0  # ポジションフラグのリセット
-            gl['position_f_direction'] = 0  # 順思想のポジション方向のリセット
-            if gl['latest_res_pips'] >= 0:
-                # 結果がプラスの場合（第二の矢が入る可能性あり）
-                # make_position_second()
-                pass
-            else:
-                # 結果がマイナスの場合、第二の矢の可能性はない！
-                pass
 
-    # ★ペンディング所持時！
+    # 【長期オーダーの削除専用】ペンディング所持時！
     if len(pending_new_df) != 0:
         # 注文中のデータが存在する場合
-        print("    ◇未確定注文有", len(pending_new_df), gl['now'])
-        past_time = pending_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
+        past_time = pending_new_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
         print("  orderあり（保持中）", past_time)
-        close_order(pending_new_df)  # 個別解除
 
-        limit_time_min = 14
+        limit_time_min = 25
         if past_time > 60 * limit_time_min:  # 60*指定の分
             # 12分以上経過している場合、オーダーをキャンセルする
             oa.OrderCancel_All_exe()
             tk.line_send(str(limit_time_min), "以上のオーダーを解除します■")
 
-    # ★メインとなる分岐
+    # ★★★メインとなる分岐
     if len(position_df) != 0:
-        # ★ポジションがある場合（ポジション解消検討処理へ）
+        # ★ポジションがある場合（ポジションがある場合は動かない)
         gl['exe_mode'] = 1
-        print("    ◇ポジション有", gl['now'], gl['exe_mode'])
+        print("    ポジション有", gl['now'], gl['exe_mode'])
         close_position()
-    elif len(position_df) == 0 and len(pending_new_df) == 0:
+    elif len(position_df) == 0:
         # ★ポジションがない場合
-        gl['cd_flag'] = 0
-        make_order()
+        if len(pending_new_df) == 0:
+            # オーダーもなし（ポジションもなし）
+            gl['cd_flag'] = 0
+            if inspection_ans['inspection_ans'] != 0:
+                make_order(inspection_ans)
+                oa.OrderBook_exe( price_dic['mid'])
+        else:
+            # オーダーあり（ポジションはなし）⇒オーダーを取り消してから、ポジションを取得
+            # if inspection_ans['inspection_ans'] != 0:
+            #     make_order(inspection_ans)
+            pass
 
 
 def schedule(interval, f, wait=True):
@@ -326,8 +260,6 @@ def schedule(interval, f, wait=True):
 print("開始")
 # グローバル変数の定義
 gl = {
-    # "pending": 0,
-    "main_counter": 0,
     "exe_mode": 0,  # 実行頻度モードの変更（基本的は０）
     "schedule_freq": 1,  # 間隔指定の秒数（N秒ごとにスケジュールで処理を実施する）
     "order_time": datetime.datetime.now() + datetime.timedelta(minutes=-20),
@@ -352,9 +284,9 @@ gl = {
 }
 
 # ■練習か本番かの分岐
-fx_mode = 0  # 0=practice, 1=Live
+fx_mode = 1  # 1=practice, 0=Live
 
-if fx_mode == 0:  # practice
+if fx_mode == 1:  # practice
     env = tk.environment
     acc = tk.accountID
     tok = tk.access_token

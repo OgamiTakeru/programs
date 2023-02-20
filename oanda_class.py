@@ -5,6 +5,8 @@ from scipy.signal import argrelmin, argrelmax  # 極値探索に利用
 import math
 import time
 
+import programs.tokens as tk
+
 import numpy as np
 import oandapyV20
 import oandapyV20.endpoints.accounts as accounts
@@ -53,6 +55,26 @@ class Oanda:
                 dt = dt.astimezone(pytz.timezone("Asia/Tokyo"))
             except ValueError:
                 # print("@@@@@@日付変換一部できず（空欄等の可能性）")
+                pass
+        if dt is None:
+            df = ""
+            return df
+        return dt.strftime('%Y/%m/%d %H:%M:%S')  # 文字列に再変換
+
+
+    def iso_to_jstdt_single(self, iso_str):  # ISO8601→JST変換関数
+        dt = None
+        split_timedate = iso_str.rsplit(".", 8)  # ここでマイクロ病以下を切り落とし
+        iso_str = split_timedate[0]
+        try:
+            dt = datetime.datetime.strptime(iso_str, '%Y-%m-%dT%H:%M:%S')
+            dt = pytz.utc.localize(dt).astimezone(pytz.timezone("Asia/Tokyo"))
+        except ValueError:
+            try:
+                dt = datetime.datetime.strptime(iso_str, '%Y-%m-%dT%H:%M:%S')
+                dt = dt.astimezone(pytz.timezone("Asia/Tokyo"))
+            except ValueError:
+                print("変換できてない")
                 pass
         if dt is None:
             df = ""
@@ -246,8 +268,10 @@ class Oanda:
         temp_df.drop(['index'], axis=1, inplace=True)  # 不要項目の削除
         # 解析用の列を追加する（不要な場合はここは削除する。機械学習等で利用する）
         data_df = self.add_basic_data(temp_df)  # 【関数/必須】基本項目を追加する
+        data_df['middle_price_gap'] = data_df['middle_price'] - data_df['middle_price'].shift(1)  # よくわからないが、必要！
         data_df = self.add_ema_data(data_df)
         data_df = self.add_bb_data(data_df)
+        data_df = self.add_peak(data_df)
 
         # 返却
         return data_df
@@ -408,6 +432,24 @@ class Oanda:
         time_past = (datetime.datetime.now() - time_dt).seconds  # 差分を秒で求める
         return time_past
 
+    # 注文系や確認系で利用する関数(single版）
+    def cal_past_time_single(self, x):
+        """
+        OpenTrades_exe等、いくつかの関数から呼び出され、ポジション取得やオーダー時間からの経過秒数を計算する関数
+        order_time_jpと比較した秒数。（order_time_jpという列名でとりあえず固定する）
+        order_time_jpはAPIでの返却は存在しないため、この関数を呼ぶ以前で、作成されている必要がある。
+        """
+        self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
+        target_col = x
+        time_dt = datetime.datetime(int(target_col[0:4]),
+                                int(target_col[5:7]),
+                                int(target_col[8:10]),
+                                int(target_col[11:13]),
+                                int(target_col[14:16]),
+                                int(target_col[17:19]))
+        time_past = (datetime.datetime.now()+ datetime.timedelta(seconds=2) - time_dt).seconds  # 差分を秒で求める（タイミングで-値になるので、現在時刻-2秒)
+        return time_past
+
     # (3)-1 オーダーを発行する（指値+LC/TP有）
     def OrderCreate_exe(self, units, ask_bid, price, tp_range, lc_range, type, tr_range, remark):
         """
@@ -464,9 +506,15 @@ class Oanda:
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         if 'orderCancelTransaction' in res_json:
             print("   ■■■CANCELあり")
+            print(res_json)
             canceled = True
+            order_id = 0
+            order_time = 0
         else:
+            # 正確にオーダーが入ったためオーダーIDを取得
             canceled = False
+            order_id = res_json['orderCreateTransaction']['id']
+            order_time = res_json['orderCreateTransaction']['time']
 
         # res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出　不要？？？221030
         # 実行結果の中から、約定価格を取得する（Marketの場合のみとなる）
@@ -484,7 +532,9 @@ class Oanda:
                       "lc": str(round(price - (lc_range * ask_bid), 3)),
                       "type": type,
                       "remark": remark,
-                      "cancel": canceled
+                      "cancel": canceled,
+                      "order_id": order_id,
+                      "order_time": order_time
                       }
         return order_info
 
@@ -547,10 +597,15 @@ class Oanda:
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         if 'orderCancelTransaction' in res_json:
             print("   ■■■CANCELあり")
-            print(res_json)
+            # print(res_json)
             canceled = True
+            order_id = 0
+            order_time = 0
         else:
+            # 正確にオーダーが入ったためオーダーIDを取得
             canceled = False
+            order_id = res_json['orderCreateTransaction']['id']
+            order_time = res_json['orderCreateTransaction']['time']
 
         # res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出　不要？？？221030
         # 実行結果の中から、約定価格を取得する（Marketの場合のみとなる）
@@ -567,7 +622,9 @@ class Oanda:
                       "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
                       "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
                       "type": info['type'],
-                      "cancel": canceled
+                      "cancel": canceled,
+                      "order_id": order_id,
+                      "order_time": order_time
                       }
         return order_info
 
@@ -587,6 +644,7 @@ class Oanda:
         # 返却値:Dataframe
         ep = OrderCancel(accountID=self.accountID, orderID=order_id)
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
+        # print(res_json)
         res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出
         return res_df
 
@@ -631,6 +689,70 @@ class Oanda:
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         return res_json
 
+    # (5-2) 注文（単品のステータスを含めて）確認
+    def OrderDetailsState_exe(self, order_id):
+        """
+        単品の注文番号を渡すと、ポジションまで（ある場合）の情報を返却する
+        :param order_id: 注文のID
+        :return: あまり利用しないので、Jsonのままで返却
+        """
+        ep = OrderDetails(accountID=self.accountID, orderID=order_id)
+        res_json = eval(json.dumps(self.api.request(ep), indent=2))
+        order_state = res_json['order']['state']  # オーダーのステータスを確認
+
+        if "price" in res_json['order']:  # MAEKET注文の場合、orderPriceが表示されない
+            order_price = res_json['order']['price']
+        else:
+            order_price = 0
+
+        # 返却用の項目追加を実施
+        if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
+            position_id = 0
+            pips = 0
+            position_time = 0
+            position_close_time = 0
+            position_price = 0
+            position_state = 0
+            position_realizePL = 0
+
+        elif order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
+            position_id = res_json['order']['fillingTransactionID']
+            position_js = self.TradeDetails_exe(position_id)
+            if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
+                pips = round(float(position_js['trade']['realizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
+                position_realizePL = position_js['trade']['realizedPL']
+                position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                position_close_time = self.iso_to_jstdt_single(position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
+                position_price = position_js['trade']['price']
+                position_state = position_js['trade']['state']
+            elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
+                pips = round(float(position_js['trade']['unrealizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
+                position_realizePL = position_js['trade']['unrealizedPL']
+                position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                position_close_time = 0
+                position_price = position_js['trade']['price']
+                position_state = position_js['trade']['state']
+
+
+        # わかりやすいJsonを作っておく
+        res = {
+            "order_id": res_json['order']['id'],
+            "order_time": self.iso_to_jstdt_single(res_json['order']['createTime']),
+            "order_time_past": self.cal_past_time_single(self.iso_to_jstdt_single(res_json['order']['createTime'])),
+            "order_units": res_json['order']['units'],
+            "order_price": order_price, #Marketでは存在しない
+            "order_state": res_json['order']['state'],
+            "position_id": position_id,
+            "position_time": position_time,
+            "position_time_past": self.cal_past_time_single(position_time) if position_time != 0 else 0,
+            "position_price": position_price,
+            "position_state": position_state,
+            "position_realizePL": position_realizePL,
+            "position_pips": pips,
+            "position_close_time": position_close_time
+        }
+        return res
+
     # (6) 注文（保留中）の一覧
     def OrdersPending_exe(self):
         """
@@ -663,7 +785,6 @@ class Oanda:
         ep = OrdersPending(accountID=self.accountID)
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
         res_df = pd.DataFrame(res_json['orders'])  # DFに変換
-        # print(res_df)
         if len(res_df) == 0:
             # 注文中がない場合、何もしない
             return res_df
@@ -674,12 +795,12 @@ class Oanda:
 
             del_target = []
             for index, row in res_df.iterrows():
-                if row['type'] == 'LIMIT' or row['type'] == 'STOP':
+                if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
                     # LIMITとSTOPが対象。
                     pass
                 else:
                     # typeが利確やロスカ、トレール注文の場合は一覧には乗せない
-                    del_target.append(index)
+                    del_target.append(index)  # 消す対象をリスト化
             res_df.drop(index=del_target, inplace=True)  # 不要な行を削除（IMITとSTOPのみが対象）
 
             return res_df
@@ -713,9 +834,8 @@ class Oanda:
     def TradeDetails_exe(self, trade_id):
         ep = TradeDetails(accountID=self.accountID, tradeID=trade_id)
         res_json = eval(json.dumps(self.api.request(ep), indent=2))
-        # print(res_json["trade"])
-        res_df = pd.DataFrame(res_json["trade"], index=[0, ])
-        return res_df  # res_json
+        return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
+
 
     # (10) トレードの変更等
     def TradeCRCDO_exe(self, trade_id, data):
@@ -747,7 +867,7 @@ class Oanda:
         return res_df
 
     # (12) 取引中の全トレードを一個づつ決済（データ取得あり）
-    def TradeAllColse_exe(self, remark):
+    def TradeAllColse_exe(self,  remark="cancel"):
         # 呼び出し:oa.TradeAllColse_exe(remark(何かメモ[使わないが必要]))
         open_df = self.OpenTrades_exe()
         if len(open_df) == 0:
@@ -804,6 +924,30 @@ class Oanda:
         else:
             act_price = 99999999
         return act_price
+
+    def OrderBook_exe(self, target_price):
+        ep = instruments.InstrumentsOrderBook(instrument="USD_JPY")
+        res_json = self.api.request(ep)  # 結果をjsonで取得
+        df = pd.DataFrame(res_json["orderBook"]["buckets"])
+        # 集計
+        price = target_price
+
+        from_price = price - 0.2
+        from_price = from_price - (from_price % 0.05)
+        from_price3 = '{:.3f}'.format(from_price)
+        from_index = df[df['price'] == from_price3].index.values[0]  # 一つのはず
+
+        to_price = price + 0.2
+        to_price = to_price - (to_price % 0.05)
+        to_price3 = '{:.3f}'.format(to_price)
+        to_index = df[df['price'] == to_price3].index.values[0]
+
+        df = df[from_index:to_index]
+        df = df.sort_index(ascending=False)
+        return df
+
+
+
 
     # 【Roll等を使い、過去足との平均値等を算出】
     def add_roll_info(self, data_df):
@@ -872,72 +1016,41 @@ class Oanda:
         else:
             return x.mid_past_1
 
-    # # 【極値情報を取得する】
-    # def peak_flag(self, x):
-    #     self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
-    #     if math.isnan(x["peak"]):
-    #     # if math.isnan(x):
-    #         return 0
-    #     else:
-    #         return 1
-    #
-    # def gap_vector(self, x):
-    #     if x.ans > 0.10:
-    #         return 0
-    #     else:
-    #         return 1
-    #
-    # def valley_flag(self, x):
-    #     self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
-    #     if math.isnan(x["valley"]):
-    #         return 0
-    #     else:
-    #         return 1
-    #
-    # # def add_peak(self, data_df):
-    # #     # ####peak関数を使うケース
-    # #     order_num = 4  # ピーク探索の粒度
-    # #     peak = data_df['high'].loc[argrelmfax(data_df["high"].values, order=order_num)]
-    # #     valley = data_df['low'].loc[argrelmin(data_df["low"].values, order=order_num)]
-    # #
-    # #     # データに過去のピーク情報を付属させる（個数が多くなるかもしれないので、ループを作成する）
-    # #     for i in range(3):
-    # #         # peak情報
-    # #         data_df['4peak_b' + str(i)] = peak.shift(i)
-    # #         temp_series = pd.Series(data=peak.index)
-    # #         temp_series_index = pd.Series(data=temp_series.shift(i).values, index=temp_series)
-    # #         data_df['4peak_b_index' + str(i)] = temp_series_index
-    # #
-    # #         # valley情報
-    # #         data_df['4valley_b' + str(i)] = valley.shift(i)
-    # #         temp_series = pd.Series(data=valley.index)
-    # #         temp_series_index = pd.Series(data=temp_series.shift(i).values, index=temp_series)
-    # #         data_df['4valley_b_index' + str(i)] = temp_series_index
-    # #
-    # #     # order_num = 5  # ピーク探索の粒度
-    # #     # peak = data_df['high'].loc[argrelmax(data_df["high"].values, order=order_num)]
-    # #     # valley = data_df['low'].loc[argrelmin(data_df["low"].values, order=order_num)]
-    # #     # # データに過去のピーク情報を付属させる（個数が多くなるかもしれないので、ループを作成する）
-    # #     # for i in range(3):
-    # #     #     # peak情報
-    # #     #     data_df['7peak_b' + str(i)] = peak.shift(i)
-    # #     #     temp_series = pd.Series(data=peak.index)
-    # #     #     temp_series_index = pd.Series(data=temp_series.shift(i).values, index=temp_series)
-    # #     #     data_df['7peak_b_index' + str(i)] = temp_series_index
-    # #     #
-    # #     #     # valley情報
-    # #     #     data_df['7valley_b' + str(i)] = valley.shift(i)
-    # #     #     temp_series = pd.Series(data=valley.index)
-    # #     #     temp_series_index = pd.Series(data=temp_series.shift(i).values, index=temp_series)
-    # #     #     data_df['7valley_b_index' + str(i)] = temp_series_index
-    # #
-    # #     # peakの機械学習用
-    # #     # data_df['peak'] = peak  # この時点では「価格」を含んだ情報  なおindexに紐ついて結合ざれる
-    # #     # data_df['valley'] = valley  # この時点では「価格」を含んだ情報
-    # #     # data_df['peak_tf'] = data_df.apply(lambda x: self.peak_flag(x), axis=1)
-    # #     # data_df['valley_tf'] = data_df.apply(lambda x: self.valley_flag(x), axis=1)
-    # #
-    # #     return data_df
+    # 【極値情報を取得する】
+    def peak_flag(self, x):
+        self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
+        if math.isnan(x["peak"]):
+        # if math.isnan(x):
+            return 0
+        else:
+            return 1
+
+    def gap_vector(self, x):
+        if x.ans > 0.10:
+            return 0
+        else:
+            return 1
+
+    def valley_flag(self, x):
+        self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
+        if math.isnan(x["valley"]):
+            return 0
+        else:
+            return 1
+
+    def add_peak(self, data_df):
+        # ####peak関数を使うケース
+        order_num = 3  # ピーク探索の粒度
+        peak = data_df['high'].loc[argrelmax(data_df["high"].values, order=order_num)]
+        valley = data_df['low'].loc[argrelmin(data_df["low"].values, order=order_num)]
+        data_df['peak_3'] = peak
+        data_df['valley_3'] = valley
+
+        return data_df
+
+
+
+
     #
     #
     # def add_peak_ml(self, data_df):

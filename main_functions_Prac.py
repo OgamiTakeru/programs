@@ -12,7 +12,7 @@ def draw_graph(mid_df):
     ローソクチャーを表示する関数。
     引数にはDataFrameをとり、最低限Open,hitg,low,Close,Time_jp,が必要。その他は任意。
     """
-    order_num = 2  # 極値調査の粒度  gl['p_order']  ⇒基本は３。元プログラムと同じ必要がある（従来Globalで統一＝引数で渡したいけど。。）
+    order_num = 3  # 極値調査の粒度  gl['p_order']  ⇒基本は３。元プログラムと同じ必要がある（従来Globalで統一＝引数で渡したいけど。。）
     fig = make_subplots(specs=[[{"secondary_y": True}]])  # 二軸の宣言
     # ローソクチャートを表示する
     graph_trace = go.Candlestick(x=mid_df["time_jp"], open=mid_df["open"], high=mid_df["high"],
@@ -23,39 +23,39 @@ def draw_graph(mid_df):
     col_name = 'peak_' + str(order_num)
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df['peak_' + str(order_num)], mode="markers",
-                               marker={"size": 10, "color": "red", "symbol": "circle"}, name="peak")
+                               marker={"size": 10, "color": "orange", "symbol": "circle"}, name="peak")
         fig.add_trace(add_graph)
     col_name = 'valley_' + str(order_num)
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df['valley_' + str(order_num)], mode="markers",
-                               marker={"size": 10, "color": "blue", "symbol": "circle"}, name="valley")
+                               marker={"size": 10, "color": "skyblue", "symbol": "circle"}, name="valley")
         fig.add_trace(add_graph)
     # 移動平均線を表示する
     col_name = "ema_l"
     if col_name in mid_df:
-        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name, line={"color": "silver"})
         fig.add_trace(add_graph)
     col_name = "ema_s"
     if col_name in mid_df:
-        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name, line={"color": "darkgray"})
         fig.add_trace(add_graph)
     col_name = "cross_price"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name],  mode="markers",
-                               marker={"size": 5, "color": "black", "symbol": "cross"}, name=col_name)
+                               marker={"size": 5, "color": "blue", "symbol": "cross"}, name=col_name)
         fig.add_trace(add_graph)
     # ボリンジャーバンドを追加する
     col_name = "bb_upper"
     if col_name in mid_df:
-        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name, line={"color": "wheat"})
         fig.add_trace(add_graph)
     col_name = "bb_lower"
     if col_name in mid_df:
-        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name, line={"color": "wheat"})
         fig.add_trace(add_graph)
     col_name = "bb_middle"
     if col_name in mid_df:
-        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name, line={"color": "khaki"})
         fig.add_trace(add_graph)
 
     # ↑ここまでは基本的に必須。↓以下は基本的には任意
@@ -90,19 +90,19 @@ def draw_graph(mid_df):
     col_name = "hige_no"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
-                               marker={"size": 10, "color": "red", "symbol": "triangle-up"}, name=col_name)
+                               marker={"size": 8, "color": "red", "symbol": "triangle-up"}, name=col_name)
         fig.add_trace(add_graph, secondary_y=True)
 
     col_name = "test_target_price"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
-                               marker={"size": 10, "color": "red", "symbol": "diamond"}, name=col_name)
+                               marker={"size": 8, "color": "red", "symbol": "diamond"}, name=col_name)
         fig.add_trace(add_graph)
 
     col_name = "conti"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
-                               marker={"size": 10, "color": "red", "symbol": "diamond"}, name=col_name)
+                               marker={"size": 8, "color": "red", "symbol": "diamond"}, name=col_name)
         fig.add_trace(add_graph)
 
     # col_name = "range"
@@ -117,11 +117,29 @@ def draw_graph(mid_df):
                                marker={"size": 10, "color": "Magenta", "symbol": "diamond"}, name=col_name)
         fig.add_trace(add_graph, secondary_y=True)
 
-    col_name = "return_half_all"
+    col_name = "entry42"
     if col_name in mid_df:
         add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
                                marker={"size": 10, "color": "black", "symbol": "diamond"}, name=col_name)
-        fig.add_trace(add_graph, secondary_y=True)
+        fig.add_trace(add_graph)
+
+    col_name = "entry43"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
+                               marker={"size": 10, "color": "black", "symbol": "square"}, name=col_name)
+        fig.add_trace(add_graph)
+
+    col_name = "f_lc"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
+                               marker={"size": 10, "color": "red", "symbol": "triangle-up"}, name=col_name)
+        fig.add_trace(add_graph)
+
+    col_name = "f_tp"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], mode="markers",
+                               marker={"size": 10, "color": "blue", "symbol": "triangle-up"}, name=col_name)
+        fig.add_trace(add_graph)
 
     fig.show()
     # 参考＜マーカーの種類＞
@@ -335,7 +353,7 @@ def renzoku_gap_pm(data_df):
                 pattern = -13
     else:
         pattern = -99
-        pattern_comment = "何もなし"
+        pattern_comment = "NoComment"
 
     return({
         # "final_time": data_df.iloc[0]["time_jp"],
@@ -374,11 +392,16 @@ def make_repeat_order(order_dic):
                     の配列を却下
     """
     base_price = order_dic["price"]
+    units = order_dic["units"]
     lap = order_dic["lap"]  # 前のTPとのラップ（マイナス値でTP範囲とラップさせる）
     lc = order_dic["lc"]
     tp = order_dic["tp"]
     num = order_dic["num"]
     direction_l = order_dic["ask_bid"]  # direction_lと同義
+    reorder_units = order_dic["reoeder_units"]
+    inc_units = -5000  # 毎回増えていく用（インクリーズさせる用）
+    inc_lc = 0.03  #　毎回増えていくよう
+    inc_tp = 0.04  # 毎回増えていくよう
     order_arr = []
     for i in range(num):
         temp_rep = {
@@ -387,25 +410,26 @@ def make_repeat_order(order_dic):
             "lc_range": lc,  # ギリギリまで。
             "tp_range": tp,
             "ask_bid": 1 * order_dic["ask_bid"],
-            "units": order_dic["units"],
+            "units": units,
             "type":  order_dic["type"],
             "tr_range": 0,
             "mind": order_dic["mind"],
             "memo": "trap",
-            "time_out": order_dic["time_out"],  # 時間を過ぎたら解除するオーダー
-            "order_edit_flag": 0,  # オーダーを変更したフラグ
-            "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
-            "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
         }
-        tp_price = round(base_price + (tp * direction_l), 3)  # 次期トラリピ用
-        base_price = round(tp_price + (lap * direction_l), 3)
+        # 参考情報計算
+        tp_price = round(base_price + (tp * direction_l), 3)  #
+        base_price = round(tp_price + (lap * direction_l), 3)  # 次期トラリピやオーダーの参考用（トラリピの最終オーダー箇所）
         order_arr.append(temp_rep)
-    return order_arr,base_price
+        # インクリーズ計算
+        units = units + inc_units
+        lc = lc + inc_lc
+        tp = tp + inc_tp
+    return order_arr, base_price
 
 
-def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
+def judgement_42(oldest_ans, latest_ans, now_price):
     """
-
+    old区間4,latest区間2の場合のジャッジメント
     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
     :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
@@ -415,130 +439,60 @@ def renzoku_gap_compare(oldest_ans, latest_ans, now_price):
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
-            info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap']}  # 情報を保持しておく
-            # 戻り基準と比較し、基準値以内(N%以下等）であれば、戻り不十分＝エントリーポイントとみなす
-            max_return_ratio = 99
-            direction_l = latest_ans['direction']
-            if 80 <= return_ratio < max_return_ratio:
-                print("  戻り大")
-                entry_price = oldest_ans['inner_high_price'] if direction_l == 1 else oldest_ans['inner_low_price']
-                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
-                       "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10 * 60,
-                       "order_edit_flag": 0, "order_id": 0, "position_id": 0, "memo": "戻り半端"
-                       }
-                r_repeat_arr = make_repeat_order(rep)
-                return {"r_repeat": r_repeat_arr[0], "info": info, "memo": 1}
-            elif 40 < return_ratio < 80:
-                print("  戻り中途半端")
-                return_price = latest_ans['gap'] * (return_ratio + 10 / 100)  # 60%戻し
-                entry_price = latest_ans['latest_price'] + return_price if direction_l == 1 else latest_ans['latest_price'] - return_price
-                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
-                       "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10 * 60,
-                       "order_edit_flag": 0, "order_id": 0, "position_id": 0, "memo": "戻り半端"
-                       }
-                r_repeat_arr = make_repeat_order(rep)
-                return {"r_repeat": r_repeat_arr[0], "info": info, "memo": 1}
+            ans_info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap'],
+                        "oldest_old": oldest_ans["oldest_price"], "latest_late": latest_ans["latest_price"],
+                        "latest_old": latest_ans["oldest_price"], "direction": latest_ans["direction"],
+                        "mid_price": now_price, "oldest_count": oldest_ans["count"], "latest_count": latest_ans['count']}
 
-            elif return_ratio <= 40:
-                # 微戻りを考える
-                moves = latest_ans['data']['moves'].mean()  # 直近の移動量
-                lcs = 0.1 if moves > 0.1 else moves
-                # 4:2探索時は幅が狭いことがあるので、latestのinner_highとinner_lowの差分をエントリー価格に反映
-                high_low_gap = latest_ans['inner_high_price'] - latest_ans['inner_low_price']
-                min_gap = 0.02
-                if high_low_gap < min_gap:
-                    # 差分が小さすぎる場合、元々の幅に、上下に均等にクライテリアを設定する(4pipsを超えるように）
-                    adjuster = round((min_gap - high_low_gap) / 2, 3)
-                    t_latest_inner_high_price = latest_ans['inner_high_price'] + adjuster
-                    t_latest_inner_low_price = latest_ans['inner_low_price'] - adjuster
-                    t_gap = min_gap
-                    print(" 差分小", adjuster,t_latest_inner_high_price,t_latest_inner_low_price, t_gap, high_low_gap)
-                    print(" 差分小Data", latest_ans['inner_high_price'], latest_ans['inner_low_price'], adjuster)
-                else:
-                    t_latest_inner_high_price = latest_ans['inner_high_price']
-                    t_latest_inner_low_price = latest_ans['inner_low_price']
-                    t_gap = high_low_gap
-                    print(" 差分大", t_latest_inner_high_price, t_latest_inner_low_price, t_gap, high_low_gap)
-
-                # ★①　下にいく本命用（このオーダーはまれにしか入らない。ただし入るときは勢いがあると推定する）
-                temp = t_latest_inner_low_price + 0.015 if direction_l == 1 else t_latest_inner_high_price - 0.015
-                rep = {"price": temp, "lap": -0.005, "lc": 0.03, "tp": 0.018, "num": 4,
-                     "ask_bid": -1 * direction_l, "units": 10010, "type": "STOP", "mind": -1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,
-                     }
-                f_repeat_arr = make_repeat_order(rep)
-                base_price = f_repeat_arr[1]  # 0はデータ、１はBasePrice
+            # 戻り率次第で、色々処理を変える
+            order_arr = []
+            max_return_ratio = 80  # 初期値の設定（最大戻り率）
+            direction_l = latest_ans['direction']  #
+            if return_ratio < max_return_ratio:
+                print("  オーダー準備")
+                # 順方向（４２の場合）
+                entry_price = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
                 f_order = {
-                    "price": base_price,
+                    "price": entry_price,
                     "lc_price": 0.05,
-                    "lc_range": t_gap - 0.007,  # ギリギリまで。。
-                    "tp_range": 0.08,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                    "lc_range": 0.028,  # ギリギリまで。。
+                    "tp_range": 0.022,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": -1 * direction_l,
-                    "units": 10011,
+                    "units": 6000,
                     "type": "STOP",
-                    "tr_range": 0.05,  # ↑ここまでオーダー
+                    "tr_range": 0.10,  # ↑ここまでオーダー
                     "mind": 1,
-                    "memo": "first_f",
-                    "time_out": 10*60,  # 時間を過ぎたら解除するオーダー
-                    "order_edit_flag": 0,  # オーダーを変更したフラグ
-                    "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
-                    "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
+                    "memo": "forward"
                 }
+                order_arr.append(f_order)  # 0はデータ
 
-                # ★②ちょっと上に行く（逆思想）のを取りに行く。LCの関係で
-                temp = t_latest_inner_high_price+0.01 if direction_l == 1 else t_latest_inner_low_price-0.01
-                if direction_l == 1:  # 谷の場合
-                    if now_price > temp:
-                        entry_price = now_price
-                        print("now超え", entry_price)
-                    else:
-                        entry_price = temp
-                        print("now超え無し", entry_price)
-                else:  # 山の場合
-                    if now_price < temp:
-                        entry_price = now_price
-                        print("now以下", entry_price)
-                    else:
-                        entry_price = temp
-                        print("now以下なし", entry_price)
-                # トラリピ系
-                rep = {"price": entry_price, "lap": 0.005, "lc": 0.03, "tp": 0.018, "num": 4,
-                     "ask_bid": direction_l, "units": 10020, "type": "STOP", "mind": -1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,
-                     }
-                r_repeat_arr = make_repeat_order(rep)
-                # 最後はロングのオーダーを出す
-                base_price = r_repeat_arr[1]  # 0はデータ、１はBasePrice
+                # 逆方向（４２の場合）
+                gap = abs(entry_price - now_price) * 1.4  # 順方向に達成する幅をそのまま流用する(1.5倍くらいしておくか。。。）
+                pr = latest_ans['latest_price'] + gap if direction_l == 1 else latest_ans['latest_price'] - gap
+                # print("  テスト価格表示42", entry_price, pr, gap, latest_ans['latest_price'])
                 r_order = {
-                    "price": base_price,  # トラリピ後の価格を取得（トラリピは最後にインクリメントしていく）
-                    "lc_price": 0.03,
-                    "lc_range": t_gap - 0.007,  # ギリギリまで。
-                    "tp_range": 0.08,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                    "price": pr,
+                    "lc_price": 0.05,
+                    "lc_range": 0.03,  # ギリギリまで。。
+                    "tp_range": 0.05,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": 1 * direction_l,
-                    "units": 10021,
+                    "units": 7000,
                     "type": "STOP",
-                    "tr_range": 0.05,
-                    "mind": 1,
-                    "memo": "first",
-                    "time_out": 10 * 60,  # 時間を過ぎたら解除するオーダー
-                    "order_edit_flag": 0,  # オーダーを変更したフラグ
-                    "order_id": 0,  # オーダーを発行した場合、オーダーIDを取得しておく
-                    "position_id": 0,  # オーダーがポジションした場合、ポジションIDを取得しておく（可能か・・？）
+                    "tr_range": 0.10,  # ↑ここまでオーダー
+                    "mind": -1,
+                    "memo": "reverse",
                 }
-
-                return {"f_order": f_order, "f_repeat":f_repeat_arr[0], "r_order": r_order, "r_repeat": r_repeat_arr[0],
-                        "info": info, "memo": 0}
+                # ans_info['ref_r_entry'] = pr  # テスト用
+                # オーダーをひとまとめにする
+                order_arr.append(r_order)
+                # 返却する
+                return {"ans": 42, "orders": order_arr, "info": ans_info, "memo": "42成立"}
             else:
-                print(" 戻し幅NG[率,gap]", return_ratio, ",", latest_ans['gap'], "/", oldest_ans['gap']
-                      ," 開始位置", oldest_ans['oldest_price'], "count:", oldest_ans['count'], ",", latest_ans['count'],
-                      latest_ans['latest_time'])
-                # print(" 戻し幅をみたさず", latest_ans['direction'], latest_ans['latest_price'])
-                return 0
+                print("  戻り率大（４２）", return_ratio)
+                return {"ans": 0, "orders": order_arr, "info": ans_info, "memo": "戻り大"}
         else:
-            print("  行数未達")
-            return 0
+            print("  行数未達（４２）")
+            return {"ans": 0, "orders": 0, "info": 0, "memo": "行数未達"}
     else:
-        print("  同方向", oldest_ans['count'], latest_ans['count'], latest_ans['direction'], oldest_ans['direction'])
-        return 0
-
-
+        print("  方向同方向４２")
+        return {"ans": 0, "orders": 0, "info": 0, "memo": "同方向"}
