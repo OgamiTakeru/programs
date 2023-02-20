@@ -446,7 +446,7 @@ def judgement_42(oldest_ans, latest_ans, now_price):
 
             # 戻り率次第で、色々処理を変える
             order_arr = []
-            max_return_ratio = 80  # 初期値の設定（最大戻り率）
+            max_return_ratio = 50  # 初期値の設定（最大戻り率）
             direction_l = latest_ans['direction']  #
             if return_ratio < max_return_ratio:
                 print("  オーダー準備")
@@ -486,13 +486,13 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                 # オーダーをひとまとめにする
                 order_arr.append(r_order)
                 # 返却する
-                return {"ans": 42, "orders": order_arr, "info": ans_info, "memo": "42成立"}
+                return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立"}
             else:
                 print("  戻り率大（４２）", return_ratio)
-                return {"ans": 0, "orders": order_arr, "info": ans_info, "memo": "戻り大"}
+                return {"ans": 0, "order_plan": order_arr, "jd_info": ans_info, "memo": "戻り大"}
         else:
             print("  行数未達（４２）")
-            return {"ans": 0, "orders": 0, "info": 0, "memo": "行数未達"}
+            return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "行数未達"}
     else:
         print("  方向同方向４２")
-        return {"ans": 0, "orders": 0, "info": 0, "memo": "同方向"}
+        return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "同方向"}
