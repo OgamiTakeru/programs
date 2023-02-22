@@ -62,8 +62,8 @@ class order_information:
         self.life = False  # 有効かどうか（オーダー発行からポジションクローズまで）
         self.plan = {}  # plan情報
         self.plan_info = {}  # plan情報をもらった際の付加情報（戻り率等）
-        self.order = {"id": 0, "state": 0}  # オーダー情報 (idとステートは初期値を入れておく）
-        self.position = {"id": 0, "state": 0}  # ポジション情報 (idとステートは初期値を入れておく））
+        self.order = {"id": 0, "state": 0, "time_past": 0}  # オーダー情報 (idとステートは初期値を入れておく）
+        self.position = {"id": 0, "state": 0, "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
         self.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
         self.reorder_next = 0  # リオーダープラン
         self.reorder = 1  # ２回まで再オーダーを実施する
@@ -72,8 +72,8 @@ class order_information:
     def reset(self):
         # 完全にそのオーダーを削除する
         self.life = False
-        self.order = {"id": 0, "state": 0}  # オーダー情報 (idとステートは初期値を入れておく）
-        self.position = {"id": 0, "state": 0}  # ポジション情報 (idとステートは初期値を入れておく））
+        self.order = {"id": 0, "state": 0, "time_past": 0}  # オーダー情報 (idとステートは初期値を入れておく）
+        self.position = {"id": 0, "state": 0, "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
 
     def print_i(self):
         print("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
@@ -161,17 +161,17 @@ class order_information:
 
             # （３）情報を更新
             self.order['id'] = temp['order_id']
-            self.order['time'] = temp['order_time']
-            self.order['time_past'] = float(temp['order_time_past'])
+            self.order['time'] = 0 if type(temp['order_time']) == int else datetime.datetime.strptime(temp['order_time'], '%Y/%m/%d %H:%M:%S')
+            self.order['time_past'] = float(temp['order_time_past'])  # 諸事情でプラス２秒程度ある
             self.order['units'] = float(temp['order_units'])
             self.order['price'] = float(temp['order_price'])
             self.order['state'] = temp['order_state']
             self.order['id'] = temp['order_id']
 
             self.position['id'] = temp['position_id']
-            self.position['time'] = temp['position_time']
-            self.position['time_past'] = float(temp['position_time_past'])
-            self.position['price'] = float(temp['position_time_past'])
+            self.position['time'] = 0 if type(temp['position_time']) == int else datetime.datetime.strptime(temp['position_time'], '%Y/%m/%d %H:%M:%S')
+            self.position['time_past'] = float(temp['position_time_past'])  # 諸事情でプラス２秒程度ある
+            self.position['price'] = float(temp['position_price'])
             self.position['units'] = 0  # そのうち導入したい
             self.position['state'] = temp['position_state']
             self.position['realizePL'] = float(temp['position_realizePL'])
@@ -208,9 +208,24 @@ class order_information:
 def inspection_next_action():  # クラスはグローバル関数の為引数で渡される必要なし
     # オーダー希望（基準達成）があった場合、現在のオーダーをどうするか（新オーダー不可　or 全てキャンセルして新オーダーか）
     # 新オーダー不可の場合は、オーダーが二つとも存在＋かつ２０分経過指定いない場合、fw.reorder_nextが１の場合(リオーダー待ち)
-    limit_time_min = 20
-    if (fw.order['state'] == "PENDING" and fw.order['time_past'] < 60 * limit_time_min) and (
-            rv.order['state'] == "PENDING" and rv.order['time_past'] < 60 * limit_time_min):
+    limit_time_min = 6
+    now = datetime.datetime.now().replace(microsecond=0)
+    if fw.order['id'] == 0: # まだない
+        fw_time_past_for_jd = 0
+    else:
+        print(fw.order['time'], type(fw.order['time']))
+        fw_time_past_for_jd = (now-fw.order['time']).seconds
+    if rv.order['id'] == 0: # まだない
+        rv_time_past_for_jd = 0
+    else:
+        print(rv.order['time'], type(rv.order['time']))
+        rv_time_past_for_jd = (now-rv.order['time']).seconds
+
+    print(fw.order['state'], fw.order['time_past'], rv.order['state'], rv.order['time_past'],
+          fw_time_past_for_jd, rv_time_past_for_jd)
+    # if 0 < fw.order['time_past'] < 60 * limit_time_min or 0 < rv.order['time_past'] < 60 * limit_time_min:
+    if 0 < fw_time_past_for_jd < limit_time_min * 60 or 0 < rv_time_past_for_jd < limit_time_min * 60:
+        print(" 直後のオーダーの可能性あり")
         new_order = False
     elif fw.reorder_next == 1:
         new_order = False
@@ -301,16 +316,20 @@ def main():
                 if time_past > 30:  # ３０秒後にリオーダー実施
                     oa.OrderCancel_All_exe()  # 露払い
                     oa.TradeAllColse_exe()  # 露払い
-                    tk.line_send("  リオーダー実施！！", fw.order['lc_price'], fw.order['direction'])
+                    tk.line_send("  リオーダー実施！！", fw.order['lc_price'], fw.order['direction'], datetime.datetime.now().replace(microsecond=0))
                     fw.reset()  # リセット ポジションもリセットされる⇒ここには入らなくなる(LC情報も消えるので注意）
                     fw.reorder = fw.reorder - 1
                     # 設定価格の入れ替え（LC価格をリオーダー価格に） 他のオーダーとの兼ね合いも考えないと。。
-                    fw.plan['price'] = fw.plan['lc_price'] + (fw.plan['ask_bid'] * 0.05)  # 余裕度を入れる
-                    fw.plan['units'] = 80005
+                    price_dic = oa.NowPrice_exe("USD_JPY")
+                    test_price = price_dic['mid']
+                    fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.05)  # 余裕度を入れる
+                    fw.plan['units'] = 8000
+                    fw.plan['type'] = "LIMIT"  # 'MARKET'
                     fw.plan['tp_range'] = 0.05  # 余裕度を入れる
                     fw.plan['lc_range'] = 0.05
-                    fw.plan['type'] = 'STOP'
+
                     print(fw.plan)
+                    fw.reorder_next = 0
                     fw.make_order()
                     # rvもキャンセルしておく
                     rv.close_order()
@@ -354,7 +373,7 @@ def schedule(interval, f, wait=True):
             # ★基本的な実行関数。基本的にgl['schedule_freq']は１秒で実行を行う。（〇〇分〇秒に実行等）
             if gl["exe_mode"] == 0:
                 # [2の倍数分、15秒に処理に定期処理実施
-                if time_min % 1 == 0 and time_sec == 9:
+                if time_min % 1 == 0 and (time_sec == 9 or time_sec == 39):
                     t = threading.Thread(target=f)
                     t.start()
                     if wait:  # 時間経過待ち処理？
