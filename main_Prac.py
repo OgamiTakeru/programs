@@ -12,36 +12,6 @@ import programs.main_functions_Prac as f  # とりあえずの関数集
 from time import sleep
 
 
-def make_order(inspection_ans):
-    """
-    ポジション取得のメイン
-    オーダー発行し、結果を返却
-    結果には、オーダー予定情報からオーダーIDまでが付属している
-    """
-    print(" MAKE ORDER")
-
-    # オーダーや情報の取得
-    order_dic_arr = inspection_ans['order_plan']
-    info = inspection_ans['jd_info']
-
-    ref_id = []
-
-    # オーダーの実行
-    for i in range(len(order_dic_arr)):  # オーダー実行（トラリピ）
-        res = oa.OrderCreate_dic_exe(order_dic_arr[i])
-        order_dic_arr[i]['order_id'] = res['order_id']  # ★オーダーIDを追記（０はミスorder）
-    print("  オーダー実行")
-    tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
-                 ref_id,
-                 ",現価格:", info['mid_price'],
-                 ",順方向:", info['direction'],
-                 ",戻り率:", info["return_ratio"], "(", info['bunbo_gap'], ")",
-                 "OLDEST範囲", info["oldest_old"], "-", info['latest_old'], "(COUNT", info["oldest_count"], ")"
-                 "LATEST範囲", info['latest_old'], "-", info['latest_late'], "(COUNT", info["latest_count"], ")",
-                 )
-    return order_dic_arr
-
-
 def inspection_candle():
     """
     オーダーを発行するかどうかの判断。
@@ -89,25 +59,31 @@ class order_information:
     def __init__(self, name, oa):
         self.oa = oa  # クラス変数でもいいが、LiveとPracticeの混在ある？　引数でもらう
         self.name = name  # FwかRvかの表示用。引数でもらう
-        self.life = False  # 有効かどうか
+        self.life = False  # 有効かどうか（オーダー発行からポジションクローズまで）
         self.plan = {}  # plan情報
         self.plan_info = {}  # plan情報をもらった際の付加情報（戻り率等）
         self.order = {"id": 0, "state": 0}  # オーダー情報 (idとステートは初期値を入れておく）
         self.position = {"id": 0, "state": 0}  # ポジション情報 (idとステートは初期値を入れておく））
         self.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
+        self.reorder_next = 0  # リオーダープラン
         self.reorder = 1  # ２回まで再オーダーを実施する
+        self.reorder_time = 0  # リオーダーまで６０秒待つ
 
     def reset(self):
+        # 完全にそのオーダーを削除する
         self.life = False
         self.order = {"id": 0, "state": 0}  # オーダー情報 (idとステートは初期値を入れておく）
         self.position = {"id": 0, "state": 0}  # ポジション情報 (idとステートは初期値を入れておく））
 
     def print_i(self):
-        print("  <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
-        print("【LIFE】", self.life)
-        print("【PLAN】", self.plan)
-        print("【ORDER】", self.order)
-        print("【POSITION】", self.position)
+        print("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
+        print("　 【LIFE】", self.life)
+        print("　 【CRCDO】", self.crcdo)
+        print("　 【ORDER】", self.order['id'], self.order['state'])
+        print("　 【POSITIOn】", self.position['id'], self.position['state'])
+        # print("　【PLAN】", self.plan)
+        # print("　【ORDER】", self.order)
+        # print("　【POSITION】", self.position)
 
     def plan_info_input(self, info):  #
         self.plan_info = info
@@ -120,7 +96,6 @@ class order_information:
     def make_order(self):
         # Planを元にオーダーを発行する
         order_ans = oa.OrderCreate_dic_exe(self.plan)  # オーダーをセットしローカル変数に結果を格納する
-        gl['exe_mode'] = 1
         # print(order_ans)
         self.order = {
             "id": order_ans['order_id'],
@@ -144,9 +119,24 @@ class order_information:
             pass  # 送信はMainで実施
 
     def close_order(self):
-        oa.OrderCancel_exe(self.order['id'])
-        tk.line_send("  オーダー解消", self.order['id'])
+        # オーダークローズする関数
+        res = oa.OrderCancel_exe(self.order['id'])
+        if type(res) is int:
+            print("   存在しないorder")
+        else:
+            self.order['state'] = "CANCELLED"
+            self.life = False
+            tk.line_send("  オーダー解消", self.order['id'])
 
+    def close_position(self):
+        # ポジションをクローズする関数
+        res = oa.TradeClose_exe(self.position['id'],None,"")
+        if type(res) is int:
+            print("   存在しないposition")
+        else:
+            self.position['state'] = "CLOSED"
+            self.life = False
+            tk.line_send("  ポジション解消", self.position['id'])
 
     def update_information(self):  # orderとpositionを両方更新する
         # どちらか一つでもOpenなPlanがある場合は、exemode=1を維持する！！！
@@ -156,17 +146,18 @@ class order_information:
         if self.life == True:
             # （０）情報取得 + 変化点キャッチ（情報を埋める前に変化点をキャッチする）
             temp = oa.OrderDetailsState_exe(self.order['id'])
-            # （1)　変化点を算出（ポジションの新規取得等）
-            # print(" ★確認用 ORDE", self.order['state'], temp['order_state'], "POSI", self.position['state'], temp['position_state'])
-            if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現ポジ無し⇒ポジ有（取得時）
+            # （1-1)　変化点を算出（ポジションの新規取得等）
+            if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現orderあり⇒約定（取得時）
                 print("  ★position取得！")
-                tk.line_send("取得！", self.name)
-                gl['exe_mode'] = 1  # これは基本不要かも
+                tk.line_send("取得！", self.name, datetime.datetime.now().replace(microsecond=0))
             elif self.position['state'] == "OPEN" and temp['position_state'] == "CLOSED":  # 現ポジあり⇒ポジ無し（終了時）
                 print("  ★position解消")
-                tk.line_send("  解消", self.name)
-                gl['exe_mode'] = 0
-                self.life == False
+                tk.line_send("  解消", self.name, temp['position_pips'], datetime.datetime.now().replace(microsecond=0))
+                self.life = False
+            elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
+                print("  ★order消滅")
+                self.life = False
+
 
             # （３）情報を更新
             self.order['id'] = temp['order_id']
@@ -188,20 +179,7 @@ class order_information:
             self.position['close_time'] = temp['position_close_time']
 
             self.print_i()  # 情報の表示
-            print("   order保持時間", self.order['time_past'])
-
-            # （４）オーダーの解消の実施
-            limit_time_min = 25
-            if self.order['time_past'] > 60 * limit_time_min:  # 60*指定の分 かつ orderOpenだったら
-                if self.order['state'] == 'PENDING':  # 注文が生きている場合はキャンセル
-                    oa.OrderCancel_exe(self.order['id'])  # オーダーキャンセル
-                    tk.line_send(str(limit_time_min), "以上のオーダーを解除します", self.name)
-                    self.life = False
-                    self.reset()
-                    print("　★CANCEl後")
-                    self.print_i()  # 情報の表示
-                else:  # CANCELEDかFILLEDの場合はオーダーは無効
-                    print(" 　オーダー解除不要（すでに解除済）")
+            print("    order保持時間", self.order['time_past'])
 
             # (５) ポジションのLC底上げを実施
             if self.crcdo == False and self.position['state'] == "OPEN":  # ポジションのCRCDO歴がない場合⇒ポジションLC調整を行う可能性
@@ -215,84 +193,135 @@ class order_information:
                     }
                     oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
                     tk.line_send("■(BOX)LC値底上げ", self.name, p['price'], "⇒", cd_line)
-                    self.crcdo == True  # main本体で、ポジションを取る関数で解除する
-                else:
-                    print("  [ポジ有]LC底上げ基準プラス未達")
-            else:
-                print("  CRCDO済 or ポジション無し")
+                    self.crcdo = True  # main本体で、ポジションを取る関数で解除する
+                print("    [ポジ有] LC底上げ基準プラス未達")
+            elif self.crcdo == True:
+                print("    CRCDO済")
+            elif self.position['state'] != "OPEN":
+                print("  　ポジション無し")
 
         else:
-            print("  LIFE = FALSE")
+            pass
+            # print("  LIFE = FALSE")
 
+
+def inspection_next_action():  # クラスはグローバル関数の為引数で渡される必要なし
+    # オーダー希望（基準達成）があった場合、現在のオーダーをどうするか（新オーダー不可　or 全てキャンセルして新オーダーか）
+    # 新オーダー不可の場合は、オーダーが二つとも存在＋かつ２０分経過指定いない場合、fw.reorder_nextが１の場合(リオーダー待ち)
+    limit_time_min = 20
+    if (fw.order['state'] == "PENDING" and fw.order['time_past'] < 60 * limit_time_min) and (
+            rv.order['state'] == "PENDING" and rv.order['time_past'] < 60 * limit_time_min):
+        new_order = False
+    elif fw.reorder_next == 1:
+        new_order = False
+        print(" ★★★奇遇　リオーダー待ち中の真意オーダータイミング")
+    else:
+        new_order = True
+
+    # モードの検討
+    # モード１（随時確認モード）は、いずれかのオーダーのlifeがTrueの場合
+    if fw.life == True or rv.life == True:
+        exe_mode = 1
+    else:
+        exe_mode = 0
+
+    return {"exe_mode": exe_mode, "new_order": new_order}
 
 
 def main():
     global gl
     print("■■■", gl["now"], gl["exe_mode"])
 
-    # オーダー状況を確認
-    position_df = oa.OpenTrades_exe()  # ポジション情報の取得
-    orders_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
-
+    # ★最新の情報にアップデートする
     # 状況の確認(オーダーを入れるかの判断用）
     order_judge = inspection_candle()  # [return] ans(int), order_plan(dic&arr), jd_info(dic)
-    # order_judge = order_judge_test
+    # if gl['count'] == 0:  # testモード
+    #     order_judge = order_judge_test
+
+    # 状況の確認(LC底上げや、オーダーの時間切れ判定はここで行う）
+    fw.update_information()
+    rv.update_information()
+
+    # next_actionの確認
+    next = inspection_next_action()  # exe_mode, new_order
+
+    #ExeModeの設定
+    gl['exe_mode'] = next['exe_mode']  #exe_modeを設定する
+
 
     # 初のオーダーの発行
     if order_judge['ans'] == 0:
+        pass
         print("  オーダーしない")
     else:
         print("  オーダー条件は達成")
-        # print(order_judge)
-        if len(position_df) == 0 and len(orders_df) == 0:  # 何もない場合はオーダー基準で確実に
-            print("  ★エントリー確定")
-            fw.plan_info_input(order_judge['jd_info'])
-            fw.plan_input(order_judge['order_plan'][0])  # 順思想クラスに、順方向の予定を追加
-            rv.plan_info_input(order_judge['jd_info'])
-            rv.plan_input(order_judge['order_plan'][1])  # 逆思想クラスに、逆思想の予定を追加
+        if next['new_order']:
+            print("  ★エントリー確定 クロース＋オーダー発注")
+            # 全てのオーダー、ポジションをクローズする
+            for i in range(len(classes)):
+                classes[i].close_order()
+                classes[i].close_position()
+            # オーダー情報を順に格納していく
+            for i in range(len(classes)):
+                classes[i].plan_info_input(order_judge['jd_info'])
+                classes[i].plan_input(order_judge['order_plan'][i])
+            # オーダーを発行していく
+            for i in range(len(classes)):
+                classes[i].make_order()
+            # 情報をLINEで送付する
             temp = order_judge['jd_info']
             tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
                          ",戻り率:", temp['return_ratio'],
                          "OLDEST範囲", temp["oldest_old"], "-", temp['latest_old'], "(COUNT", temp["oldest_count"],
                          ")LATEST範囲",temp['latest_old'], "-", temp['latest_late'], "(COUNT", temp["latest_count"], ")",
                          )
-            # for i in range(len(gl['classes'])):
-            #     print(" 巡回表示")
-            #     gl["classes"][i].printf()
             print("  　まとめてオーダー発注")
-            fw.make_order()
-            rv.make_order()
-        else:
-            print("  　オーダーかポジションあり")
-            pass
 
-    # 状況の確認(LC底上げや、オーダーの時間切れ判定はここで行う）
-    fw.update_information()
-    rv.update_information()
+
+
 
     # Next判断
     # 1 fwが利確している場合、Rvオーダーは削除
     # 2 fwがロスカしてる場合、rvオーダーを維持し、リオーダーを入れる(fwのロスカ部分に逆張り?現在価格基準？）
     if fw.position['state'] == "CLOSED" and fw.position['pips'] >= 0:
-        tk.line_send("  RVオーダー解消")
-        rv.close_order()
+        if rv.life==True:
+            tk.line_send("  FW利確済⇒RVオーダー解消で今回終了")
+            rv.close_order()
+            rv.reset()  # 完全終了(中身も消去）
     elif fw.position['state'] == "CLOSED" and fw.position['pips'] <= 0:
         if fw.reorder != 0:  # リオーダー回数が余っている場合
-            tk.line_send("  リオーダー対象！！", fw.order['lc_price'], fw.order['direction'])
-            fw.reset()  # リセット ポジションもリセットされる⇒ここには入らなくなる(LC情報も消えるので注意）
-            fw.reorder = fw.reorder - 1
-            # 設定価格の入れ替え（LC価格をリオーダー価格に）
-            fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
-            fw.plan['units'] = 5005
-            fw.plan['tp_range'] = 0.05  # 余裕度を入れる
-            fw.plan['lc_range'] = 0.05
-            fw.plan['type'] = 'STOP'
-            print(fw.plan)
-            fw.make_order()
+            if fw.reorder_time == 0:
+                print(" リオーダー受付")
+                # 初めてリオーダーを受け付ける場合
+                fw.reorder_time = datetime.datetime.now().replace(microsecond=0)
+                fw.reorder_next = 1  # リオーダー待ちフラグ（新規オーダーに阻害されない）
+                tk.line_send("  リオーダー受付！！", fw.reorder_time)
+            else:  # リオーダー設定後、待ち状態
+                time_past = (datetime.datetime.now().replace(microsecond=0) - fw.reorder_time).seconds
+                if time_past > 30:  # ３０秒後にリオーダー実施
+                    oa.OrderCancel_All_exe()  # 露払い
+                    oa.TradeAllColse_exe()  # 露払い
+                    tk.line_send("  リオーダー実施！！", fw.order['lc_price'], fw.order['direction'])
+                    fw.reset()  # リセット ポジションもリセットされる⇒ここには入らなくなる(LC情報も消えるので注意）
+                    fw.reorder = fw.reorder - 1
+                    # 設定価格の入れ替え（LC価格をリオーダー価格に） 他のオーダーとの兼ね合いも考えないと。。
+                    fw.plan['price'] = fw.plan['lc_price'] + (fw.plan['ask_bid'] * 0.05)  # 余裕度を入れる
+                    fw.plan['units'] = 80005
+                    fw.plan['tp_range'] = 0.05  # 余裕度を入れる
+                    fw.plan['lc_range'] = 0.05
+                    fw.plan['type'] = 'STOP'
+                    print(fw.plan)
+                    fw.make_order()
+                    # rvもキャンセルしておく
+                    rv.close_order()
+                    fw.close_position()
+                else:
+                    print(" リオーダー待機中")
         else:
             print(" □リオーダー実施ずみ")
 
     print("")
+    gl['count'] = gl['count'] + 1
 
 
 
@@ -311,7 +340,7 @@ def schedule(interval, f, wait=True):
         gl['now_hms'] = datetime.datetime.now().replace(microsecond=0)  # ミリsecのない時刻を取得
 
         # 【時間帯による実施無し】
-        if 3 <= time_hour < 8:
+        if 3 <= time_hour < 6:
             # 3時～７時の間はスプレッドを考慮していかなる場合も実行しない⇒ポジションや注文も全て解消
             if gl['midnight_close'] == 0:  # 深夜にポジションが残っている場合は解消
                 oa.OrderCancel_All_exe()
@@ -347,6 +376,7 @@ def schedule(interval, f, wait=True):
 print("開始")
 # グローバル変数の定義
 gl = {
+    "count": 0,
     "exe_mode": 0,  # 実行頻度モードの変更（基本的は０）
     "exe_mode_sec": 2,  # 実行頻度モードの変更（基本的は０）
     "schedule_freq": 1,  # 間隔指定の秒数（N秒ごとにスケジュールで処理を実施する）
@@ -384,7 +414,7 @@ else:
 oa = oanda_class.Oanda(acc, tok, env)  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
 fw = order_information("fw ", oa)  # 順思想のオーダーを入れるクラス
 rv = order_information("rv ", oa)  # 逆思想のオーダーを入れるクラス
-gl['classes'] = [fw, rv]  # クラスをセットで持つ
+classes = [fw, rv]  # クラスをセットで持つ
 print(env)
 
 price_dic = oa.NowPrice_exe("USD_JPY")
@@ -395,7 +425,7 @@ test_f_order = {
     "lc_range": 0.005,  # ギリギリまで。。
     "tp_range": 0.012,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
     "ask_bid": -1,
-    "units": 5000,
+    "units": 6000,
     "type": "MARKET",
     "tr_range": 0.10,  # ↑ここまでオーダー
     "mind": 1,
@@ -407,7 +437,7 @@ test_r_order = {
     "lc_range": 0.028,  # ギリギリまで。。
     "tp_range": 0.022,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
     "ask_bid": 1,
-    "units": 6000,
+    "units": 5000,
     "type": "STOP",
     "tr_range": 0.10,  # ↑ここまでオーダー
     "mind": 1,

@@ -25,20 +25,6 @@ oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
 price_dic = oa.NowPrice_exe("USD_JPY")
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
 
-# f_order = {
-#     "price": 134.120,
-#     "lc_price": 0.05,
-#     "lc_range": 0.028,  # ギリギリまで。。
-#     "tp_range": 0.022,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-#     "ask_bid": -1,
-#     "units": 6000,
-#     "type": "MARKET",
-#     "tr_range": 0.10,  # ↑ここまでオーダー
-# }
-# ans = oa.OrderCreate_dic_exe(f_order)
-# print(ans)
-
-
 
 
 # print("test")
@@ -47,6 +33,15 @@ order_id = 88169  # pending
 # order_id = ans['order_id']
 order_detail = oa.OrderDetailsState_exe(order_id)  # 詳細の取得
 print(order_detail)
+
+test = oa.OrderCancel_exe(order_id)
+
+print(type(test))
+if type(test) is int:
+    print("の")
+else:
+    print("OK")
+
 
 
 # print(time_jp)

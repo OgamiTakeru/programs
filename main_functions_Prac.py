@@ -446,19 +446,19 @@ def judgement_42(oldest_ans, latest_ans, now_price):
 
             # 戻り率次第で、色々処理を変える
             order_arr = []
-            max_return_ratio = 50  # 初期値の設定（最大戻り率）
+            max_return_ratio = 56  # 初期値の設定（最大戻り率）
             direction_l = latest_ans['direction']  #
             if return_ratio < max_return_ratio:
-                print("  オーダー準備")
+                # print("  オーダー準備")
                 # 順方向（４２の場合）
                 entry_price = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
                 f_order = {
                     "price": entry_price,
                     "lc_price": 0.05,
-                    "lc_range": 0.028,  # ギリギリまで。。
-                    "tp_range": 0.022,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                    "lc_range": 0.022,  # ギリギリまで。。
+                    "tp_range": 0.035,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": -1 * direction_l,
-                    "units": 6000,
+                    "units": 60000,
                     "type": "STOP",
                     "tr_range": 0.10,  # ↑ここまでオーダー
                     "mind": 1,
@@ -476,7 +476,7 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                     "lc_range": 0.03,  # ギリギリまで。。
                     "tp_range": 0.05,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": 1 * direction_l,
-                    "units": 7000,
+                    "units": 50000,
                     "type": "STOP",
                     "tr_range": 0.10,  # ↑ここまでオーダー
                     "mind": -1,
