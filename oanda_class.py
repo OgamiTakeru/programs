@@ -692,7 +692,8 @@ class Oanda:
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             return res_json
         except Exception as e:
-            print("★★APIエラー★★")
+            print("★★APIエラー★★ order_detail")
+            return 0
 
     # (5-2) 注文（単品のステータスを含めて）確認
     def OrderDetailsState_exe(self, order_id):
@@ -701,62 +702,95 @@ class Oanda:
         :param order_id: 注文のID
         :return: あまり利用しないので、Jsonのままで返却
         """
-        ep = OrderDetails(accountID=self.accountID, orderID=order_id)
-        res_json = eval(json.dumps(self.api.request(ep), indent=2))
-        order_state = res_json['order']['state']  # オーダーのステータスを確認
+        res_json = self.OrderDetails_exe(order_id)
 
-        if "price" in res_json['order']:  # MAEKET注文の場合、orderPriceが表示されない
-            order_price = res_json['order']['price']
+        if type(res_json) is int:
+            # わかりやすいJsonを作っておく
+            print("   ★★★★★入ってほしくないエラー")
+            res = {
+                "order_id": order_id,
+                "order_time": 0,
+                "order_time_past": 0,
+                "order_units": 0,
+                "order_price": 0.0,  # Marketでは存在しない
+                "order_state": 0,
+                "position_id": 0,
+                "position_time": 0,
+                "position_time_past": 0,
+                "position_price": 0.0,
+                "position_state": 0,
+                "position_realizePL": 0.0,
+                "position_pips": 0.0,
+                "position_close_time": 0
+            }
+            return res
+
         else:
-            order_price = 0
+            order_state = res_json['order']['state']  # オーダーのステータスを確認
 
-        # 返却用の項目追加を実施
-        if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
-            position_id = 0
-            pips = 0
-            position_time = 0
-            position_close_time = 0
-            position_price = 0
-            position_state = 0
-            position_realizePL = 0
+            if "price" in res_json['order']:  # MAEKET注文の場合、orderPriceが表示されない
+                order_price = res_json['order']['price']
+            else:
+                order_price = 0
 
-        elif order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
-            position_id = res_json['order']['fillingTransactionID']
-            position_js = self.TradeDetails_exe(position_id)
-            if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
-                pips = round(float(position_js['trade']['realizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
-                position_realizePL = position_js['trade']['realizedPL']
-                position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
-                position_close_time = self.iso_to_jstdt_single(position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
-                position_price = position_js['trade']['price']
-                position_state = position_js['trade']['state']
-            elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
-                pips = round(float(position_js['trade']['unrealizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
-                position_realizePL = position_js['trade']['unrealizedPL']
-                position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+            # 返却用の項目追加を実施
+            if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
+                position_id = 0
+                pips = 0
+                position_time = 0
                 position_close_time = 0
-                position_price = position_js['trade']['price']
-                position_state = position_js['trade']['state']
+                position_price = 0
+                position_state = 0
+                position_realizePL =0
+
+            elif order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
+                position_id = res_json['order']['fillingTransactionID']
+                position_js = self.TradeDetails_exe(position_id)
+                # print("   " ,type(position_js))
+                if type(position_js) is int:
+                    pips = 0
+                    position_realizePL = 0
+                    position_time = 0
+                    position_close_time = 0
+                    position_price = 0
+                    position_state = 0
+                    print(" □リ")
+                else:
+                    if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
+                        pips = round(float(position_js['trade']['realizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
+                        position_realizePL = position_js['trade']['realizedPL']
+                        position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                        position_close_time = self.iso_to_jstdt_single(position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
+                        position_price = position_js['trade']['price']
+                        position_state = position_js['trade']['state']
+                    elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
+                        pips = round(float(position_js['trade']['unrealizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
+                        position_realizePL = position_js['trade']['unrealizedPL']
+                        position_time = self.iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                        position_close_time = 0
+                        position_price = position_js['trade']['price']
+                        position_state = position_js['trade']['state']
+
+            # わかりやすいJsonを作っておく
+            res = {
+                "order_id": order_id,
+                "order_time": self.iso_to_jstdt_single(res_json['order']['createTime']),
+                "order_time_past": self.cal_past_time_single(self.iso_to_jstdt_single(res_json['order']['createTime'])),
+                "order_units": res_json['order']['units'],
+                "order_price": order_price, #Marketでは存在しない
+                "order_state": res_json['order']['state'],
+                "position_id": position_id,
+                "position_time": position_time,
+                "position_time_past": self.cal_past_time_single(position_time) if position_time != 0 else 0,
+                "position_price": position_price,
+                "position_state": position_state,
+                "position_realizePL": position_realizePL,
+                "position_pips": pips,
+                "position_close_time": position_close_time
+            }
+            return res
 
 
-        # わかりやすいJsonを作っておく
-        res = {
-            "order_id": res_json['order']['id'],
-            "order_time": self.iso_to_jstdt_single(res_json['order']['createTime']),
-            "order_time_past": self.cal_past_time_single(self.iso_to_jstdt_single(res_json['order']['createTime'])),
-            "order_units": res_json['order']['units'],
-            "order_price": order_price, #Marketでは存在しない
-            "order_state": res_json['order']['state'],
-            "position_id": position_id,
-            "position_time": position_time,
-            "position_time_past": self.cal_past_time_single(position_time) if position_time != 0 else 0,
-            "position_price": position_price,
-            "position_state": position_state,
-            "position_realizePL": position_realizePL,
-            "position_pips": pips,
-            "position_close_time": position_close_time
-        }
-        return res
 
     # (6) 注文（保留中）の一覧
     def OrdersPending_exe(self):
@@ -846,6 +880,7 @@ class Oanda:
             return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
         except Exception as e:
             print("★★APIエラー★★")
+            return 0
 
     # (10) トレードの変更等
     def TradeCRCDO_exe(self, trade_id, data):
