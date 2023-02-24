@@ -68,6 +68,7 @@ class order_information:
         self.reorder_next = 0  # リオーダープラン
         self.reorder = 1  # ２回まで再オーダーを実施する
         self.reorder_time = 0  # リオーダーまで６０秒待つ
+        self.reorder_latest = datetime.datetime.now().replace(microsecond=0)
 
     def reset(self):
         # 完全にそのオーダーを削除する
@@ -84,6 +85,14 @@ class order_information:
         # print("　【PLAN】", self.plan)
         # print("　【ORDER】", self.order)
         # print("　【POSITION】", self.position)
+
+    def print_all(self):
+        print("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
+        print("　 【LIFE】", self.life)
+        print("　 【CRCDO】", self.crcdo)
+        print("　　【PLAN】", self.plan)
+        print("　　【ORDER】", self.order)
+        print("　　【POSITION】", self.position)
 
     def plan_info_input(self, info):  #
         self.plan_info = info
@@ -162,11 +171,13 @@ class order_information:
                 print("  ★position解消")
                 tk.line_send("  解消", self.name, temp['position_pips'], datetime.datetime.now().replace(microsecond=0))
                 self.life = False
-                self.reset()
+                self.print_all()
+                self.reset()  # ここでリセットする必要があるかどうか？
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
                 print("  ★order消滅")
                 tk.line_send("　　order消滅！", self.name, datetime.datetime.now().replace(microsecond=0))
                 self.life = False
+                self.print_all()
                 self.reset()
             else:
                 print(" 　　状態変化なし")
@@ -196,19 +207,43 @@ class order_information:
 
             # (５) ポジションのLC底上げを実施
             if self.crcdo is False and self.position['state'] == "OPEN":  # ポジションのCRCDO歴がない場合⇒ポジションLC調整を行う可能性
-                p = self.position
-                o = self.order
-                if p['pips'] > 0.015:  # ある程度のプラスがあれば、LC底上げを実施する
-                    cd_line = p['price'] - 0.005 if self.plan['ask_bid'] < 0 else p['price'] + 0.005
-                    print("■", p['price'], o['units'])
-                    data = {
-                        "stopLoss": {"price": str(cd_line), "timeInForce": "GTC"},
-                        "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
-                    }
-                    oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
-                    tk.line_send("■(BOX)LC値底上げ", self.name, p['price'], "⇒", cd_line, o['units'], self.plan['ask_bid'])
-                    self.crcdo = True  # main本体で、ポジションを取る関数で解除する
-                print("    [ポジ有] LC底上げ基準プラス未達")
+                if self.name == "fw_reorder":  # 自分がfw_reorderだった場合
+                    print("    リオーダーのLC底上げ")
+                    p = self.position
+                    o = self.order
+                    margin = abs(p['pips'])/2
+                    cl_line_test = p['price'] - margin if self.plan['ask_bid'] < 0 else p['price'] + margin
+                    cl_span = 60  # 1分に１回しか更新しない
+                    reorder_past = (datetime.datetime.now().replace(microsecond=0) - self.reorder_latest).seconds  # 経過時間確認
+                    if p['pips'] > 0.015 and reorder_past > cl_span:  # ある程度のプラスがあれば、LC底上げを実施する
+                        cd_line = cl_line_test + 0 if self.plan['ask_bid'] < 0 else cl_line_test - 0  # 微プラス
+                        print("■", p['price'], o['units'])
+                        data = {
+                            "stopLoss": {"price": str(cd_line), "timeInForce": "GTC"},
+                            "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+                        }
+                        oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
+                        tk.line_send("■(ReOrder)LC値底上げ", self.name, p['price'], "⇒", cd_line, o['units'],
+                                     self.plan['ask_bid'], self.position['pips'], reorder_past, self.reorder_latest)
+                        self.crcdo = True  # main本体で、ポジションを取る関数で解除する
+                        self.reorder_latest = datetime.datetime.now().replace(microsecond=0)
+                    print("    [ポジ有] (ReOrder)LC底上げ基準プラス未達")
+
+                else:  # 通常のLC底上げ
+                    p = self.position
+                    o = self.order
+                    if p['pips'] > 0.015:  # ある程度のプラスがあれば、LC底上げを実施する
+                        # cd_line = p['price'] - 0.005 if self.plan['ask_bid'] < 0 else p['price'] + 0.005  # 微プラス
+                        cd_line = p['price'] + 0.005 if self.plan['ask_bid'] < 0 else p['price'] - 0.005  # 微プラス
+                        print("■", p['price'], o['units'])
+                        data = {
+                            "stopLoss": {"price": str(cd_line), "timeInForce": "GTC"},
+                            "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+                        }
+                        oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
+                        tk.line_send("■(通常)LC値底上げ", self.name, p['price'], "⇒", cd_line, o['units'], self.plan['ask_bid'])
+                        self.crcdo = True  # main本体で、ポジションを取る関数で解除する
+                    print("    [ポジ有] LC底上げ基準プラス未達")
             elif self.crcdo:
                 print("    CRCDO済")
             elif self.position['state'] != "OPEN":
@@ -325,24 +360,34 @@ def main():
                 if time_past > 30:  # ３０秒後にリオーダー実施
                     oa.OrderCancel_All_exe()  # 露払い
                     oa.TradeAllColse_exe()  # 露払い
-                    tk.line_send("  リオーダー実施！！", fw.order['lc_price'], fw.order['direction'], datetime.datetime.now().replace(microsecond=0))
                     fw.reset()  # リセット ポジションもリセットされる⇒ここには入らなくなる(LC情報も消えるので注意）
                     fw.reorder = fw.reorder - 1
                     # 設定価格の入れ替え（LC価格をリオーダー価格に） 他のオーダーとの兼ね合いも考えないと。。
-                    temp_price = oa.NowPrice_exe("USD_JPY")
-                    test_price = temp_price['mid']
-                    fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
-                    fw.plan['units'] = 8000
+                    price_dic_reorder = oa.NowPrice_exe("USD_JPY")
+                    if fw.plan['ask_bid'] > 0:  # プラス(買い) オーダーの場合
+                        now_price = float(price_dic_reorder["ask"])
+                    else:
+                        now_price = float(price_dic_reorder["bid"])
+                    print("    ReOrder価格", now_price, fw.plan['ask_bid'])
+
+                    # fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
+                    fw.name = "fw_reorder"
+                    fw.plan['price'] = now_price - (int(fw.plan['ask_bid']) * 0.01)  # 余裕度を入れる
+                    fw.plan['units'] = 60000
                     fw.plan['type'] = "LIMIT"  # 'MARKET'
-                    fw.plan['tp_range'] = 0.05  # 余裕度を入れる
-                    fw.plan['lc_range'] = 0.05
+                    fw.plan['tp_range'] = 0.10  # 余裕度を入れる
+                    fw.plan['lc_range'] = 0.06
 
                     print(fw.plan)
                     fw.reorder_next = 0
                     fw.make_order()
+                    tk.line_send("  リオーダー実施！！", fw.plan['lc_price'], fw.plan['direction'],now_price,
+                                 datetime.datetime.now().replace(microsecond=0))
+                    fw.print_all()
                     # rvもキャンセルしておく
                     rv.close_order()
                     fw.close_position()
+                    rv.print_all()
                 else:
                     print(" リオーダー待機中")
         else:
@@ -408,23 +453,13 @@ gl = {
     "exe_mode": 0,  # 実行頻度モードの変更（基本的は０）
     "exe_mode_sec": 2,  # 実行頻度モードの変更（基本的は０）
     "schedule_freq": 1,  # 間隔指定の秒数（N秒ごとにスケジュールで処理を実施する）
-    "now_h": 0,
-    "now_m": 0,
-    "now_s": 0,
-    'now': datetime.datetime.now().replace(microsecond=0),
+    "now_h": 0,  # グローバルの必要ある？
+    "now_m": 0,  # グローバルの必要ある？
+    "now_s": 0,  # グローバルの必要ある？
+    'now': datetime.datetime.now().replace(microsecond=0),  # グローバルの必要ある？
     "spread": 0.02,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
     "p_order": 2,  # 極値の判定幅
-    "position_flag": 0,  # ポジションが消えたタイミングを取得するためのフラグ
-    "position_f_direction": 0,  # ポジションが買いか売りか
-    "position_mind": 0,  # ポジションが順思想が、逆思想が
-    "orders": [],
-    "ag_orders": [],
-    "cd_flag": 0,  # 利確幅を途中で変えた時のフラグ
-    "add_flag": 0,  # 途中でポジションを追加しに行く処理
     "midnight_close": 0,
-    "latest_res_pips": 0,  # 最終的なマイナス（最後の数行は推定になるが）
-    "ids": [],
-    "classes": [],
 }
 
 # ■練習か本番かの分岐

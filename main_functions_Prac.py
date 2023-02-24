@@ -436,7 +436,7 @@ def judgement_42(oldest_ans, latest_ans, now_price):
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
-        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
+        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 3:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
             ans_info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap'],
@@ -456,9 +456,9 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                     "price": entry_price,
                     "lc_price": 0.05,
                     "lc_range": 0.022,  # ギリギリまで。。
-                    "tp_range": 0.035,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                    "tp_range": 0.04,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                     "ask_bid": -1 * direction_l,
-                    "units": 60000,
+                    "units": 10000,
                     "type": "STOP",
                     "tr_range": 0.10,  # ↑ここまでオーダー
                     "mind": 1,
