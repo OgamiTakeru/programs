@@ -467,9 +467,14 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                 order_arr.append(f_order)  # 0はデータ
 
                 # 逆方向（４２の場合）
+                min_gap = 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
+                max_gap = 0.12  # 最高でもMax
                 gap = abs(entry_price - now_price) * 1.4  # 順方向に達成する幅をそのまま流用する(1.5倍くらいしておくか。。。）
+                if gap < min_gap:
+                    gap = min_gap
+                elif gap > max_gap:
+                    gap = max_gap
                 pr = latest_ans['latest_price'] + gap if direction_l == 1 else latest_ans['latest_price'] - gap
-                # print("  テスト価格表示42", entry_price, pr, gap, latest_ans['latest_price'])
                 r_order = {
                     "price": pr,
                     "lc_price": 0.05,
