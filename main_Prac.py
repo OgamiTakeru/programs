@@ -76,6 +76,8 @@ class order_information:
         self.life = False
         self.order = {"id": 0, "state": "", "time_past": 0}  # オーダー情報 (idとステートは初期値を入れておく）
         self.position = {"id": 0, "state": "", "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
+        self.reorder = 1
+        self.reorder_next = 0  # リオーダー待ちフラグ
         if self.name == "fw_reorder":
             self.name = "fw"  # 名前を元に戻す（名前での処理有）
 
@@ -185,8 +187,8 @@ class order_information:
                 self.print_all()
                 self.reset()  # ここでリセットする必要があるかどうか？
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
-                print("  ★order消滅")
-                tk.line_send("　　order消滅！", self.name, datetime.datetime.now().replace(microsecond=0))
+                print("  ★orderCancel")
+                tk.line_send("　　orderCancel！", self.name, datetime.datetime.now().replace(microsecond=0))
                 self.life = False
                 self.print_all()
                 self.reset()
@@ -398,18 +400,31 @@ def main():
                     else:
                         target_price = low_temp  # 売りの場合は、Max値
 
-                    # fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
+                    # # fw.plan['price'] = fw.plan['lc_price'] - (fw.plan['ask_bid'] * 0.01)  # 余裕度を入れる
+                    # fw.name = "fw_reorder"
+                    # fw.plan['price'] = now_price - (int(fw.plan['ask_bid']) * 0.04)  # 余裕度を入れる
+                    # fw.plan['units'] = 60000
+                    # fw.plan['type'] = "LIMIT"  # 'MARKET'
+                    # fw.plan['tp_range'] = 0.10  # 余裕度を入れる
+                    # fw.plan['lc_range'] = 0.06
+                    #
+                    # print(fw.plan)
+                    # fw.reorder_next = 0
+                    # fw.make_order()
+                    # fw.print_all()
+
                     fw.name = "fw_reorder"
-                    fw.plan['price'] = now_price - (int(fw.plan['ask_bid']) * 0.04)  # 余裕度を入れる
+                    fw.plan['price'] = now_price
                     fw.plan['units'] = 60000
-                    fw.plan['type'] = "LIMIT"  # 'MARKET'
+                    fw.plan['type'] = "MARKET"  # 'MARKET'
                     fw.plan['tp_range'] = 0.10  # 余裕度を入れる
                     fw.plan['lc_range'] = 0.06
 
                     print(fw.plan)
                     fw.reorder_next = 0
+                    fw.reorder = 1  # リセット
                     fw.make_order()
-                    fw.print_all()
+
                     tk.line_send("  リオーダー実施", high_temp, low_temp, target_price)
                     tk.line_send("  リオーダー実施！！", fw.plan['lc_price'], fw.plan['ask_bid'], now_price,
                                  datetime.datetime.now().replace(microsecond=0))
