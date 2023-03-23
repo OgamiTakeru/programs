@@ -28,12 +28,30 @@ class Oanda:
         self.access_token = access_token
         self.environment = env  # デモ口座
         self.api = API(access_token=access_token, environment=self.environment)
+        self.print_words = ""  # 表示用。。
+        self.print_words_bef = ""  # 表示用。。。
 
     def dummy(self, **params):
         """
         機能なし。Pycharmの注意分（PEP）を消すためだけに用意した物
         """
         return self.environment
+
+    def print_i(self, *msg):
+        # 関数は可変複数のコンマ区切りの引数を受け付ける
+        # temp = ""
+        # 複数の引数を一つにする（数字が含まれる場合があるため、STRで文字化しておく）
+        for item in msg:
+            self.print_words = self.print_words + " " + str(item)
+        self.print_words = self.print_words + "\n"  # 改行する
+
+    def print_view(self):
+        if self.print_words != self.print_words_bef:
+            print(self.print_words)
+            self.print_words_bef = self.print_words
+            self.print_words = ""
+        else:
+            self.print_words = ""
 
     def iso_to_jstdt(self, x, colname):
         """
@@ -275,7 +293,7 @@ class Oanda:
         data_df['middle_price_gap'] = data_df['middle_price'] - data_df['middle_price'].shift(1)  # よくわからないが、必要！
         data_df = self.add_ema_data(data_df)
         data_df = self.add_bb_data(data_df)
-        data_df = self.add_peak(data_df)
+        # data_df = self.add_peak(data_df)
 
         # 返却
         return data_df
@@ -440,19 +458,25 @@ class Oanda:
     def cal_past_time_single(self, x):
         """
         OpenTrades_exe等、いくつかの関数から呼び出され、ポジション取得やオーダー時間からの経過秒数を計算する関数
+        引数の形式は、分割できる文字列であること(APIで取得したままの時刻）
         order_time_jpと比較した秒数。（order_time_jpという列名でとりあえず固定する）
         order_time_jpはAPIでの返却は存在しないため、この関数を呼ぶ以前で、作成されている必要がある。
         """
         self.dummy()  # ただpycharmの波戦警告を消したいだけ。。。なんの機能もない呼び出し
-        target_col = x
-        time_dt = datetime.datetime(int(target_col[0:4]),
-                                int(target_col[5:7]),
-                                int(target_col[8:10]),
-                                int(target_col[11:13]),
-                                int(target_col[14:16]),
-                                int(target_col[17:19]))
-        time_past = (datetime.datetime.now()+ datetime.timedelta(seconds=2) - time_dt).seconds  # 差分を秒で求める（タイミングで-値になるので、現在時刻-2秒)
-        return time_past
+        try:
+            # print(x)
+            target_col = x
+            time_dt = datetime.datetime(int(target_col[0:4]),
+                                    int(target_col[5:7]),
+                                    int(target_col[8:10]),
+                                    int(target_col[11:13]),
+                                    int(target_col[14:16]),
+                                    int(target_col[17:19]))
+            time_past = (datetime.datetime.now()+ datetime.timedelta(seconds=2) - time_dt).seconds  # 差分を秒で求める（タイミングで-値になるので、現在時刻-2秒)
+            return time_past
+        except Exception as e:
+            # print("  時刻形式が異なります")
+            return 0
 
     # (3)-1 オーダーを発行する（指値+LC/TP有）
     def OrderCreate_exe(self, units, ask_bid, price, tp_range, lc_range, type, tr_range, remark):
@@ -544,6 +568,7 @@ class Oanda:
             return order_info
 
         except Exception as e:
+            print(e)
             print("★★APIエラー★★")
 
 
@@ -629,7 +654,8 @@ class Oanda:
             return order_info
 
         except Exception as e:
-            print("★★APIエラー★★")
+            print(e)
+            print("★★APIエラー★★orderCreate")
 
     # (4)-1 注文（単品）キャンセル
     def OrderCancel_exe(self, order_id, remark="cancel"):
@@ -649,7 +675,8 @@ class Oanda:
             res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出
             return res_json
         except Exception as e:
-            print("★★APIエラー★★")
+            print("★★APIエラー★★ orderCancel")
+            # print(e)
             return 0
 
     # (4)-2 注文の全解除(各ポジションのロスカや利確注文は削除しない（TPとLCを指値時に設定した場合、ポジションと同時にTP/LCオーダーが入る。）
@@ -693,6 +720,8 @@ class Oanda:
             return res_json
         except Exception as e:
             print("★★APIエラー★★ order_detail")
+            print(e)
+            print("★★APIエラーFIN")
             return 0
 
     # (5-2) 注文（単品のステータスを含めて）確認
@@ -774,6 +803,7 @@ class Oanda:
             # わかりやすいJsonを作っておく
             res = {
                 "order_id": order_id,
+                "order_time_original":res_json['order']['createTime'],
                 "order_time": self.iso_to_jstdt_single(res_json['order']['createTime']),
                 "order_time_past": self.cal_past_time_single(self.iso_to_jstdt_single(res_json['order']['createTime'])),
                 "order_units": res_json['order']['units'],
@@ -870,16 +900,19 @@ class Oanda:
                                                     res_df['currentUnits'].astype('float'), 3)
                 return res_df
         except Exception as e:
-            print("★★APIエラー★★")
+            print(e)
+            print("★★APIエラー★★opentrade")
 
     # (9)トレードIDの詳細（トレード毎 今うまく使えない。）
     def TradeDetails_exe(self, trade_id):
         try:
             ep = TradeDetails(accountID=self.accountID, tradeID=trade_id)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
+
             return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
         except Exception as e:
-            print("★★APIエラー★★")
+            print(e)
+            print("★★APIエラー★★tradedetail")
             return 0
 
     # (10) トレードの変更等
@@ -895,16 +928,32 @@ class Oanda:
                 "timeInForce": "GTC",
                 },
             }
+            "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
         :param trade_id:
         :param data:
         :return:
         '''
+
+        # データの価格情報をStrに変更しておく（priceがstrでもfloatで来ても、いいように。。）
+        if 'stopLoss' in data:
+            data['stopLoss']['price'] = str(round(float(data['stopLoss']['price']), 3))
+        if 'takeProfit' in data:
+            data['takeProfit']['price'] = str(round(float(data['takeProfit']['price']), 3))
+        if 'trailingStopLoss' in data:
+            data['trailingStopLoss']['distance'] = str(round(float(data['trailingStopLoss']['distance']), 3))
+
         try:
             ep = TradeCRCDO(accountID=self.accountID, tradeID=trade_id, data=data)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             return res_json
         except Exception as e:
-            print("★★APIエラー★★")
+            print("★★APIエラー★★　CRCDO")
+            print(e)
+            return 0
+
+        # ep = TradeCRCDO(accountID=self.accountID, tradeID=trade_id, data=data)
+        # res_json = eval(json.dumps(self.api.request(ep), indent=2))
+        # return res_json
 
     # (11)トレードの決済 data=Noneの場合はポジション一括（部分決済ではない）
     def TradeClose_exe(self, trade_id, data, remark):

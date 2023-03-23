@@ -10,10 +10,6 @@ import programs.tokens as tk  # Token等、各自環境の設定ファイル（g
 import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
 
-test = []
-sample = {"test": 1}
+test = "230320"
 
-if sample == 0:
-    print("test")
-else:
-    print(" No")
+

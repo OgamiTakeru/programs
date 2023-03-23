@@ -29,18 +29,26 @@ print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['b
 
 # print("test")
 # オーダー番号から、オーダーの行く末を取得する
-order_id = 88169  # pending
-# order_id = ans['order_id']
-order_detail = oa.OrderDetailsState_exe(order_id)  # 詳細の取得
-print(order_detail)
+# order_id = 88169  # pending
+# # order_id = ans['order_id']
+# order_detail = oa.OrderDetailsState_exe(order_id)  # 詳細の取得
+# print(order_detail)
+#
+# test = oa.OrderCancel_exe(order_id)
+#
+# print(type(test))
+# if type(test) is int:
+#     print("の")
+# else:
+#     print("OK")
 
-test = oa.OrderCancel_exe(order_id)
+temp = oa.OrderDetails_exe(88169)  # 88169  97483
+print(temp)
 
-print(type(test))
-if type(test) is int:
-    print("の")
-else:
-    print("OK")
+# temp = oa.OrderCancel_exe(88169)
+# print(temp)
+
+
 
 
 

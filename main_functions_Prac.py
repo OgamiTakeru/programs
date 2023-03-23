@@ -4,15 +4,13 @@ from scipy.signal import argrelmin, argrelmax  # add_peaks
 import pandas as pd  # add_peaks
 from plotly.subplots import make_subplots  # draw_graph
 import plotly.graph_objects as go  # draw_graph
-import programs.oanda_class as oanda_class
-
-
+import programs.oanda_class as oa
 def draw_graph(mid_df):
     """
     ローソクチャーを表示する関数。
     引数にはDataFrameをとり、最低限Open,hitg,low,Close,Time_jp,が必要。その他は任意。
     """
-    order_num = 3  # 極値調査の粒度  gl['p_order']  ⇒基本は３。元プログラムと同じ必要がある（従来Globalで統一＝引数で渡したいけど。。）
+    order_num = 2  # 極値調査の粒度  gl['p_order']  ⇒基本は３。元プログラムと同じ必要がある（従来Globalで統一＝引数で渡したいけど。。）
     fig = make_subplots(specs=[[{"secondary_y": True}]])  # 二軸の宣言
     # ローソクチャートを表示する
     graph_trace = go.Candlestick(x=mid_df["time_jp"], open=mid_df["open"], high=mid_df["high"],
@@ -322,46 +320,86 @@ def renzoku_gap_pm(data_df):
         ans_count = p_counter + 1
         middle_price = round(oldest_price + (latest_price - oldest_price) / 2, 3)  # oldが低いところにいる
 
-    # ３個(or２個）の場合、ローソクの関係性を求める
+    # ３個(or２個）の場合、「折り返し直後（メインはLatestの最初2つを知りたい）」のローソクの関係性を求める
     # ３個の場合、３パターンのいずれか。谷の場合(折り返し部が＋）、古い順に1,1,1/1,-1,1/1,1,-1
-    if len(data_df) == 3:
+    if len(data_df) == 2:
         if ans == 1:  # プラスの連荘＝谷の場合　（折り返し部のみの話）
-            if data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] >=0:
-                pattern_comment = "afterV:all plus"
+            if data_df.iloc[1]['body'] >= 0 and data_df.iloc[0]['body'] >= 0:
+                pattern_comment = "afterV:UpUp"
                 pattern = 10
-            elif data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] >=0:
-                pattern_comment = "afterV:middle Down"
+                pattern_high = data_df.iloc[0]['inner_high']
+                pattern_low = data_df.iloc[1]['inner_low']
+            elif data_df.iloc[1]['body'] >= 0 and data_df.iloc[0]['body'] <= 0:
+                pattern_comment = "afterV:UpDown"
                 pattern = 11
-            elif data_df.iloc[2]['body'] >=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] <=0:
-                pattern_comment = "afterV:last Down"
+                pattern_high = data_df.iloc[1]['inner_high']
+                pattern_low = data_df.iloc[1]['inner_low']
+            elif data_df.iloc[1]['body'] <= 0 and data_df.iloc[0]['body'] >= 0:
+                pattern_comment = "afterV:DownUp"
                 pattern = 12
+                pattern_high = data_df.iloc[0]['inner_high']
+                pattern_low = data_df.iloc[0]['inner_low']
             else:
-                pattern_comment = "afterV:first Down"
+                pattern_comment = "afterV:Error"
                 pattern = 13
+                pattern_high = 0
+                pattern_low = 0
         elif ans == -1:  # マイナスの連荘＝山の場合　（折り返し部の話）
-            if data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] <=0:
-                pattern_comment = "afterM:all minus"
+            if data_df.iloc[1]['body'] <= 0 and data_df.iloc[0]['body'] <= 0:
+                pattern_comment = "afterM:DownDown"
                 pattern = -10
-            elif data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] <=0:
-                pattern_comment = "afterM:middle Up"
+                pattern_high = data_df.iloc[1]['inner_high']
+                pattern_low = data_df.iloc[0]['inner_low']
+            elif data_df.iloc[1]['body'] <= 0 and data_df.iloc[0]['body'] >= 0:
+                pattern_comment = "afterM:DownUp"
                 pattern = -11
-            elif data_df.iloc[2]['body'] <=0 and data_df.iloc[1]['body'] <=0 and data_df.iloc[0]['body'] >=0:
-                pattern_comment = "afterM:last Up"
+                pattern_high = data_df.iloc[1]['inner_high']
+                pattern_low = data_df.iloc[1]['inner_low']
+            elif data_df.iloc[1]['body'] >=0 and data_df.iloc[0]['body'] <=0:
+                pattern_comment = "afterM:UpDown"
                 pattern = -12
+                pattern_high = data_df.iloc[0]['inner_high']
+                pattern_low = data_df.iloc[0]['inner_low']
             else:
-                pattern_comment = "afterM:first Up"
+                pattern_comment = "afterM:Error"
                 pattern = -13
+                pattern_high = 0
+                pattern_low = 0
     else:
         pattern = -99
         pattern_comment = "NoComment"
+        pattern_high = 0
+        pattern_low = 0
+
+    # 移動の平均量を求める
+    inner_size = data_df['body_abs'].mean()
+    # print(data_df)
+    # print(data_df.head(ans_count))
+    # 範囲のみに絞ってしまう
+    data_df = data_df.head(ans_count)
+    # mid_df.to_csv(tk.save_folder + 'mid_df.csv', index=False, encoding="utf-8")
+    # print(data_df.iloc[0]["time_jp"])
+    # print(data_df.iloc[-1]["time_jp"])
+    # print(pattern_high)  # 2個の場合のみ
+    # print(pattern_low)
+    # print(data_df.iloc[-1]["inner_high"])
+    # print(data_df.iloc[-1]["inner_low"])
+    # print(data_df.iloc[0]["inner_high"])
+    # print(data_df.iloc[0]["inner_low"])
+    # print(ans_count,data_df)
+
 
     return({
         # "final_time": data_df.iloc[0]["time_jp"],
         # "final_close_price": data_df.iloc[0]["close"],
         "oldest_price": oldest_price,
         "oldest_time": data_df.iloc[-1]["time_jp"],
+        "oldest_body": data_df.iloc[-1]["body"],
+        "oldest_body2": data_df.iloc[-2]["body"],
         "latest_price": latest_price,
         "latest_time": data_df.iloc[0]["time_jp"],
+        "latest_body": data_df.iloc[0]["body"],
+        "latest_body2": data_df.iloc[1]["body"],
         "inner_high_price": data_df["inner_high"].max(),
         "inner_low_price": data_df["inner_low"].min(),
         "high_price": data_df["high"].max(),  # 範囲の最高価格(innerではない）（将来的にLC/利確価格になるかも）
@@ -372,8 +410,15 @@ def renzoku_gap_pm(data_df):
         "count": ans_count,
         "data_size": len(data_df),
         "pattern": pattern,  # 3この場合のみ
-        "pattern_comment": pattern_comment,  # 3個の場合のみ
+        "pattern_comment": pattern_comment,  # 2個の場合のみ
+        "pattern_high": pattern_high,  # 2個の場合のみ
+        "pattern_low": pattern_low,  # 2個の場合のみ
+        "pattern_high_old": data_df.iloc[-1]["inner_high"],
+        "pattern_low_old": data_df.iloc[-1]["inner_low"],
+        "pattern_high_latest": data_df.iloc[0]["inner_high"],
+        "pattern_low_latest": data_df.iloc[0]["inner_low"],
         "data": data_df,
+        "inner_size": inner_size,
     })
     print(oldest_price, "-", latest_price, ans, ans_count)
 
@@ -435,6 +480,12 @@ def judgement_42(oldest_ans, latest_ans, now_price):
     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
     :return:
     """
+    # price_dic_reorder = oa.NowPrice_exe("USD_JPY")
+    # if latest_ans['direction'] > 0:  # プラス(買い) オーダーの場合
+    #     now_price = float(price_dic_reorder["ask"])
+    # else:
+    #     now_price = float(price_dic_reorder["bid"])
+
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 3:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
@@ -447,57 +498,141 @@ def judgement_42(oldest_ans, latest_ans, now_price):
             # 戻り率次第で、色々処理を変える
             order_arr = []
             max_return_ratio = 56  # 初期値の設定（最大戻り率）
+            ave_body = round(latest_ans["inner_size"], 3)
             direction_l = latest_ans['direction']  #
             if return_ratio < max_return_ratio:
-                # print("  オーダー準備")
-                # 順方向（４２の場合）
-                entry_price = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
-                f_order = {
-                    "price": entry_price,
-                    "lc_price": 0.05,
-                    "lc_range": 0.022,  # ギリギリまで。。
-                    "tp_range": 0.04,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-                    "ask_bid": -1 * direction_l,
-                    "units": 10000,
-                    "type": "STOP",
-                    "tr_range": 0.10,  # ↑ここまでオーダー
-                    "mind": 1,
-                    "memo": "forward"
-                }
-                order_arr.append(f_order)  # 0はデータ
+                # 判定基準
+                jds = abs(int(latest_ans['pattern']))
+                latest_bodys = abs(latest_ans['oldest_body']) + abs(latest_ans['oldest_body2'])
+                if jds == 10 and oldest_ans['pattern_high_latest'] > latest_ans['pattern_high'] and oldest_ans['pattern_low_latest'] > latest_ans['pattern_low']: # RVに行く可能性が高い場合
+                    print(oldest_ans['pattern_low_latest'], oldest_ans['pattern_high_latest'], latest_ans['pattern_low'],
+                          latest_ans['pattern_high'])
+                    # 順方向（４２の場合rv）
+                    entry_price = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
+                    f_order = {
+                        "price": entry_price,
+                        "lc_price": 0.05,
+                        "lc_range": 0.06,  # ave_body,  # 0.022,  # ギリギリまで。。
+                        "tp_range": 0.10,
+                        # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                        "ask_bid": -1 * direction_l,
+                        "units": 20000,
+                        "type": "STOP",
+                        "tr_range": 0.06,  # ↑ここまでオーダー
+                        "mind": 1,
+                        "memo": "forward"
+                    }
+                    order_arr.append(f_order)  # 0はデータ
 
-                # 逆方向（４２の場合）
-                min_gap = 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
-                max_gap = 0.12  # 最高でもMax
-                gap = abs(entry_price - now_price) * 1.4  # 順方向に達成する幅をそのまま流用する(1.5倍くらいしておくか。。。）
-                if gap < min_gap:
-                    gap = min_gap
-                elif gap > max_gap:
-                    gap = max_gap
-                pr = latest_ans['latest_price'] + gap if direction_l == 1 else latest_ans['latest_price'] - gap
-                r_order = {
-                    "price": pr,
-                    "lc_price": 0.05,
-                    "lc_range": 0.03,  # ギリギリまで。。
-                    "tp_range": 0.05,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-                    "ask_bid": 1 * direction_l,
-                    "units": 50000,
-                    "type": "STOP",
-                    "tr_range": 0.10,  # ↑ここまでオーダー
-                    "mind": -1,
-                    "memo": "reverse",
-                }
-                # ans_info['ref_r_entry'] = pr  # テスト用
-                # オーダーをひとまとめにする
-                order_arr.append(r_order)
-                # 返却する
-                return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立"}
+                    # 逆方向（４２の場合）
+                    min_gap = 0.053  # 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
+                    max_gap = 0.08  # 0.12  # 最高でもMax
+                    if direction_l == 1:  # 逆方向時なので、上にそのまま行く場合
+                        if latest_ans["latest_price"] > now_price:
+                            r_entry_price = latest_ans["latest_price"]  # 高いほうを採用
+                        else:
+                            r_entry_price = now_price  # 高いほうを採用
+                    elif direction_l == -1:
+                        if latest_ans["latest_price"] < now_price:
+                            r_entry_price = latest_ans["latest_price"]  # 低いほうを採用
+                        else:
+                            r_entry_price = now_price  # 高いほうを採用
+                    
+                    if abs(r_entry_price - entry_price) < min_gap:  # 順思想価格と近すぎる場合、
+                        r_entry_price = entry_price + min_gap if direction_l == 1 else entry_price - min_gap
+                    elif abs(r_entry_price - entry_price) > max_gap:  # 順思想価格と遠すぎる場合、順思想＋Max＿Gapとする。
+                        r_entry_price = entry_price + max_gap if direction_l == 1 else entry_price - max_gap
+                    else:
+                        r_entry_price = r_entry_price  # そのまま利用する
+
+                    r_order = {
+                        "price": r_entry_price,
+                        "lc_price": 0.05,
+                        "lc_range": 0.06,  # ave_body,  # 0.03,  # ギリギリまで。。
+                        "tp_range": 0.05,
+                        # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                        "ask_bid": 1 * direction_l,
+                        "units": 20000,
+                        "type": "STOP",
+                        "tr_range": 0.10,  # ↑ここまでオーダー
+                        "mind": -1,
+                        "memo": "reverse",
+                    }
+                    # print(entry_price, r_entry_price, now_price)
+
+                    # オーダーをひとまとめにする
+                    order_arr.append(r_order)
+                    # 返却する
+                    return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立RV"}
+
+                else:  # その他通常
+                    # print("  オーダー準備")
+                    fw_entry = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
+                    # 順方向（４２の場合）
+                    entry_price = latest_ans["oldest_price"] if direction_l == 1 else latest_ans["oldest_price"]
+                    lc = 0.17 if oldest_ans['gap']>0.17 else oldest_ans['gap']
+                    # print("lc:", lc, oldest_ans['gap'])
+                    f_order = {
+                        "price": entry_price,
+                        "lc_price": 0.05,
+                        "lc_range": lc, # 0.022,  # ギリギリまで。。
+                        "tp_range": 0.10,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                        "ask_bid": -1 * direction_l,
+                        "units": 30000,
+                        "type": "STOP",
+                        "tr_range": 0.06,  # ↑ここまでオーダー
+                        "mind": 1,
+                        "memo": "forward"
+                    }
+                    order_arr.append(f_order)  # 0はデータ
+
+                    # 逆方向（４２の場合）
+                    min_gap = 0.053  # 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
+                    max_gap = 0.08  # 0.12  # 最高でもMax
+                    if direction_l == 1:  # 逆方向時なので、上にそのまま行く場合
+                        if latest_ans["latest_price"] > now_price:
+                            r_entry_price = latest_ans["latest_price"]  # 高いほうを採用
+                        else:
+                            r_entry_price = now_price  # 高いほうを採用
+                    elif direction_l == -1:
+                        if latest_ans["latest_price"] < now_price:
+                            r_entry_price = latest_ans["latest_price"]  # 低いほうを採用
+                        else:
+                            r_entry_price = now_price  # 高いほうを採用
+
+                    if abs(r_entry_price - entry_price) < min_gap:  # 順思想価格と近すぎる場合、
+                        r_entry_price = entry_price + min_gap if direction_l == 1 else entry_price - min_gap
+                    elif abs(r_entry_price - entry_price) > max_gap:  # 順思想価格と遠すぎる場合、順思想＋Max＿Gapとする。
+                        r_entry_price = entry_price + max_gap if direction_l == 1 else entry_price - max_gap
+                    else:
+                        r_entry_price = r_entry_price  # そのまま利用する
+                    # print(entry_price, r_entry_price, now_price, latest_ans["latest_price"], direction_l)
+
+                    r_order = {
+                        "price": r_entry_price,
+                        "lc_price": 0.05,
+                        "lc_range": ave_body,  # 0.03,  # ギリギリまで。。
+                        "tp_range": 0.05,
+                        # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+                        "ask_bid": 1 * direction_l,
+                        "units": 20000,
+                        "type": "STOP",
+                        "tr_range": 0.10,  # ↑ここまでオーダー
+                        "mind": -1,
+                        "memo": "reverse",
+                    }
+                    # print(entry_price, r_entry_price, now_price)
+
+                    # オーダーをひとまとめにする
+                    order_arr.append(r_order)
+                    # 返却する
+                    return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立"}
             else:
-                print("  戻り率大（４２）", return_ratio)
+                # print("  戻り率大（４２）", return_ratio)
                 return {"ans": 0, "order_plan": order_arr, "jd_info": ans_info, "memo": "戻り大"}
         else:
-            print("  行数未達（４２）")
+            # print("  行数未達（４２）")
             return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "行数未達"}
     else:
-        print("  方向同方向４２")
+        # print("  方向同方向４２")
         return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "同方向"}

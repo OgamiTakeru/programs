@@ -200,8 +200,8 @@ def main_peak():
             oldest_df = dr[dr_latest_n: dr_latest_n + dr_oldest_n]  # 前半と１行をラップさせて、古い期間の範囲を求める
             latest_ans = f.renzoku_gap_pm(latest_df)  # 直近何連続で同方向に行くかの結果を取得
             oldest_ans = f.renzoku_gap_pm(oldest_df)  # その後何連続で同じ方向に行くのかの結果を取得
-            ans = f.renzoku_gap_compare(oldest_ans, latest_ans, dr.iloc[0]['open'])  # 引数の順番に注意！（左がOldest）⇒注文価格情報を取得
-            if ans == 0:
+            ans = f.judgement_42(oldest_ans, latest_ans, dr.iloc[0]['open'])  # 引数の順番に注意！（左がOldest）⇒注文価格情報を取得
+            if ans['ans'] == 0:
                 # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
                 pass
             else:
@@ -241,98 +241,36 @@ def main_peak():
                     fr_flag = 0
                     position_time = 0
                     for index, item in detail_df.iterrows():
-                        if position_flag == 0: # ■ポジションを持っていない場合
-                            # Position候補（順思想と逆思想）を所持
-                            position_price = ans['forward']['target_price']
-                            position_price_r = ans['reverse']['target_price']
-                            if item['low'] < ans['forward']['target_price'] < item['high']:
-                                base_info = ans['forward']  # 順方向のデータ（コード短縮化のための置き換え）
-                                print(" 順方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
-                                f_flag = 1  # 順方向への持ちがあるフラグ
-                                fr_flag = "forward &" + str(base_info['direction'])  # 順方向であることを示す履歴
-                                target_price = base_info['target_price']
-                                if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
-                                    lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
-                                    tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
-                                elif base_info['direction'] == -1:  # 売り方向へのオーダーの場合
-                                    lc_price = round(base_info['target_price'] + base_info['lc_range'], 3)  # LCはプラス！
-                                    tp_price = round(base_info['target_price'] - base_info['tp_range'], 3)
-                            if item['low'] < ans['reverse']['target_price'] < item['high']:
-                                print(" 逆方向へのポジションを取得", item['time_jp'], item['low'], item['high'])
-                                base_info = ans['reverse']  # 逆方向のデータ（コード短縮化のための置き換え）
-                                r_flag = 1  # 逆方向への持ちがあるフラグ
-                                fr_flag = "reverse &" + str(base_info['direction'])  # 逆方向であることを示すフラグ
-                                target_price = base_info['target_price']
-                                if base_info['direction'] == 1:  # 買い方向へのオーダーの場合
-                                    lc_price = round(base_info['target_price'] - base_info['lc_range'], 3)  # LCは－！
-                                    tp_price = round(base_info['target_price'] + base_info['tp_range'], 3)
-                                elif base_info['direction'] == -1:  # 売り方向へのオーダーの場合
-                                    lc_price = round(base_info['target_price'] + base_info['lc_range'], 3)  # LCはプラス！
-                                    tp_price = round(base_info['target_price'] - base_info['tp_range'], 3)
-                            # ポジション条件のいずれかを満たしている場合、ポジションフラグを立てて次の行へ。
-                            if f_flag == 1 or r_flag == 1:
-                                if f_flag == 1 and r_flag == 1:
-                                    double_flag = 1  # 5秒間(5S足)の間に、逆も順も取る場合（乱高下や、狭いレンジでの発生か）
-                                else:
-                                    double_flag = 0  # 大抵はこっちだと思う
-                                position_flag = 1  # ポジションフラグ成立
-                                position_time = item['time_jp']
-                                print(" Po", item['time_jp'], fr_flag, base_info['target_price'], lc_price, tp_price)
-                        else:  # ■ポジションを持っている場合、利確ロスカに当たっているかを確認(各価格はポジション時に格納される）
-                            # print(" Positionあり", item['low'] ,item['high'], lc_price, tp_price)
-                            ans_dic ={
-                                "find_time_ref": dr.iloc[0]['time_jp'],  # mainの実行時間の考え方次第。各分05秒実行の場合、５秒のずれ程度。
-                                "find_price_ref": dr.iloc[0]['open'],  # 参考値。13:00:00のCloseの場合、13:04:59時点価格。となってしまう。その為、Open価格がここでは適正。
-                                                                        # それにあわせ、mainのトリガーも毎分05秒に変更
-                                "find_time_sub":  detail_df.iloc[0]['time_jp'],  #
-                                "find_price_sub": detail_df.iloc[0]['open'],  # 確認用。気づいた時のM5のCloseと、調査開始5SのOpenの差（０が正）
-                                "flag": fr_flag,
-                                "time_to_posi": (f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
-                                "posi_time": position_time,
-                                "posi_price": position_price,
-                                "posi_price_r": position_price_r,
-                                "type": base_info['type'],
-                                "double": double_flag,
-                                "lc_price": lc_price,
-                                "tp_price": tp_price,
-                                "lc_pips": base_info['lc_range'],
-                                "tp_range": base_info['tp_range'],
-                                "res_time": item['time_jp'],
-                                "res": "",
-                                "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
-                                "latest_high": latest_ans['high_price'],
-                                "latest_low": latest_ans['low_price'],
-                                "oldest_high": oldest_ans['high_price'],
-                                "oldest_low": oldest_ans['low_price'],
-                                "return_ratio": ans['info']['return_ratio'],
-                                "bunbo_gap": ans['info']['bunbo_gap'],
-                                "res_gap": 0,
-                            }
-                            # ロスカにひっかかている場合
-                            if item['low'] < lc_price < item['high']:
-                                print(" LC")
-                                ans_dic['res'] = "LC"
-                                ans_dic['res_gap'] = abs(lc_price - base_info['target_price']) * -1  # base_info['lc_range'] * -1
-                                TEST_ans_arr.append(ans_dic)
-                                # print(TEST_ans_arr)
-                                break
-                            # 利確に引っかかっている場合
-                            if item['low'] < tp_price < item['high']:
-                                print(" TP")
-                                ans_dic['res'] = "TP"
-                                ans_dic['res_gap'] = abs(tp_price - base_info['target_price'])
-                                TEST_ans_arr.append(ans_dic)
-                                # print(TEST_ans_arr)
-                                break
-                            # 揉んでしまって、期間内にポジションを解消できていない場合
-                            if index == len(detail_df)-1:
-                                print(" NoSide", index, item['time_jp'])
-                                print(detail_df.head(3))
-                                print(detail_df.tail(3))
-                                ans_dic['res'] = "NoSide"
-                                ans_dic['res_gap'] = 0
-                                TEST_ans_arr.append(ans_dic)
-                                # print(TEST_ans_arr)
+                        ans_dic = {
+                            "find_time_ref": dr.iloc[0]['time_jp'],  # mainの実行時間の考え方次第。各分05秒実行の場合、５秒のずれ程度。
+                            "find_price_ref": dr.iloc[0]['open'],
+                            # 参考値。13:00:00のCloseの場合、13:04:59時点価格。となってしまう。その為、Open価格がここでは適正。
+                            # それにあわせ、mainのトリガーも毎分05秒に変更
+                            "find_time_sub": detail_df.iloc[0]['time_jp'],  #
+                            "find_price_sub": detail_df.iloc[0]['open'],  # 確認用。気づいた時のM5のCloseと、調査開始5SのOpenの差（０が正）
+                            "flag": fr_flag,
+                            "time_to_posi": (
+                                        f.str_to_time(position_time) - f.str_to_time(dr.iloc[0]['time_jp'])).seconds,
+                            "posi_time": position_time,
+                            "posi_price": position_price,
+                            "posi_price_r": position_price_r,
+                            "type": base_info['type'],
+                            "double": double_flag,
+                            "lc_price": lc_price,
+                            "tp_price": tp_price,
+                            "lc_pips": base_info['lc_range'],
+                            "tp_range": base_info['tp_range'],
+                            "res_time": item['time_jp'],
+                            "res": "",
+                            "hold_time": (f.str_to_time(item['time_jp']) - f.str_to_time(position_time)).seconds,
+                            "latest_high": latest_ans['high_price'],
+                            "latest_low": latest_ans['low_price'],
+                            "oldest_high": oldest_ans['high_price'],
+                            "oldest_low": oldest_ans['low_price'],
+                            "return_ratio": ans['info']['return_ratio'],
+                            "bunbo_gap": ans['info']['bunbo_gap'],
+                            "res_gap": 0,
+                        }
     # 結果の表示
     print(TEST_ans_arr)
     res_df = pd.DataFrame(TEST_ans_arr)
