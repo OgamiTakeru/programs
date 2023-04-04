@@ -318,6 +318,7 @@ class Oanda:
         data_df['low_rod'] = data_df.apply(lambda x: self.for_lower(x), axis=1)  # 下髭の長さを取得
         data_df['highlow'] = data_df['high'] - data_df['low']  # 最高値と再低値の長さ
         data_df['middle_price'] = round(data_df['inner_low'] + (data_df['body_abs'] / 2), 3)  # 最高値と再低値の長さ
+        data_df['middle_price_gap'] = data_df['middle_price'] - data_df['middle_price'].shift(1)
 
         # 不要項目の削除（timeは連続取得時に利用するため、削除+ない）
         # print(data_df.columns.values)
@@ -660,24 +661,30 @@ class Oanda:
     # (4)-1 注文（単品）キャンセル
     def OrderCancel_exe(self, order_id, remark="cancel"):
         """
-        注文（単品）キャンセルする。
+        注文（単品）キャンセルする。 a.OrderCancel_exe(order_id,"remark")
         ＜参考＞ロスカ注文やTP注文、通常の指値等、一つ一つにIDがある。ロスカIDのみのキャンセルが可能。
         :param order_id: キャンセルしたいオーダーのID（ポジションではなくオーダー）
         :param remark:今は利用していないが、、、念のためにとってある
-        :return:
+        :return:基本的にはJsonで返却
         """
-        # 呼び出し:oa.OrderCancel_exe(order_id,"remark")
-        # remarkは引数には不要！
-        # 返却値:Dataframe
-        try:
-            ep = OrderCancel(accountID=self.accountID, orderID=order_id)
-            res_json = eval(json.dumps(self.api.request(ep), indent=2))
-            res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出
-            return res_json
-        except Exception as e:
-            print("★★APIエラー★★ orderCancel")
-            # print(e)
-            return 0
+        detail_json = self.OrderDetails_exe(order_id)  # 存在を確認（無駄なAPI発行を防ぐため）
+        if "error" in detail_json:
+            print("　★★オーダー存在確認不可(not cancel)★★", order_id)
+            return {"error": "No"}
+        else:
+            if detail_json['order']['state'] == "PENDING":
+                try:
+                    ep = OrderCancel(accountID=self.accountID, orderID=order_id)
+                    res_json = eval(json.dumps(self.api.request(ep), indent=2))
+                    res_df = self.func_make_dic(res_json, remark)  # 必要項目の抜出
+                    return res_json
+                except Exception as e:
+                    print("　★★APIエラー★★ orderCancel", order_id)
+                    print(e)
+                    return {"error": e}
+            else:
+                print("　★★Cancel不可オーダー（既にCancelや約定済み）", order_id)
+                return {"error": "No"}
 
     # (4)-2 注文の全解除(各ポジションのロスカや利確注文は削除しない（TPとLCを指値時に設定した場合、ポジションと同時にTP/LCオーダーが入る。）
     def OrderCancel_All_exe(self):
@@ -719,10 +726,9 @@ class Oanda:
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             return res_json
         except Exception as e:
-            print("★★APIエラー★★ order_detail")
             print(e)
             print("★★APIエラーFIN")
-            return 0
+            return {"error": e}
 
     # (5-2) 注文（単品のステータスを含めて）確認
     def OrderDetailsState_exe(self, order_id):
@@ -733,7 +739,7 @@ class Oanda:
         """
         res_json = self.OrderDetails_exe(order_id)
 
-        if type(res_json) is int:
+        if "erroe" in res_json:
             # わかりやすいJsonを作っておく
             print("   ★★★★★入ってほしくないエラー")
             res = {
@@ -819,7 +825,6 @@ class Oanda:
                 "position_close_time": position_close_time
             }
             return res
-
 
 
     # (6) 注文（保留中）の一覧

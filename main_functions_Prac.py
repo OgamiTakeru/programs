@@ -229,6 +229,55 @@ def add_peak(data_df, order_num):
 #                     break
 #     return {"count": counter, "price": price}
 
+def make_repeat_order(order_dic):
+    """
+    :param order_dic: {"base_price": entry_price, "lap":-0.01, "lc":0.03, "tp": 0.015, "num":4,
+                     "ask_bid": 1 * direction_l, "units": 10001, "type":"STOP", "mind":-1, "time_out": 10*60,
+                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,"memo":"memo"
+                     }
+                     なおlapは-値の場合、TP価格とかぶる。プラスの価格で、隙間の空いた注文となる
+    :return: トラリピのオーダーを作成し、①辞書の配列と②最終的にいくらの価格でリピートを入れた（Base価格）を返却。辞書は以下の通り
+                    {"price": temp,"lc_price": 0.05,"lc_range": t_gap - 0.007, "tp_range": 0.08,
+                    "ask_bid": -1 * direction_l,"units": 10000,"type": "STOP","tr_range": 0.05,"mind": 1,
+                    "memo": "first_f","time_out": 10*60,"order_edit_flag": 0,"order_id": 0,"position_id": 0}
+                    の配列を却下
+    """
+    base_price = order_dic["price"]
+    units = order_dic["units"]
+    lap = order_dic["lap"]  # 前のTPとのラップ（マイナス値でTP範囲とラップさせる）
+    lc = order_dic["lc"]
+    tp = order_dic["tp"]
+    num = order_dic["num"]
+    direction_l = order_dic["ask_bid"]  # direction_lと同義
+    reorder_units = order_dic["reoeder_units"]
+    inc_units = -5000  # 毎回増えていく用（インクリーズさせる用）
+    inc_lc = 0.03  #　毎回増えていくよう
+    inc_tp = 0.04  # 毎回増えていくよう
+    order_arr = []
+    for i in range(num):
+        temp_rep = {
+            "price": base_price,
+            "lc_price": 100,
+            "lc_range": lc,  # ギリギリまで。
+            "tp_range": tp,
+            "ask_bid": 1 * order_dic["ask_bid"],
+            "units": units,
+            "type":  order_dic["type"],
+            "tr_range": 0,
+            "mind": order_dic["mind"],
+            "memo": "trap",
+        }
+        # 参考情報計算
+        tp_price = round(base_price + (tp * direction_l), 3)  #
+        base_price = round(tp_price + (lap * direction_l), 3)  # 次期トラリピやオーダーの参考用（トラリピの最終オーダー箇所）
+        order_arr.append(temp_rep)
+        # インクリーズ計算
+        units = units + inc_units
+        lc = lc + inc_lc
+        tp = tp + inc_tp
+    return order_arr, base_price
+
+
 
 def renzoku_gap_pm(data_df):
     """
@@ -423,55 +472,6 @@ def renzoku_gap_pm(data_df):
     print(oldest_price, "-", latest_price, ans, ans_count)
 
 
-def make_repeat_order(order_dic):
-    """
-    :param order_dic: {"base_price": entry_price, "lap":-0.01, "lc":0.03, "tp": 0.015, "num":4,
-                     "ask_bid": 1 * direction_l, "units": 10001, "type":"STOP", "mind":-1, "time_out": 10*60,
-                     "order_edit_flag": 0, "order_id": 0, "position_id": 0,"memo":"memo"
-                     }
-                     なおlapは-値の場合、TP価格とかぶる。プラスの価格で、隙間の空いた注文となる
-    :return: トラリピのオーダーを作成し、①辞書の配列と②最終的にいくらの価格でリピートを入れた（Base価格）を返却。辞書は以下の通り
-                    {"price": temp,"lc_price": 0.05,"lc_range": t_gap - 0.007, "tp_range": 0.08,
-                    "ask_bid": -1 * direction_l,"units": 10000,"type": "STOP","tr_range": 0.05,"mind": 1,
-                    "memo": "first_f","time_out": 10*60,"order_edit_flag": 0,"order_id": 0,"position_id": 0}
-                    の配列を却下
-    """
-    base_price = order_dic["price"]
-    units = order_dic["units"]
-    lap = order_dic["lap"]  # 前のTPとのラップ（マイナス値でTP範囲とラップさせる）
-    lc = order_dic["lc"]
-    tp = order_dic["tp"]
-    num = order_dic["num"]
-    direction_l = order_dic["ask_bid"]  # direction_lと同義
-    reorder_units = order_dic["reoeder_units"]
-    inc_units = -5000  # 毎回増えていく用（インクリーズさせる用）
-    inc_lc = 0.03  #　毎回増えていくよう
-    inc_tp = 0.04  # 毎回増えていくよう
-    order_arr = []
-    for i in range(num):
-        temp_rep = {
-            "price": base_price,
-            "lc_price": 100,
-            "lc_range": lc,  # ギリギリまで。
-            "tp_range": tp,
-            "ask_bid": 1 * order_dic["ask_bid"],
-            "units": units,
-            "type":  order_dic["type"],
-            "tr_range": 0,
-            "mind": order_dic["mind"],
-            "memo": "trap",
-        }
-        # 参考情報計算
-        tp_price = round(base_price + (tp * direction_l), 3)  #
-        base_price = round(tp_price + (lap * direction_l), 3)  # 次期トラリピやオーダーの参考用（トラリピの最終オーダー箇所）
-        order_arr.append(temp_rep)
-        # インクリーズ計算
-        units = units + inc_units
-        lc = lc + inc_lc
-        tp = tp + inc_tp
-    return order_arr, base_price
-
-
 def judgement_42(oldest_ans, latest_ans, now_price):
     """
     old区間4,latest区間2の場合のジャッジメント
@@ -512,7 +512,7 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                     f_order = {
                         "price": entry_price,
                         "lc_price": 0.05,
-                        "lc_range": 0.06,  # ave_body,  # 0.022,  # ギリギリまで。。
+                        "lc_range": 0.029,  # ave_body,  # 0.022,  # ギリギリまで。。
                         "tp_range": 0.10,
                         # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                         "ask_bid": -1 * direction_l,
@@ -522,48 +522,8 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                         "mind": 1,
                         "memo": "forward"
                     }
-                    order_arr.append(f_order)  # 0はデータ
-
-                    # 逆方向（４２の場合）
-                    min_gap = 0.053  # 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
-                    max_gap = 0.08  # 0.12  # 最高でもMax
-                    if direction_l == 1:  # 逆方向時なので、上にそのまま行く場合
-                        if latest_ans["latest_price"] > now_price:
-                            r_entry_price = latest_ans["latest_price"]  # 高いほうを採用
-                        else:
-                            r_entry_price = now_price  # 高いほうを採用
-                    elif direction_l == -1:
-                        if latest_ans["latest_price"] < now_price:
-                            r_entry_price = latest_ans["latest_price"]  # 低いほうを採用
-                        else:
-                            r_entry_price = now_price  # 高いほうを採用
-                    
-                    if abs(r_entry_price - entry_price) < min_gap:  # 順思想価格と近すぎる場合、
-                        r_entry_price = entry_price + min_gap if direction_l == 1 else entry_price - min_gap
-                    elif abs(r_entry_price - entry_price) > max_gap:  # 順思想価格と遠すぎる場合、順思想＋Max＿Gapとする。
-                        r_entry_price = entry_price + max_gap if direction_l == 1 else entry_price - max_gap
-                    else:
-                        r_entry_price = r_entry_price  # そのまま利用する
-
-                    r_order = {
-                        "price": r_entry_price,
-                        "lc_price": 0.05,
-                        "lc_range": 0.06,  # ave_body,  # 0.03,  # ギリギリまで。。
-                        "tp_range": 0.05,
-                        # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-                        "ask_bid": 1 * direction_l,
-                        "units": 20000,
-                        "type": "STOP",
-                        "tr_range": 0.10,  # ↑ここまでオーダー
-                        "mind": -1,
-                        "memo": "reverse",
-                    }
-                    # print(entry_price, r_entry_price, now_price)
-
-                    # オーダーをひとまとめにする
-                    order_arr.append(r_order)
                     # 返却する
-                    return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立RV"}
+                    return {"ans": 42, "order_plan": f_order, "jd_info": ans_info, "memo": "42成立RV"}
 
                 else:  # その他通常
                     # print("  オーダー準備")
@@ -575,7 +535,7 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                     f_order = {
                         "price": entry_price,
                         "lc_price": 0.05,
-                        "lc_range": lc, # 0.022,  # ギリギリまで。。
+                        "lc_range": 0.029,  #lc, # 0.022,  # ギリギリまで。。
                         "tp_range": 0.10,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
                         "ask_bid": -1 * direction_l,
                         "units": 30000,
@@ -584,55 +544,15 @@ def judgement_42(oldest_ans, latest_ans, now_price):
                         "mind": 1,
                         "memo": "forward"
                     }
-                    order_arr.append(f_order)  # 0はデータ
 
-                    # 逆方向（４２の場合）
-                    min_gap = 0.053  # 0.06  # 最低でも6pipは最低でも空ける（順思想オーダーと）
-                    max_gap = 0.08  # 0.12  # 最高でもMax
-                    if direction_l == 1:  # 逆方向時なので、上にそのまま行く場合
-                        if latest_ans["latest_price"] > now_price:
-                            r_entry_price = latest_ans["latest_price"]  # 高いほうを採用
-                        else:
-                            r_entry_price = now_price  # 高いほうを採用
-                    elif direction_l == -1:
-                        if latest_ans["latest_price"] < now_price:
-                            r_entry_price = latest_ans["latest_price"]  # 低いほうを採用
-                        else:
-                            r_entry_price = now_price  # 高いほうを採用
-
-                    if abs(r_entry_price - entry_price) < min_gap:  # 順思想価格と近すぎる場合、
-                        r_entry_price = entry_price + min_gap if direction_l == 1 else entry_price - min_gap
-                    elif abs(r_entry_price - entry_price) > max_gap:  # 順思想価格と遠すぎる場合、順思想＋Max＿Gapとする。
-                        r_entry_price = entry_price + max_gap if direction_l == 1 else entry_price - max_gap
-                    else:
-                        r_entry_price = r_entry_price  # そのまま利用する
-                    # print(entry_price, r_entry_price, now_price, latest_ans["latest_price"], direction_l)
-
-                    r_order = {
-                        "price": r_entry_price,
-                        "lc_price": 0.05,
-                        "lc_range": ave_body,  # 0.03,  # ギリギリまで。。
-                        "tp_range": 0.05,
-                        # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-                        "ask_bid": 1 * direction_l,
-                        "units": 20000,
-                        "type": "STOP",
-                        "tr_range": 0.10,  # ↑ここまでオーダー
-                        "mind": -1,
-                        "memo": "reverse",
-                    }
-                    # print(entry_price, r_entry_price, now_price)
-
-                    # オーダーをひとまとめにする
-                    order_arr.append(r_order)
                     # 返却する
-                    return {"ans": 42, "order_plan": order_arr, "jd_info": ans_info, "memo": "42成立"}
+                    return {"ans": 42, "order_plan": f_order, "jd_info": ans_info, "memo": "42成立"}
             else:
                 # print("  戻り率大（４２）", return_ratio)
-                return {"ans": 0, "order_plan": order_arr, "jd_info": ans_info, "memo": "戻り大"}
+                return {"ans": 0, "order_plan": 0, "jd_info": ans_info, "memo": "戻り大"}
         else:
             # print("  行数未達（４２）")
-            return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "行数未達"}
+            return {"ans": 0, "order_plan": 0, "jd_info": {}, "memo": "行数未達"}
     else:
         # print("  方向同方向４２")
-        return {"ans": 0, "order_plan": 0, "jd_info": 0, "memo": "同方向"}
+        return {"ans": 0, "order_plan": 0, "jd_info": {}, "memo": "同方向"}

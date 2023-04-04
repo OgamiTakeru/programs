@@ -3,94 +3,338 @@ import time
 import datetime
 import sys
 import pandas as pd
-# import requests
 
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
-from time import sleep
 
 
-def make_order(inspection_ans):
-    """
-    ポジション取得のメイン
-    """
-    global gl
-    print(" MAKE ORDER")
-
-    # オーダーや情報の取得
-    order_dic = inspection_ans['datas']['orders']
-    info = inspection_ans['datas']['info']
-
-    # オーダーの実行
-    for i in range(len(order_dic)):  # オーダー実行（トラリピ）
-        print("各")
-        print(order_dic[i])
-        oa.OrderCreate_dic_exe(order_dic[i])
-    print("  オーダー実行")
-    tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0),
-                 ",現価格:", info['mid_price'],
-                 ",順方向:", info['direction'],
-                 ",戻り率:", info["return_ratio"], "(", info['bunbo_gap'], ")",
-                 "OLDEST範囲", info["oldest_old"], "-", info['latest_old'], "(COUNT", info["oldest_count"], ")"
-                 "LATEST範囲", info['latest_old'], "-", info['latest_late'], "(COUNT", info["latest_count"], ")",
-                 )
+class order_information:
+    total_pips = 0  # クラス変数で管理
+    def __init__(self, name, oa):
+        self.oa = oa  # クラス変数でもいいが、LiveとPracticeの混在ある？　引数でもらう
+        # リセ対象群
+        self.name = name  # FwかRvかの表示用。引数でもらう
+        self.life = False  # 有効かどうか（オーダー発行からポジションクローズまで）
+        self.plan = {}  # plan情報
+        self.plan_info = {}  # plan情報をもらった際の付加情報（戻り率等）⇒この情報は基本上書きされるまで消去せず
+        self.plan_info_before = {}  # ひとつ前のInfo情報も所持しておく（plan_info代入時にのみ更新=注文時のみの更新）
+        self.order = {"id": 0, "state": "", "time_past": 0}  # オーダー情報 (idとステートは初期値を入れておく）
+        self.position = {"id": 0, "state": "", "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
+        self.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
+        self.crcdo_sec = 0  # ポジション所有から何秒後に、最新のCRCDOを行ったかを記録する。
+        self.now_price = 0  # 直近の価格を記録しておく（APIを叩かなくて済むように）
+        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回まで
 
 
-def close_position():
-    global gl
+        # リセット対象外（規定値がある物）
+        self.order_timeout = 60  # リセ無。分で指定。この時間が過ぎたらオーダーをキャンセルする
+        self.lc_border = 0.03  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
+        self.tp_border = 0.1  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
 
-    position_df = oa.OpenTrades_exe()  # positionを取得（ループタイミングの関係で、ここでもポジション数を確認する！）
-    # ■ポジション有の場合　（解消後初回のみ、mainからこっちに入ってくるため、対策が必要）
-    if len(position_df) > 0:  # ポジション有
-        print("　　　【ポジションあり状態】", len(position_df))
-        for i in range(len(position_df)):  # 複数ポジションがある場合があるため、ループ回す
-            # ポジションを持っている場合、ポジションの情報を取得
-            price = float(position_df.iloc[i]["price"])  # 取得時点の価格
-            pl = float(position_df.iloc[i]["unrealizedPL"])  # 含み損益価格
-            p_id = int(position_df.iloc[i]["id"])  # ポジションのID
-            t = position_df.iloc[i]["order_time_jp"]  # 注文時刻
-            unit = float(position_df.iloc[i]["currentUnits"])  # 保持枚数
-            past_time_sec = float(position_df.iloc[i]["past_time_sec"])  # 経過時間秒
-            pl_pips = round(pl / abs(unit), 3)  # 含み損益（0.0１円単位）名前はピップスだが、１００分の１円単位表示
+    def reset(self):
+        # 完全にそのオーダーを削除する ただし、Planは消去せず残す
+        #
+        oa.print_i("   ◆リセット", self.name)
+        self.life_set(False)
+        self.crcdo = False
+        self.order = {"id": 0, "state": "", "time_past": 0}  # オーダー情報 (idとステートは初期値を入れておく）
+        self.position = {"id": 0, "state": "", "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
+        self.reorder = 1
+        self.reorder_waiting = 0  # リオーダー待ちフラグ
+        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回まで
+        if self.name == "fw_reorder":
+            self.name = "fw"  # 名前を元に戻す（名前での処理有）
 
-            # 情報を表示
-            if pl < 0:
-                print("　　　＠含み損ポジあり", pl, t, p_id, price, pl_pips, past_time_sec)
+    def print_i(self):
+        oa.print_i("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
+        oa.print_i("　 【LIFE】", self.life)
+        oa.print_i("　 【CRCDO】", self.crcdo)
+        oa.print_i("　 【ORDER】", self.order['id'], self.order['state'])
+        oa.print_i("　 【POSITIOn】", self.position['id'], self.position['state'])
+
+    def print_all(self):
+        oa.print_i("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
+        oa.print_i("　 【LIFE】", self.life)
+        oa.print_i("　 【CRCDO】", self.crcdo)
+        oa.print_i("　　【PLAN】", self.plan)
+        oa.print_i("　　【ORDER】", self.order)
+        oa.print_i("　　【POSITION】", self.position)
+        print("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
+        print("　 【LIFE】", self.life)
+        print("　 【CRCDO】", self.crcdo)
+        print("　　【PLAN】", self.plan)
+        print("　　【ORDER】", self.order)
+        print("　　【POSITION】", self.position)
+
+    def plan_info_input(self, info):  # plan_info を更新する＋過去の情報を保存しておく
+        self.plan_info_before = self.plan_info  # 過去情報を保存しておく
+        print("   plan代入")
+        # 空のデータがBeforeにうわがきされる事態は発生しているので、
+        self.plan_info = info  # 現在情報新規の情報を記入する
+
+    def plan_input(self, plan):
+        self.reset()
+        self.plan = plan
+        # r_order = {
+        #     "price": r_entry_price,
+        #     "lc_price": 0.05,
+        #     "lc_range": ave_body,  # 0.03,  # ギリギリまで。。
+        #     "tp_range": 0.05,
+        #     # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
+        #     "ask_bid": 1 * direction_l,
+        #     "units": 20000,
+        #     "type": "STOP",
+        #     "tr_range": 0.10,  # ↑ここまでオーダー
+        #     "mind": -1,
+        #     "memo": "reverse",
+        # }
+
+    def crcdo_set(self, boo):
+        # print("  CRCDOフラッグ変化", self.name, boo)
+        oa.print_i("  CRCDOフラッグ変化", self.name, boo)
+        self.crcdo = boo
+
+    def life_set(self, boo):
+        # print("  Life変化", self.name, boo)
+        oa.print_i("  　Life変化", self.name, boo)
+        self.life = boo
+
+    def make_order(self):
+        # Planを元にオーダーを発行する
+        if self.plan['price'] != 999:  # 例外時（price=999)以外は、通常通り実行する
+            order_ans = oa.OrderCreate_dic_exe(self.plan)  # Plan情報からオーダー発行しローカル変数に結果を格納する
+            self.order = {
+                "id": order_ans['order_id'],
+                "time": order_ans['order_time'],
+                "cancel": order_ans['cancel'],
+                "state": "PENDING",  # 強引だけど初期値にPendingを入れておく
+                "tp_price": float(order_ans['tp']),
+                "lc_price": float(order_ans['lc']),
+                "units": float(order_ans['unit']),
+                "direction": float(order_ans['unit'])/abs(float(order_ans['unit']))
+            }
+            self.plan['tp_price'] = float(order_ans['tp'])  # 念のため入れておく（元々計算で入れられるけど。。）
+            self.plan['lc_price'] = float(order_ans['lc'])  # 念のため入れておく（元々計算で入れられるけど。。）
+
+            oa.print_i(" オーダー発行確定", order_ans['order_id'])
+            if order_ans['cancel']:  # キャンセルされている場合は、リセットする
+                # print("  Cancel発生", self.name)
+                oa.print_i("  Cancel発生", self.name)
+                oa.print_i(order_ans)
+                tk.line_send(" 　Order不成立（今後ループの可能性）", order_ans['order_id'])
             else:
-                print("　　　＠含み益ポジあり", pl, t, p_id, price, pl_pips, past_time_sec)
-            gl['latest_res_pips'] = pl_pips
+                self.life_set(True)  # LIFEのONはここでのみ実施
+                pass  # 送信はMainで実施
+        else:  # price=999の場合（例外の場合）処理不要・・？
+            pass
 
-            # 取り合えず長時間の保持は、切る。
-            if past_time_sec > 40 * 60:
-                # N分以上のポジションは、切る(本当は、オーダー時刻からの考慮である必要あり？）
-                print(" 時間によるポジション解消")
-                gl['cd_flag'] = 1
-                oa.TradeClose_exe(p_id, None, "cancel")
+    def close_order(self):
+        # オーダークローズする関数 (情報のリセットは行わなず、Lifeの変更のみ）
+        print("OrderCnacel関数", self.order['id'])
+        res_dic = oa.OrderDetails_exe(self.order['id'])
+        if "order" in res_dic:
+            status = res_dic['order']['state']
+            if status == "PENDING":  # orderがキャンセルできる状態の場合
+                print(" orderCancel検討")
+                res = oa.OrderCancel_exe(self.order['id'])
+                if type(res) is int:
+                    oa.print_i("   存在しないorder（ERROR）")
+                    print("   存在しないorder（ERROR）")
+                else:
+                    self.order['state'] = "CANCELLED"
+                    self.life_set(False)
+                    oa.print_i(" 注文の為？オーダー解消", self.order['id'])
+                    print(" 注文の為？オーダー解消", self.order['id'])
+                    # tk.line_send("  オーダー解消", self.order['id'])
+            else:  # FIEELDとかCANCELLEDの場合は、lifeにfalseを入れておく
+                oa.print_i("   order無し")
+                print("   order無し")
+        else:
+            oa.print_i("  order無し（APIなし）")
+            print("  order無し（APIなし）")
 
-            # 場合によってはCRCDOのパターンを変更する（ポジションの枚数で、どのポジションかを判断する）
-            if gl['cd_flag'] == 0:  # 過去の変更履歴がない場合は、以下の変更を実施する
-                # ポジション取得後、数分（５分足2個分）は含み損を認める。それ以降、プラス域4pips以上いった場合、最低2pipsの利確注文
-                print(" 　　　ポジションの見直し", unit)
-                if pl_pips > 0.025:
-                    print(" 　　　レンジ向けのポジション", unit)
-                    #BOX(逆思想方向）
-                    cd_line = price - 0.005 if unit < 0 else price + 0.005  # -はプラス確保、＋は容認マイナス
-                    data = {
-                        "stopLoss": {"price": str(cd_line), "timeInForce": "GTC",},
-                        "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC",},
-                    }
-                    oa.TradeCRCDO_exe(p_id, data)  # ポジションを変更する
-                    tk.line_send("■(BOX)LC値底上げ", price, "⇒", cd_line)
-                    gl['cd_flag'] = 1  # main本体で、ポジションを取る関数で解除する
+    def close_position(self):
+        # ポジションをクローズする関数 (情報のリセットは行わなず、Lifeの変更のみ）
+        if self.life:
+            res = oa.TradeClose_exe(self.position['id'], None, "")
+            if type(res) is int:
+                # print("   存在しないposition（ERRO）")
+                oa.print_i("   存在しないposition（ERRO）")
+            else:
+                self.position['state'] = "CLOSED"
+                self.life_set(False)
+                tk.line_send("  注文の為？ポジション解消", self.position['id'])
+        else:
+            # print("    position無し")
+            oa.print_i("    position無し")
+
+    def update_information(self):  # orderとpositionを両方更新する
+        # （０）途中からの再起動の場合、lifeがおかしいので。。あと、ポジション解除後についても必要（CLOSEの場合は削除する？）ｓ
+        # STATEの種類
+        # order "PENDING" "CANCELLED" "FILLED"
+        # position "OPEN" "CLOSED"
+        global gl_total_pips
+        if self.life:  # LifeがTrueの場合は、必ずorderIDが入っている
+            oa.print_i(" □□情報を更新します", self.name)
+            # ★現在価格を求めておく
+            price_dic = oa.NowPrice_exe("USD_JPY")
+            if self.plan['ask_bid'] > 0:  # プラス(買い) オーダーの場合
+                self.now_price = float(price_dic["ask"])
+            else:
+                self.now_price = float(price_dic["bid"])
+
+            # （０）情報取得 + 変化点キャッチ（ 情報を埋める前に変化点をキャッチする）
+            temp = oa.OrderDetailsState_exe(self.order['id'])
+            # （1-1)　変化点を算出しSTATEを変更する（ポジションの新規取得等）
+            if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現orderあり⇒約定（取得時）
+                oa.print_i("  ★position取得！")
+                # tk.line_send("取得！", self.name, datetime.datetime.now().replace(microsecond=0))
+                change_flag = 1  # 結果の可視化フラグ
+            elif self.order['state'] == "PENDING" and temp['position_state'] == 'CLOSED':  # 現orderあり⇒ポジクローズ
+                oa.print_i("  ★即ポジ即解消済！")
+                self.life_set(False)
+                tk.line_send("即ポジ即解消！", self.name, datetime.datetime.now().replace(microsecond=0))
+                change_flag = 1  # 結果の可視化フラグ
+            elif self.position['state'] == "OPEN" and temp['position_state'] == "CLOSED":  # 現ポジあり⇒ポジ無し（終了時）
+                oa.print_i("  ★position解消")
+                self.life_set(False)
+                gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)
+                tk.line_send("  解消", self.name, temp['position_pips'], " Total:", gl_total_pips, "time:",
+                             datetime.datetime.now().replace(microsecond=0))
+                change_flag = 1  # 結果の可視化フラグ
+            elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
+                # oa.print_i("  ★orderCancel")
+                # self.life_set(False)
+                # tk.line_send("　　orderCancel！", self.name, datetime.datetime.now().replace(microsecond=0))
+                change_flag = 1  # 結果の可視化フラグ
+            else:
+                # print(" 　　状態変化なし")
+                change_flag = 0
+
+            # （３）情報を更新
+            # print("Order")
+            self.order['id'] = temp['order_id']
+            self.order['time_str'] = temp['order_time']  # 日時（日本）の文字列版（時間差を求める場合に利用する）
+            self.order['time_past'] = int(temp['order_time_past'])  # 諸事情でプラス２秒程度ある　経過時間を求める（Trueの場合）
+            self.order['time_past_continue'] = oa.cal_past_time_single(self.order['time_str'])  # 引数は元データ(文字列時刻)
+            self.order['units'] = int(temp['order_units'])
+            self.order['price'] = float(temp['order_price'])
+            self.order['state'] = temp['order_state']
+            self.order['id'] = temp['order_id']
+
+            # print("Posi")
+            self.position['id'] = temp['position_id']
+            self.position['time_str'] = temp['position_time']
+            self.position['time_past'] = int(temp['position_time_past'])  # 諸事情でプラス２秒程度ある
+            self.position['time_past_continue'] = oa.cal_past_time_single(self.position['time_str'])
+            self.position['price'] = float(temp['position_price'])
+            self.position['units'] = 0  # そのうち導入したい
+            self.position['state'] = temp['position_state']
+            self.position['realizePL'] = float(temp['position_realizePL'])
+            self.position['pips'] = float(temp['position_pips'])
+            self.position['close_time'] = temp['position_close_time']
+
+            if change_flag == 1:
+                self.print_i()  # 情報の表示
+
+            # (4)矛盾系の状態を解消する（部分解消などが起きた場合に、idがあるのにStateがないなど、矛盾があるケースあり。
+            if self.position['id'] != 0 and self.position['state'] == 0:
+                # positionIDがあるのにStateが登録されていない⇒エラー
+                tk.line_send("  ID矛盾発生⇒強制解消処理", self.position['id'], self.position['state'])
+                oa.print_i(oa.TradeDetails_exe(self.position['id']))
+                oa.print_i(oa.OrderDetails_exe(self.order['id']))
+                self.print_all()  # 何が起きているのか確認用の表示
+                self.reset()
+
+            #  状況に応じて処理を実施する
+            # LCの底上げを行う
+            self.lc_change()
+            # 時間による解消を行う
+            if self.order['time_past'] > self.order_timeout * 60:
+                self.close_order()
+        else:
+            # LifeがFalseの場合
+            # オーダーからの時間は継続して取得する（ただし初期値０だとうまくいかないので除外）
+            if "time_str" in self.order:
+                # print("")
+                self.order['time_past_continue'] = oa.cal_past_time_single(self.order['time_str'])  # 諸事情で＋２秒程度ある
+            else:
+                self.order['time_past_continue'] = 0
+            if "time_str" in self.position:
+                self.position['time_past_continue'] = oa.cal_past_time_single(self.position['time_str'])
+            else:
+                self.position['time_past_continue'] = 0
+
+    def accept_new_order(self, new_info):
+        print(" accept[time]", self.order['time_past_continue'])
+        # 新規オーダーを受け入れるかどうか（時間的[秒指定]な物、リオーダーフラグがあるかどうか）。新規オーケーの場合、Trueを返却
+        wait_time_new = 6  # ６分以上で、上書きオーダーの受け入れが可能のフラグを出せる。
+        if 0 < self.order['time_past_continue'] < wait_time_new * 60:  # 0の場合はTrueになるので、不等号に＝はNG。
+            # print(" □発行直後のオーダー等、発行できない理由あり")
+            new_order = False
+        else:
+            new_order = True  # 最初はこっちに行く（初期では基本こっち）
+
+        # ■試し　20分以内に、現オーダー発行時のOldestGapと今回（引数）のGapを比較して、半分以下の場合は、キャンセル
+        print("    NAZE", self.plan_info_before, new_info['ans_info'])
+        if "gap" in self.plan_info_before and 'gap' in new_info['ans_info']:  # 初回はない可能性あり
+            old_gap = self.plan_info_before['gap']
+            new_gap = new_info['ans_info']['gap']
+            print(" accept[gap]", old_gap, new_gap, old_gap / 2)
+            if 0 < self.order['time_past_continue'] < 20 * 60 and self.plan_info_before['gao'] / 2 > new_gap:
+                print("    今回のGAP小さすぎ")
+                tk.line_send("★★今回ちいさすぎ”””")
+                new_order = False
+
+        return new_order
+
+    def lc_change(self):  # ポジションのLC底上げを実施 (基本的にはUpdateで平行してする形が多いかと）
+        if self.crcdo is False and self.position['state'] == "OPEN":  # ポジションのCRCDO歴がない場合⇒ポジションLC調整を行う可能性
+            p = self.position
+            o = self.order
+            cl_span = 60  # 1分に１回しか更新しない
+
+            if p['pips'] > 0.015:  # ある程度のプラスがあれば、LC底上げを実施する
+                lc_border = 0.01  # プラス値でプラス域でロスカットを実施
+                cd_line = round(
+                    p['price'] - self.lc_border if self.plan['ask_bid'] < 0 else p['price'] + self.lc_border, 3)
+                tp_line = round(
+                    self.now_price - self.tp_border if self.plan['ask_bid'] < 0 else self.now_price + self.tp_border,
+                    3)  # 微＋
+                # oa.print_i("■", p['price'], o['units'])
+                data = {
+                    "stopLoss": {"price": str(cd_line), "timeInForce": "GTC"},
+                    "takeProfit": {"price": str(tp_line), "timeInForce": "GTC"},
+                    "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+                }
+                res = oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
+
+                if type(res) is int:
+                    tk.line_send("CRCDミス", self.api_try_num)
+                    if self.api_try_num < 0:
+                        oa.print_i(" ★CRCDC諦め")
+                        self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
+                    self.api_try_num = self.api_try_num - 1
+                else:
+                    self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
+                    self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
+                    oa.print_i("    [ポジ有] LC底上げ基準プラス未達（小)")
+                    tk.line_send("　(通常小)LC値底上げ")
+
+        elif self.position['state'] != "OPEN":
+            # print("  　 ポジション無し")
+            pass
+        else:
+            pass
 
 
-def inspection_candle():
+def inspection_candle(ins_condition):
     """
-    オーダーを発行するかどうかの判断。
-    オーダーを発行する場合、オーダーの情報も返却する
-    返却値：辞書形式
+    オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
+    ins_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
+    返却値：辞書形式で以下を返却
     inspection_ans: オーダー発行有無（０は発行無し。０以外は発行あり）
     datas: 更に辞書形式が入っている
             ans: ０がオーダーなし
@@ -98,205 +342,181 @@ def inspection_candle():
             info: 戻り率等、共有の情報
             memo: メモ
     """
-    global gl
 
-    # ■現在価格を取得（スプレッド異常の場合は強制終了）
-    price_dic = oa.NowPrice_exe("USD_JPY")
-    print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
-    if price_dic['spread'] > gl['spread']:
-        print("    ▲スプレッド異常")  # スプレッドによっては実行をしない
-        sys.exit()
-
-    # ■直近の検討データの取得
-    data_format = '%Y/%m/%d %H:%M:%S'
-    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
-    d5_df = f.add_peak(d5_df, gl['p_order'])  # 念のためピーク情報を追加しておく（基本使ってないけど）
-    d5_df['middle_price_gap'] = d5_df['middle_price'] - d5_df['middle_price'].shift(1)  # 時間的にひとつ前からいくら変動があったか
-    dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある）
-    d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")
-
-    # 直近データの解析（４：２）
-    ignore = 1  # 最初（現在を意味する）
-    dr_latest_n = 2
+    # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
+    d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
+    dr = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）
+    d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
+    # 直近データの解析
+    ignore = ins_condition['ignore']  # ignore=1の場合、タイミング次第では自分を入れずに探索する（正）
+    dr_latest_n = ins_condition['latest_n']  # 2
     dr_oldest_n = 10
     latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
-    oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせる。
-    latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-    oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    ans_42 = f.judgement_42(oldest_ans, latest_ans, price_dic['mid'])  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
+    oldest_df = dr[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
+    # print("  [ins_can]", latest_df.iloc[0]["time_jp"], latest_df.iloc[-1]["time_jp"])
+    # Latestの期間を検証する
+    latest_ans = f.range_direction_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
+    # Oldestの期間を検証する
+    oldest_ans = f.range_direction_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+    # LatestとOldestの関係性を検証する
+    ans = f.compare_ranges(oldest_ans, latest_ans, gl_now_price_mid)  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
 
-    # 直近のデータの解析（４：３）
-    ignore = 1  # 最初（現在を意味する）
-    dr_latest_n = 3
-    dr_oldest_n = 10
-    latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
-    oldest_df = dr[dr_latest_n + ignore -1: dr_latest_n + dr_oldest_n + ignore -1]  # 前半と１行をラップさせる。
-    latest_ans = f.renzoku_gap_pm(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-    oldest_ans = f.renzoku_gap_pm(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    ans_43 = f.judgement_43(oldest_ans, latest_ans, price_dic['mid'])  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
-
-    # 同じ価格が過去の何分にあったかを検討する
+    return {"ans": ans["ans"], "ans_info": ans["ans_info"], "memo": ans['memo']}
 
 
-    # 上記のansが両方とも成立する（０じゃない）事はない!
-    if ans_42["ans"] == 0 and ans_43["ans"] == 0:
-        print(" どちらとも成立せず")
-        return {"inspection_ans": 0}
-    elif ans_42["ans"] != 0:
-        print(" 4:2が成立(最初）⇒注文価格情報を返却")
-        return {"inspection_ans": 2, "datas": ans_42}
-    elif ans_43["ans"] != 0:
-        print(" 4:3が成立（次順)⇒注文価格情報を返却")
-        return {"inspection_ans": 3, "datas": ans_43}
-    elif ans_42["ans"] != 0 and ans_43["ans"] != 0:
-        print(" エラー！！！！！両方成立")
+def plan_new_order(tc, ans_dic):
+    """
+    検証し、条件達成でオーダー発行
+    :param tc: ターゲットとなるクラスのインスタンス
+    :return:
+    """
+    # ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # オーダー条件
+    # 時間的な制約
+    tc.update_information()  # timepast等を埋めるため、まずupdateが必要
+    tc.print_all()
+    # オーダープラン作成
+    # if ans_dic['ans'] == 1 and tc.accept_new_order(ans_dic):  # オーダー条件達成
+    f_order = {
+        "price": ans_dic['ans_info']['latest_old_img'],
+        "lc_price": 0.05,
+        "lc_range": 0.029,  # ave_body,  # 0.022,  # ギリギリまで。。
+        "tp_range": 0.10,
+        "ask_bid": -1 * ans_dic['ans_info']['direction'],
+        "units": 20000,
+        "type": "STOP",
+        "tr_range": 0.06,  # ↑ここまでオーダー
+        "mind": 1,
+        "memo": "forward"
+    }
+    # オーダー発行
+    tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
+    tc.plan_input(f_order)  # プラン自身を代入
+    tc.order_timeout = 5  # ５分に書き換え
+    tc.lc_border = 0.01  # CDCRO時、最低のライン（プラス値で最低の利益の確保）
+    tc.tp_border = 0.05
+    tc.make_order()
+    print("  FW PRINT ALL")
+    fw.print_all()
+    tk.line_send("■折返Position！", datetime.datetime.now().replace(microsecond=0))
 
 
-def main():
-    global gl
-    print("■■■", gl["now"])
 
-    price_dic = oa.NowPrice_exe("USD_JPY") # ここでも求めておく（createOrderとは少し異なるかも）
+def mode1():
+    """
+    低頻度モード（条件を検索し、４２検査を実施する）
+    :return: なし
+    """
+    print("Mode1")
+    fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+    ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # 状況を検査する（買いフラグの確認）
+    new_arrow_flag = fw.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
+    print("   mode1,",new_arrow_flag, fw.order['time_past_continue'])
+    if new_arrow_flag and ans_dic['ans'] == 1:
+        plan_new_order(fw, ans_dic)
+    else:
+        print("   mode1:no new")
+    fw.print_all()
+    # gl_exe_mode = 1
 
-    # 現状の把握
-    position_df = oa.OpenTrades_exe()  # ポジション情報の取得
-    pending_new_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
-    inspection_ans = inspection_candle()  # 直近のローソクデータを解析して、注文の有無を確認する
 
-    # 【オーダー発生とは無関係の部分】ポジション所持時は、ポジションの情報を取得する
-    if len(position_df) != 0:
-        # ポジション所持時！
-        if gl["position_flag"] == 0:
-            # ポジション無しから、初めてポジションありになった時
-            tk.line_send("■ポジションを取得しました")
-            gl['position_flag'] = 1  # ポジションフラグの成立
-    elif len(position_df) == 0:
-        # ポジション無し時
-        if gl["position_flag"] == 1:
-            # 前実行時にポジションを持っていた場合（今は持っていない）
-            tk.line_send("■ポジションを解消しました", gl['latest_res_pips'])  # latest_res_pips は前回実行時の物（数秒前）
-            gl['exe_mode'] = 0
-            gl['position_flag'] = 0  # ポジションフラグのリセット
+def mode2():
+    fw.update_information()
+    if fw.life:
+        pass
+    else:
+        gl_exe_mode = 0
 
-    # 【長期オーダーの削除専用】ペンディング所持時！
-    if len(pending_new_df) != 0:
-        # 注文中のデータが存在する場合
-        past_time = pending_new_df.head(1).iloc[0]["past_time_sec"]  # オーダーした時刻３3
-        print("  orderあり（保持中）", past_time)
 
-        limit_time_min = 25
-        if past_time > 60 * limit_time_min:  # 60*指定の分
-            # 12分以上経過している場合、オーダーをキャンセルする
+
+def exe_manage():
+    """
+    時間やモードによって、実行関数等を変更する
+    :return:
+    """
+    # 時刻の分割（処理で利用）
+    time_hour = gl_now.hour  # 現在時刻の「時」のみを取得
+    time_min = gl_now.minute  # 現在時刻の「分」のみを取得
+    time_sec = gl_now.second  # 現在時刻の「秒」のみを取得
+    # グローバル変数の宣言（編集有分のみ）
+    global gl_midnight_close_flag, gl_now_price_mid
+
+    # ■深夜帯は実行しない　（ポジションやオーダーも全て解除）
+    if 3 <= time_hour < 6:
+        if gl_midnight_close_flag == 0:  # 繰り返し実行しないよう、フラグで管理する
             oa.OrderCancel_All_exe()
-            tk.line_send(str(limit_time_min), "以上のオーダーを解除します■")
+            oa.TradeAllColse_exe("try")
+            tk.line_send("■深夜のポジション・オーダー解消を実施")
+            gl_midnight_close_flag = 1  # 実施済みフラグを立てる
+    # ■実行を行う
+    else:
+        gl_midnight_close_flag = 0  # 実行可能時には深夜フラグを解除しておく（毎回やってしまうけどいいや）
 
-    # ★★★メインとなる分岐
-    if len(position_df) != 0:
-        # ★ポジションがある場合（ポジションがある場合は動かない)
-        gl['exe_mode'] = 1
-        print("    ポジション有", gl['now'], gl['exe_mode'])
-        close_position()
-    elif len(position_df) == 0:
-        # ★ポジションがない場合
-        if len(pending_new_df) == 0:
-            # オーダーもなし（ポジションもなし）
-            gl['cd_flag'] = 0
-            if inspection_ans['inspection_ans'] != 0:
-                make_order(inspection_ans)
-                oa.OrderBook_exe( price_dic['mid'])
-        else:
-            # オーダーあり（ポジションはなし）⇒オーダーを取り消してから、ポジションを取得
-            # if inspection_ans['inspection_ans'] != 0:
-            #     make_order(inspection_ans)
-            pass
+        # ■時間内でスプレッドが広がっている場合は強制終了し実行しない　（現価を取得しスプレッドを算出する＋グローバル価格情報を取得する）
+        price_dic = oa.NowPrice_exe("USD_JPY")
+        gl_now_price_mid = price_dic['mid']  # 念のために保存しておく（APIの回数減らすため）
+        if price_dic['spread'] > gl_arrow_spread:
+            oa.print_i("    ▲スプレッド異常")
+            sys.exit()  # 強制終了
+
+        # ■■ モード毎に実行頻度を管理する
+        if gl_exe_mode == 0:  # 低頻度モード
+            # if time_min % 1 == 0 and time_sec % 5 == 0:   # (time_sec == 8 or time_sec == 38):  # 毎分8,38秒で実施
+            if time_min % 1 == 0 and (time_sec == 8 or time_sec == 38):  # 毎分8,38秒で実施
+                print("■■■", gl_now, gl_exe_mode)  # 表示用（実行時）
+                mode1()
+        elif gl_exe_mode == 1:  # 高頻度モード
+            if time_min % 1 == 0 and time_sec % 2 == 0:
+                mode2()
+                pass
+                # gl['exe_inspect'] = 0
+                # if time_min % 5 == 0 and (time_sec == 8):
 
 
-def schedule(interval, f, wait=True):
-    global gl
+def exe_loop(interval, fun, wait=True):
+    """
+    :param interval: 何秒ごとに実行するか
+    :param fun: 実行する関数（この関数への引数は与えることが出来ない）
+    :param wait: True固定
+    :return: なし
+    """
+    global gl_now
     base_time = time.time()
     while True:
         # 現在時刻の取得
-        now = gl['now'] = datetime.datetime.now().replace(microsecond=0)  # 現在の時刻を取得
-        time_hour = gl['now_h'] = now.hour  # 現在時刻の「時」のみを取得
-        time_min = gl['now_m'] = now.minute  # 現在時刻の「分」のみを取得
-        time_sec = gl['now_s'] = now.second  # 現在時刻の「秒」のみを取得
-        gl['now_hms'] = datetime.datetime.now().replace(microsecond=0)  # ミリsecのない時刻を取得
-
-        # 【時間帯による実施無し】
-        if 3 <= time_hour < 8:
-            # 3時～７時の間はスプレッドを考慮していかなる場合も実行しない⇒ポジションや注文も全て解消
-            if gl['midnight_close'] == 0:  # 深夜にポジションが残っている場合は解消
-                oa.OrderCancel_All_exe()
-                oa.TradeAllColse_exe("try")
-                tk.line_send("■深夜のポジション・オーダー解消を実施")
-                gl['midnight_close'] = 1  # 解消済みフラグ
-
-        # 【実施時間】
-        else:
-            gl['midnight_close'] = 0  # 深夜のポジションオーダー解消フラグの解消
-            # ★基本的な実行関数。基本的にgl['schedule_freq']は１秒で実行を行う。（〇〇分〇秒に実行等）
-            if gl["exe_mode"] == 0:
-                # [2の倍数分、15秒に処理に定期処理実施
-                if time_min % 1 == 0 and time_sec == 9:
-                    t = threading.Thread(target=f)
-                    t.start()
-                    if wait:  # 時間経過待ち処理？
-                        t.join()
-            # 数秒ごとの実施要（ポジション所持時等に利用する場合有。基本は利用無しで[exe_mode=0]が基本）
-            elif gl["exe_mode"] == 1:
-                # N秒ごとに実施
-                if time_min % 1 == 0 and time_sec % 10 == 0:  # (time_sec == 9 or time_sec == 39):
-                    # print("  2秒ごと実施",time_hour,time_min,time_sec)
-                    t = threading.Thread(target=f)
-                    t.start()
-                    if wait:  # 時間経過待？
-                        t.join()
+        gl_now = datetime.datetime.now().replace(microsecond=0)  # 現在の時刻を取得
+        t = threading.Thread(target=fun)
+        t.start()
+        if wait:  # 時間経過待ち処理？
+            t.join()
         # 待機処理
-        next_time = ((base_time - time.time()) % gl['schedule_freq']) or gl['schedule_freq']
+        next_time = ((base_time - time.time()) % 1) or 1
         time.sleep(next_time)
 
 
-# 開始
-print("開始")
-# グローバル変数の定義
-gl = {
-    "exe_mode": 0,  # 実行頻度モードの変更（基本的は０）
-    "schedule_freq": 1,  # 間隔指定の秒数（N秒ごとにスケジュールで処理を実施する）
-    "order_time": datetime.datetime.now() + datetime.timedelta(minutes=-20),
-    "now_h": 0,
-    "now_m": 0,
-    "now_s": 0,
-    'now': datetime.datetime.now().replace(microsecond=0),
-    "latest_get": datetime.datetime.now() + datetime.timedelta(minutes=-20),  # 初期値は現時刻ー２０分
-    "spread": 0.012,  # 0.012,  # 許容するスプレッド practice = 0.004がデフォ。Live0.008がデフォ
-    "p_order": 2,  # 極値の判定幅
-    "position_flag": 0,  # ポジションが消えたタイミングを取得するためのフラグ
-    "position_f_direction": 0,  # ポジションが買いか売りか
-    "position_mind": 0,  # ポジションが順思想が、逆思想が
-    "orders": [],
-    "cd_flag": 0,  # 利確幅を途中で変えた時のフラグ
-    "add_flag": 0,  # 途中でポジションを追加しに行く処理
-    "midnight_close": 0,
-    "order_num": 30000,  # トータルでどのくらいポジション持つか
-    "trail_num": 20000,  # トレール分。
-    "latest_res_pips": 0,  # 最終的なマイナス（最後の数行は推定になるが）
-    "second_order": 0,  # secondオーダーを格納
-}
+# ■グローバル変数の宣言等
+# 変更なし群
+gl_peak_range = 2  # ピーク値算出用　＠ここ以外で変更なし
+gl_arrow_spread = 0.008  # 実行を許容するスプレッド　＠ここ以外で変更なし
+# 変更あり群
+gl_now = 0  # 現在時刻（ミリ秒無し） @exe_loopのみで変更あり
+gl_now_price_mid = 0  # 現在価格（念のための保持）　@ exe_manageでのみ変更有
+gl_midnight_close_flag = 0  # 深夜突入時に一回だけポジション等の解消を行うフラグ　＠time_manageのみで変更あり
+gl_exe_mode = 0  # 実行頻度のモード設定　＠
+gl_total_pips = 0  # totalの合計値
 
-# ■練習か本番かの分岐
+# ■オアンダクラスの設定
 fx_mode = 1  # 1=practice, 0=Live
-
 if fx_mode == 1:  # practice
-    env = tk.environment
-    acc = tk.accountID
-    tok = tk.access_token
-else:
-    env = tk.environmentl
-    acc = tk.accountIDl
-    tok = tk.access_tokenl
-# ■クラスインスタンスの作成
-oa = oanda_class.Oanda(acc, tok, env)  # インスタンス生成(練習用　練習時はオーダーのみこちらから）
-print(env)
-# ■出発！
-main()
-schedule(gl['schedule_freq'], main)
+    oa = oanda_class.Oanda(tk.accountID, tk.access_token, tk.environment)  # インスタンス生成
+else:  # Live
+    oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # インスタンス生成
+
+# ■ポジションクラスの生成
+fw = order_information("fw", oa)  # 順思想のオーダーを入れるクラス
+fw_r1 = order_information("fwr1", oa)  # 順思想のオーダーを入れるクラス
+
+# ■処理の開始
+oa.OrderCancel_All_exe()  # 露払い
+oa.TradeAllColse_exe()  # 露払い
+# main()
+exe_loop(1, exe_manage)  # exe_loop関数を利用し、exe_manage関数を1秒ごとに実行
