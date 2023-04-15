@@ -656,6 +656,7 @@ class Oanda:
 
         except Exception as e:
             print(e)
+            print(data)
             print("★★APIエラー★★orderCreate")
 
     # (4)-1 注文（単品）キャンセル

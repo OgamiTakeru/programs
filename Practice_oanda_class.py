@@ -327,31 +327,14 @@ price_dic = oa.NowPrice_exe("USD_JPY")
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
 
 
-test_f_order = {
-    "price": price_dic['mid'],
-    "lc_price": 0.9,
-    "lc_range": 0.9,  # ギリギリまで。。
-    "tp_range": 0.9,  # latest_ans['low_price']+0 if direction_l == 1 else latest_ans['high_price']-0
-    "ask_bid": -1,
-    "units": 4000,
-    "type": "MARKET",
-    "tr_range": 0.10,  # ↑ここまでオーダー
-    "mind": 1,
-    "memo": "forward"
-}
-fw = order_information("fw", oa)
-order_ans = oa.OrderCreate_dic_exe(test_f_order)
-# print("OrderIDtest")
-# print(order_ans)
-# print("End")
 
-# data = {
-#     "stopLoss": {"price": 134.006, "timeInForce": "GTC"},
-#     "takeProfit": {"price": 132.206, "timeInForce": "GTC"},
-#     "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
-# }
-# res = oa.TradeCRCDO_exe(103164, data)  # ポジションを変更する
-# print(res)
+data = {
+    "stopLoss": {"price": 132.151, "timeInForce": "GTC"},
+    # "takeProfit": {"price": 132.006, "timeInForce": "GTC"},
+    # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+}
+res = oa.TradeCRCDO_exe(104959, data)  # ポジションを変更する
+print(res)
 
 
 # print(oa.OrderDetailsState_exe(103163))
