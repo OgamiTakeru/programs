@@ -325,19 +325,20 @@ oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
 # # ★現在価格の取得
 price_dic = oa.NowPrice_exe("USD_JPY")
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
+print(oa.NowPrice_exe("USD_JPY")['mid'])
 
 
 
-data = {
-    "stopLoss": {"price": 132.151, "timeInForce": "GTC"},
-    # "takeProfit": {"price": 132.006, "timeInForce": "GTC"},
-    # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
-}
-res = oa.TradeCRCDO_exe(104959, data)  # ポジションを変更する
-print(res)
+# data = {
+#     "stopLoss": {"price": 132.151, "timeInForce": "GTC"},
+#     # "takeProfit": {"price": 132.006, "timeInForce": "GTC"},
+#     # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+# }
+# res = oa.TradeCRCDO_exe(104959, data)  # ポジションを変更する
+# print(res)
 
 
-# print(oa.OrderDetailsState_exe(103163))
+print(oa.OrderDetailsState_exe(108428))
 
 
 # print("test")
@@ -410,7 +411,7 @@ print(res)
 
 
 # # ★注文を発行
-# oa.OrderCreate_exe(10000, 1, price_dic['mid'], 0.05, 0.09, "STOP", 0.05, " ")
+oa.OrderCreate_exe(10000, 1, price_dic['mid'], 0.05, 0.09, "STOP", 0.05, " ")
 
 
 

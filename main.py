@@ -32,9 +32,11 @@ class order_information:
         self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回まで
 
         # リセット対象外（規定値がある物）
-        self.order_timeout = 60  # リセ無。分で指定。この時間が過ぎたらオーダーをキャンセルする
+        self.order_timeout = 15  # リセ無。分で指定。この時間が過ぎたらオーダーをキャンセルする
         self.lc_border = 0.03  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
         self.tp_border = 0.1  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
+        self.lc_range = 0.01  # CDCRO時、最低のライン（プラス値で最低の利益の確保）
+        self.tp_range = 0.05
 
     def reset(self):
         # 完全にそのオーダーを削除する ただし、Planは消去せず残す
@@ -196,7 +198,8 @@ class order_information:
             # （1-1)　変化点を算出しSTATEを変更する（ポジションの新規取得等）
             if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現orderあり⇒約定（取得時）
                 oa.print_i("  ★position取得！")
-                # tk.line_send("取得！", self.name, datetime.datetime.now().replace(microsecond=0))
+                direction_t = self.order['units'] / abs(self.order['units'])
+                tk.line_send("  (取得)", float(temp['position_price']), direction_t, datetime.datetime.now().replace(microsecond=0))
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['position_state'] == 'CLOSED':  # 現orderあり⇒ポジクローズ
                 oa.print_i("  ★即ポジ即解消済！")
@@ -207,9 +210,10 @@ class order_information:
                 oa.print_i("  ★position解消")
                 self.life_set(False)
                 gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)
+                for_view_temp = "w" + str(gl_trade_win) + "/" + str(gl_trade_num) + ",TotalPips" + str(gl_total_pips)
                 if temp['position_pips']>=0:
                     gl_trade_win += 1
-                tk.line_send("  ▲解消", gl_trade_num, gl_trade_win, self.name, temp['position_pips'], " Total:", gl_total_pips, "time:",
+                tk.line_send(" ▲解消", temp['position_close_price'], temp['position_pips'], for_view_temp, "time:",
                              datetime.datetime.now().replace(microsecond=0))
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
@@ -379,8 +383,9 @@ class order_information:
                         else:
                             self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
                             self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
-                            oa.print_i("    (LC底上げ)初回")
-                            tk.line_send("　(LC底上げ)二回目移行", lc_price,self.crcdo_lc, gl_now )
+                            oa.print_i("    (LC底上げ)二回目以降")
+                            # tk.line_send("　(LC底上げ)二回目移行", lc_price,self.crcdo_lc, gl_now )
+                            tk.line_send("　(LC底上げ)二回目以降")
 
                         self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
                         self.crcdo_tp = tp_price  # ロスカ変更後のTPラインを保存
@@ -397,6 +402,120 @@ class order_information:
             pass
         else:
             pass
+
+
+def make_stop_order_info(dic):
+    """
+    順張りのオーダーを作成する。
+    希望価格にマージンを付けた額をTargetPrice（オーダー価格）とする
+    希望価格と現在価格を比較し、適正な価格で発行する
+    :param info_dic{"p": 0, "p_now": 0, "u": 0, "latest_d": 0, "margin": 0, "lc": 0.00, "tp": 0.00, "posi_d":1}
+    p希望価格、pnow現在価格、uユニット数（正の値）、dポジションを取りたい方向、margin余裕度,lc/tpはpips指定,posi_dポジションの方向）
+    任意⇒latest_d　順思想の考えでは、latestのDirection (
+    :return:
+    """
+
+    # 取りたいポジションの方向を決める（latest_directionとは異なる。ただ、今は一緒にしている）
+    d = dic['posi_d']
+
+    # まずはmarginを考慮したポジション取得LineのPriceを求める
+    if d == 1:  # ポジの方向が買いの場合（今よりmargin分高い価格に順張り開始のLineを入れる）　
+        order_price = dic['p'] + dic['margin']
+    else:  # ポジ方向が売りの場合（d==-1)。（今よりmargin分低い価格に順張り開始のLineを入れる）
+        order_price = dic['p'] - dic['margin']
+
+    # 現在価格と比べて、オーダーの価格がおかしくないかを確認　＠必要に応じてコメントアウト（既に現在価格が超えている可能性がある）
+    # おかしいというか、即時約定になる。即時約定ではなく、「より高い(低い）井地で取得したい」マージンを取りたい場合に必要な処理
+    now_price = oa.NowPrice_exe("USD_JPY")['mid']  # 最新の価格
+    if d == 1:  # ポジ方向が買いの場合、現在価格よりポジション価格が低い場合はおかしい（現在価格＋marginに書き換える）
+        if now_price > order_price:
+            order_price = now_price + dic['margin']
+            print("  現在価格を採択1")
+        else:
+            print("  予定価格を採択1")
+    else:  # ポジ方向が売りの場合、現在価格よりポジション価格が高い場合はおかしい
+        if now_price < order_price:
+            order_price = now_price - dic['margin']
+            print("  現在価格を採択2")
+        else:
+            print("  予定価格を採択2")
+
+    # 順思想or逆思想の考えの元では、どっちかを判定する（dic内にlatest_dがある場合のみ）
+    if "latest_d" in dic:
+        if d == dic['latest_d']:  # Latestの方向と、ポジションの方向が一緒　＝　逆思想
+            c = "逆思想(stop)"
+        else:
+            c = "順思想(stop)"
+
+    order_info = {
+        "price": order_price,
+        "lc_range": dic['lc'],
+        "tp_range": dic['tp'],
+        "ask_bid": d,
+        "units": dic['u'],
+        "type": "STOP",  # ここはストップ（順張り）専用！
+        "tr_range": 0.2,  # ↑ここまでオーダー
+        "memo": c
+    }
+
+    return order_info
+
+
+def make_limit_order_info(dic):
+    """
+    逆張りのオーダーを作成する。
+    希望価格にマージンを付けた額をTargetPrice（オーダー価格）とする
+    希望価格と現在価格を比較し、適正な価格で発行する
+    :param info_dic{"p": 0, "p_now": 0, "u": 0, "latest_d": 0, "margin": 0, "lc": 0.00, "tp": 0.00, "posi_":1}
+    p希望価格、pnow現在価格、uユニット数（正の値）、dポジションを取りたい方向、margin余裕度,lc/tpはpips指定,posi_dポジションの方向）
+    任意⇒latest_d　順思想の考えでは、latestのDirection
+    :return:
+    """
+
+    # 取りたいポジションの方向を決める（latest_directionとは異なる。ただ、今は一緒にしている）
+    d = dic['latest_d']
+
+    # まずはmarginを考慮したポジション取得LineのPriceを求める
+    if d == 1:  # ポジの方向が買いの場合（今よりmargin分低い価格に逆張り開始のLineを入れる）　
+        order_price = dic['p'] - dic['margin']
+    else:  # ポジ方向が売りの場合（d==-1)。（今よりmargin分高い価格に順張り開始のLineを入れる）
+        order_price = dic['p'] + dic['margin']
+
+    # 現在価格と比べて、オーダーの価格がおかしくないかを確認　＠必要に応じてコメントアウト（既に現在価格が超えている可能性がある）
+    # おかしいというか、即時約定になる。即時約定ではなく、「より低い(高い）井地で取得したい」マージンを取りたい場合に必要な処理
+    now_price = oa.NowPrice_exe("USD_JPY")['mid']  # 最新の価格
+    if d == 1:  # ポジ方向が買いの場合、現在価格よりポジション価格が高い場合はおかしい（寄り低い価格に設定すると、即時約定にならない。現在価格-marginに書き換える）
+        if now_price < order_price:
+            order_price = now_price - dic['margin']
+            print("  現在価格を採択1 limit")
+        else:
+            print("  予定価格を採択1 limit")
+    else:  # ポジ方向が売りの場合、現在価格よりポジション価格が高い場合はおかしい
+        if now_price > order_price:
+            order_price = now_price + dic['margin']
+            print("  現在価格を採択2limit")
+        else:
+            print("  予定価格を採択2limit")
+
+    # 順思想or逆思想の考えの元では、どっちかを判定する（dic内にlatest_dがある場合のみ）
+    if "latest_d" in dic:
+        if d == dic['latest_d']:  # Latestの方向と、ポジションの方向が一緒　＝　逆思想
+            c = "逆思想(limit)"
+        else:
+            c = "順思想(limit)"
+
+    order_info = {
+        "price": order_price,
+        "lc_range": dic['lc'],
+        "tp_range": dic['tp'],
+        "ask_bid": d,
+        "units": dic['u'],
+        "type": "STOP",  # ここはストップ（順張り）専用！
+        "tr_range": 0.2,  # ↑ここまでオーダー
+        "memo": c
+    }
+
+    return order_info
 
 
 def inspection_candle(ins_condition):
@@ -425,74 +544,74 @@ def inspection_candle(ins_condition):
     # LatestとOldestの関係性を検証する
     ans = f.compare_ranges(oldest_ans, latest_ans, gl_now_price_mid)  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
 
-    return {"ans": ans["ans"], "ans_info": ans["ans_info"], "memo": ans['memo'], "type_info": latest_ans['type_info'],  "type_info_old": oldest_ans['type_info']}
+    return {"ans": ans["ans"], "ans_info": ans["ans_info"], "memo": ans['memo'],
+            "type_info": latest_ans['type_info'],  "type_info_old": oldest_ans['type_info'],
+            "latest_ans": latest_df, "oldest_ans": oldest_df}
 
 
-def order_setting(tc, ans_dic):
+def order_setting(tc, ans_dic, tc_stop):
     """
     検証し、条件達成でオーダー発行
     :param tc: ターゲットとなるクラスのインスタンス
     :return:
     """
-    # ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # オーダー条件
-    global gl_trade_num
-    # 時間的な制約
+
+    global gl_trade_num, gl_now_price_mid
+
+    # 共通的な物
+    gl_trade_num = gl_trade_num + 1
+    line_base = ans_dic['ans_info']['latest_late_img']  # 基準となる価格（共通）
+    move_range = ans_dic['ans_info']["latest_ans"]["move_abs"]  # latestの平均動き量
+
+
+    # 情報を取得する
+    print(ans_dic["type_info"]["pattern_num"], ans_dic["type_info"]["pattern_comment"])
+
+
+    # マージンのセット
+    ad = 0.023  # 逆張りまでの距離(マージン）
+    ad_stop = 0.023  # 順張りまでの距離(マージン）
+    lc_limit = 0.03  # 逆張りロスカ（＝レンジ突入の順張りまでのマージン）
+    lc_limit_fw = 0.03  # 逆張りロスカ（＝レンジ突入の順張りまでのマージン）
+    to_stop_margin = 0.005
+
+    # 稼働型を作成
+    ad_m = round(ans_dic['ans_info']["latest_ans"]['body_ave'] * 0.5, 3)  # この数字が大きいと、ポジまでの距離が離れる
+    ad_stop_m = round(ans_dic['ans_info']["latest_ans"]['body_ave'] * 0.5, 3)
+    direction = ans_dic['ans_info']['direction']
+    opp = "　幅修正候補(通常0.01)" + str(ad_m) + "," # LINE送信用
+
+    # 順思想（【latestに対して逆方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
     tc.update_information()  # timepast等を埋めるため、まずupdateが必要
-    # 順オーダーが突然入らないようにするには、谷の場合は現価より高い位置で入れる（line＜現価の場合、現価＋を基準、それ以外はline。）
-    # 山の場合(line>現価の場合、原価マイナス数ピップス、それ以外はlineを設定）
-    line = ans_dic['type_info']['order_line']
-    adjuster = 0.016
-    if adjuster < 0:  # adjusterの正負によって、Type変る。プラス域だと戻りが強い方向。マイナスだと少し戻った方
-        order_type = "LIMIT"  # 逆張り
-    else:
-        order_type = "STOP"  # 逆張り
-
-    print(" 価格情報now:", gl_now_price_mid, ",指定ライン", line)
-    if ans_dic['ans_info']['direction'] == 1:  # 1=谷
-        if line < gl_now_price_mid:
-            l = gl_now_price_mid + adjuster   # 最初は0.016プラス域で逆張り域、マイナス値で順張り域
-            print("   谷a 現在価格＋α採択")
-        else:
-            l = line
-            print("   谷b　Latest採択")
-    else:
-        if line > gl_now_price_mid:
-            l = gl_now_price_mid - adjuster
-            print("   山a　現在価格ーα採択")
-        else:
-            print("   山b　Latest採択")
-            l = line
-    # LC価格を取得する
-    lc = ans_dic['type_info_old']['lc_range']  # オールドレンジの半分を対象とする
-
-    print("  GAP", l, ans_dic['type_info_old']['gap'])
-    # オーダープラン作成
-    f_order = {
-        "price": l, # ans_dic['ans_info']['latest_old_img'],
-        "lc_price": 0.05,
-        "lc_range": 0.03,  # 0.07,  # ave_body,  # 0.022,  # ギリギリまで。。
-        "tp_range": 0,
-        "ask_bid": -1 * ans_dic['ans_info']['direction'],
-        "units": 10000,
-        "type": order_type,  # ans_dic['type_info']['order_type'],  # "STOP",
-        "tr_range": 0.2,  # ↑ここまでオーダー
-        "mind": 1,
-        "memo": "forward"
-    }
+    test = {"p": line_base, "u": 20000, "posi_d": ans_dic['ans_info']['direction'] * -1,
+            "margin": 0.04, "lc": 0.05, "tp": 0.05, "latest_d": ans_dic['ans_info']['direction']}
+    order_info = make_stop_order_info(test)
+    print(order_info)
     # オーダー発行
     tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
-    tc.plan_input(f_order)  # プラン自身を代入
-    tc.order_timeout = 15  # ５分に書き換え
-    tc.lc_range = 0.01  # CDCRO時、最低のライン（プラス値で最低の利益の確保）
-    tc.tp_range = 0.05
+    tc.plan_input(order_info)  # プラン自身を代入
     tc.make_order()
-    gl_trade_num = gl_trade_num + 1
-    print("  FW PRINT ALL")
-    fw.print_all()
-    mes = "price:" + str(ans_dic['type_info']['order_line']) + ",pattern:" + str(ans_dic['type_info']['pattern_comment']) + ",type" + str(ans_dic['type_info']['order_type'])
-    mes = mes + ",bs:" + str(round(ans_dic['type_info']['back_slash'], 3))
-    tk.line_send("■折返Position！", gl_trade_num, datetime.datetime.now().replace(microsecond=0), l, ",", mes)
+    mes = "[1]" + order_info['memo'] + str(order_info['ask_bid']) + str(round(order_info['price'], 3))
 
+    # 逆思想（【latestに対して同方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
+    tc_stop.update_information()  # timepast等を埋めるため、まずupdateが必要
+    test = {"p": line_base, "u": 10000, "posi_d": ans_dic['ans_info']['direction'],
+            "margin": 0.04, "lc": 0.05, "tp": 0.05, "latest_d": ans_dic['ans_info']['direction']}
+    order_info = make_stop_order_info(test)
+    print(order_info)
+    # オーダー発行
+    tc_stop.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
+    tc_stop.plan_input(order_info)  # プラン自身を代入
+    tc_stop.order_timeout = 15  # ５分に書き換え
+    tc_stop.make_order()
+    mes = mes + "[2]" + order_info['memo']+ str(order_info['ask_bid'])  + str(round(order_info['price'], 3))
+
+
+    # mes = "MID" + str(line_base) + "now" + str(gl_now_price_mid) + ", 逆" + str(round(order_price,3)) + ",順" + str(round(order_price_stop, 3))
+    # mes = "MID" + str(line_base) + ",順" + str(round(order_price_stop, 3))
+    tk.line_send("■折返Position！", gl_trade_num, "回目,", round(ans_dic['ans_info']['return_ratio'], 0), "%戻,",
+                 "大局向き(old):", direction * -1,
+                 datetime.datetime.now().replace(microsecond=0), mes)
 
 
 def mode1():
@@ -502,32 +621,54 @@ def mode1():
     """
     global gl_exe_mode
     print("Mode1")
+    # ポジションを２つ用意するため、二つを初期化する
     fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+    fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+    # rv_stop.update_information()
+    # チャート分析結果を取得する
     ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # 状況を検査する（買いフラグの確認）
+
+    # 新規オーダーの発行可否を確認する
     new_arrow_flag = fw.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
-    print("   mode1,",new_arrow_flag, fw.order['time_past_continue'])
-    if new_arrow_flag:
+    new_stop_arrow_flag = fw_stop.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
+
+    # print("   mode1,",new_arrow_flag, new_stop_arrow_flag, fw.order['time_past_continue'])
+
+    if new_arrow_flag and new_stop_arrow_flag:
         if ans_dic['ans'] == 1:
-            order_setting(fw, ans_dic)
+            order_setting(fw, ans_dic, fw_stop)
     else:
-        pass
-        # print("   mode1:no new")
+        print("   mode1:NoNew", new_arrow_flag, new_stop_arrow_flag)
+
 
     # Modeを変更する検討
-    if fw.life:
+    if fw.life or fw_stop.life:
         print(" MODE2（高頻度）へ移行")
         gl_exe_mode = 1
+
 
 def mode2():
     global gl_exe_mode
     fw.update_information()
-    print(" Mode2", fw.position['pips'])
-    if fw.life:
-        pass
+    fw_stop.update_information()
+    # rv_stop.update_information()
+
+    print(" Mode2")
+    # print(fw.position['state'], fw_stop.position['state'])
+    # print("lll", fw.life, fw_stop.life)
+    if fw.life == True or fw_stop.life == True or rv_stop.life == True:
+        print(fw.position['state'], fw_stop.position['state'])
+        if fw.position['state'] == "OPEN" and fw_stop.life:
+            fw_stop.close_position()
+            fw_stop.close_order()
+            print("   fwstopの方を消す")
+        elif fw_stop.position['state'] == "OPEN" and fw.life:
+            fw.close_position()
+            fw.close_order()
+            print("   fwの方を消す")
     else:
         print("   Mode１（低頻度）へ戻る")
         gl_exe_mode = 0
-
 
 
 def exe_manage():
@@ -540,7 +681,7 @@ def exe_manage():
     time_min = gl_now.minute  # 現在時刻の「分」のみを取得
     time_sec = gl_now.second  # 現在時刻の「秒」のみを取得
     # グローバル変数の宣言（編集有分のみ）
-    global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df
+    global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df, gl_first
 
     # ■深夜帯は実行しない　（ポジションやオーダーも全て解除）
     if 3 <= time_hour < 6:
@@ -582,6 +723,15 @@ def exe_manage():
                 # gl['exe_inspect'] = 0
                 # if time_min % 5 == 0 and (time_sec == 8):
 
+        # ■　初回だけ速攻で行う
+        if gl_first == 0:
+            gl_first = 1
+            print("■■■初回", gl_now, gl_exe_mode)  # 表示用（実行時）
+            d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
+            gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
+            d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
+            mode1()
+
 
 def exe_loop(interval, fun, wait=True):
     """
@@ -603,6 +753,9 @@ def exe_loop(interval, fun, wait=True):
         next_time = ((base_time - time.time()) % 1) or 1
         time.sleep(next_time)
 
+def test_exe():
+    for i in range(10):
+        print(i)
 
 # ■オアンダクラスの設定
 fx_mode = 1  # 1=practice, 0=Live
@@ -615,6 +768,7 @@ else:  # Live
 # 変更なし群
 gl_peak_range = 2  # ピーク値算出用　＠ここ以外で変更なし
 gl_arrow_spread = 0.008  # 実行を許容するスプレッド　＠ここ以外で変更なし
+gl_first = 0
 # 変更あり群
 gl_now = 0  # 現在時刻（ミリ秒無し） @exe_loopのみで変更あり
 gl_now_price_mid = 0  # 現在価格（念のための保持）　@ exe_manageでのみ変更有
@@ -626,8 +780,9 @@ gl_trade_num = 0  # 取引回数をカウントする
 gl_trade_win = 0  # プラスの回数を記録する
 
 # ■ポジションクラスの生成
-fw = order_information("fw", oa)  # 順思想のオーダーを入れるクラス
-fw_r1 = order_information("fwr1", oa)  # 順思想のオーダーを入れるクラス
+fw = order_information("逆思想", oa)  # 順思想のオーダーを入れるクラス
+fw_stop = order_information("順思想", oa)  # 順思想のオーダーを入れるクラス
+rv_stop = order_information("rv_stop", oa)  # 順思想のオーダーを入れるクラス
 
 # ■処理の開始
 oa.OrderCancel_All_exe()  # 露払い

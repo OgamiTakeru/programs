@@ -757,7 +757,8 @@ class Oanda:
                 "position_state": 0,
                 "position_realizePL": 0.0,
                 "position_pips": 0.0,
-                "position_close_time": 0
+                "position_close_time": 0,
+                "position_close_price": 0,
             }
             return res
 
@@ -777,12 +778,13 @@ class Oanda:
                 position_close_time = 0
                 position_price = 0
                 position_state = 0
-                position_realizePL =0
+                position_realizePL = 0
+                position_close_price = 0
 
             elif order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
                 position_id = res_json['order']['fillingTransactionID']
                 position_js = self.TradeDetails_exe(position_id)
-                # print("   " ,type(position_js))
+                # print("   " , type(position_js), position_js)
                 if type(position_js) is int:
                     pips = 0
                     position_realizePL = 0
@@ -790,6 +792,7 @@ class Oanda:
                     position_close_time = 0
                     position_price = 0
                     position_state = 0
+                    position_close_price = 0
                     print(" □リ")
                 else:
                     if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
@@ -799,6 +802,7 @@ class Oanda:
                         position_close_time = self.iso_to_jstdt_single(position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
                         position_price = position_js['trade']['price']
                         position_state = position_js['trade']['state']
+                        position_close_price = position_js['trade']['averageClosePrice']
                     elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
                         pips = round(float(position_js['trade']['unrealizedPL']) / abs(float(position_js['trade']['initialUnits'])), 3)
                         position_realizePL = position_js['trade']['unrealizedPL']
@@ -806,6 +810,7 @@ class Oanda:
                         position_close_time = 0
                         position_price = position_js['trade']['price']
                         position_state = position_js['trade']['state']
+                        position_close_price = 0
 
             # わかりやすいJsonを作っておく
             res = {
@@ -823,7 +828,8 @@ class Oanda:
                 "position_state": position_state,
                 "position_realizePL": position_realizePL,
                 "position_pips": pips,
-                "position_close_time": position_close_time
+                "position_close_time": position_close_time,
+                "position_close_price": position_close_price
             }
             return res
 

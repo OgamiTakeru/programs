@@ -277,6 +277,10 @@ def range_direction_inspection(data_df):
         latest_image_price = ans_df.iloc[0]["inner_low"]
         oldest_image_price = ans_df.iloc[-1]["inner_high"]
 
+    # ■平均移動距離等を考える
+    body_ave = data_df["body_abs"].mean()
+    move_ave = data_df["moves"].mean()
+
     # ■　一旦格納する
     ans_dic = {
         "direction": base_direction,
@@ -289,6 +293,8 @@ def range_direction_inspection(data_df):
         "latest_price": ans_df.iloc[0]["close"],
         "oldest_price": ans_df.iloc[-1]["open"],
         "gap": round(abs(latest_image_price - oldest_image_price), 3),
+        "body_ave": body_ave,
+        "move_abs": move_ave
     }
 
     # ■　形状を判定する（テスト）
@@ -307,7 +313,7 @@ def compare_ranges(oldest_ans, latest_ans, now_price):
     :return:
     """
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
-        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 3:  # 行数確認(old区間はt直接指定！）
+        if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
             ans_info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap'],
@@ -316,8 +322,9 @@ def compare_ranges(oldest_ans, latest_ans, now_price):
                         "latest_old_img": latest_ans["oldest_image_price"], "latest_late_img": latest_ans["latest_image_price"],
                         "oldest_old_img": latest_ans["oldest_image_price"], "oldest_late_img": latest_ans["latest_image_price"],
                         "direction": latest_ans["direction"],
-                        "mid_price": now_price, "oldest_count": oldest_ans["count"], "latest_count": latest_ans['count']}
-            max_return_ratio = 60
+                        "mid_price": now_price, "oldest_count": oldest_ans["count"], "latest_count": latest_ans['count'],
+                        "oldest_ans": oldest_ans, "latest_ans": latest_ans}
+            max_return_ratio = 50
             if return_ratio < max_return_ratio:
                 # print("  達成")
                 return {"ans": 1, "ans_info": ans_info, "memo": "達成"}
@@ -330,3 +337,12 @@ def compare_ranges(oldest_ans, latest_ans, now_price):
     else:
         # print("  同方向")
         return {"ans": 0, "ans_info": {}, "memo": "同方向"}
+
+
+def make_stop_order():
+    """
+    指定の価格に順張りを入れる。もし現在価格がふさわしくない場合は、現在価格を基準に入れる
+    :return:
+    """
+
+
