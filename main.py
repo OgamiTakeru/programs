@@ -561,25 +561,10 @@ def order_setting(tc, ans_dic, tc_stop):
     # 共通的な物
     gl_trade_num = gl_trade_num + 1
     line_base = ans_dic['ans_info']['latest_late_img']  # 基準となる価格（共通）
-    move_range = ans_dic['ans_info']["latest_ans"]["move_abs"]  # latestの平均動き量
-
+    direction = ans_dic['ans_info']['direction']
 
     # 情報を取得する
     print(ans_dic["type_info"]["pattern_num"], ans_dic["type_info"]["pattern_comment"])
-
-
-    # マージンのセット
-    ad = 0.023  # 逆張りまでの距離(マージン）
-    ad_stop = 0.023  # 順張りまでの距離(マージン）
-    lc_limit = 0.03  # 逆張りロスカ（＝レンジ突入の順張りまでのマージン）
-    lc_limit_fw = 0.03  # 逆張りロスカ（＝レンジ突入の順張りまでのマージン）
-    to_stop_margin = 0.005
-
-    # 稼働型を作成
-    ad_m = round(ans_dic['ans_info']["latest_ans"]['body_ave'] * 0.5, 3)  # この数字が大きいと、ポジまでの距離が離れる
-    ad_stop_m = round(ans_dic['ans_info']["latest_ans"]['body_ave'] * 0.5, 3)
-    direction = ans_dic['ans_info']['direction']
-    opp = "　幅修正候補(通常0.01)" + str(ad_m) + "," # LINE送信用
 
     # 順思想（【latestに対して逆方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
     tc.update_information()  # timepast等を埋めるため、まずupdateが必要
@@ -605,7 +590,6 @@ def order_setting(tc, ans_dic, tc_stop):
     tc_stop.order_timeout = 15  # ５分に書き換え
     tc_stop.make_order()
     mes = mes + "[2]" + order_info['memo']+ str(order_info['ask_bid'])  + str(round(order_info['price'], 3))
-
 
     # mes = "MID" + str(line_base) + "now" + str(gl_now_price_mid) + ", 逆" + str(round(order_price,3)) + ",順" + str(round(order_price_stop, 3))
     # mes = "MID" + str(line_base) + ",順" + str(round(order_price_stop, 3))
