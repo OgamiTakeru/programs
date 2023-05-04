@@ -48,7 +48,13 @@ class order_information:
         self.position = {"id": 0, "state": "", "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
         self.reorder = 1
         self.reorder_waiting = 0  # リオーダー待ちフラグ
-        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回まで
+        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回までself.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
+        self.crcdo_sec = 0  # ポジション所有から何秒後に、最新のCRCDOを行ったかを記録する。
+        self.crcdo_lc = 0  # ロスカ変更後のLCライン
+        self.crcdo_tp = 0  # ロスカ変更後のTPライン
+        self.pips_max = 0  # 最高プラスが額を記録
+        self.pips_min = 0  # 最低のマイナス額を記録
+
         if self.name == "fw_reorder":
             self.name = "fw"  # 名前を元に戻す（名前での処理有）
 
@@ -110,7 +116,7 @@ class order_information:
         global gl_trade_win
         # Planを元にオーダーを発行する
         if self.plan['price'] != 999:  # 例外時（price=999)以外は、通常通り実行する
-            print(" 108行テスト", self.plan)
+            # print(" 108行テスト", self.plan)
             order_ans = oa.OrderCreate_dic_exe(self.plan)  # Plan情報からオーダー発行しローカル変数に結果を格納する
             self.order = {
                 "id": order_ans['order_id'],
@@ -209,11 +215,11 @@ class order_information:
             elif self.position['state'] == "OPEN" and temp['position_state'] == "CLOSED":  # 現ポジあり⇒ポジ無し（終了時）
                 oa.print_i("  ★position解消")
                 self.life_set(False)
-                gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)
-                for_view_temp = "w" + str(gl_trade_win) + "/" + str(gl_trade_num) + ",TotalPips" + str(gl_total_pips)
-                if temp['position_pips']>=0:
-                    gl_trade_win += 1
-                tk.line_send(" ▲解消", temp['position_close_price'], temp['position_pips'], for_view_temp, "time:",
+                gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)  # トータル計算
+                if temp['position_pips'] >=0 :
+                    gl_trade_win += 1  # トータルプラス計算
+                for_view_temp = "w" + str(gl_trade_win) + "/" + str(gl_trade_num) + ",TotalPips" + str(gl_total_pips) + ",P-M" + str(self.pips_min) + "," + str(self.pips_max)
+                tk.line_send(" ▲解消", temp['position_close_price'], temp['position_pips'], for_view_temp, " time:",
                              datetime.datetime.now().replace(microsecond=0))
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
@@ -269,6 +275,7 @@ class order_information:
             self.lc_change()
             # 時間による解消を行う
             if self.order['time_past'] > self.order_timeout * 60 and self.order['state'] == "PENDING":
+                print("時間解消@")
                 self.close_order()
         else:
             # LifeがFalseの場合
@@ -562,26 +569,29 @@ def order_setting(tc, ans_dic, tc_stop):
     gl_trade_num = gl_trade_num + 1
     line_base = ans_dic['ans_info']['latest_late_img']  # 基準となる価格（共通）
     direction = ans_dic['ans_info']['direction']
-
+    moves = ans_dic['type_info_old']['move_abs']
+    old_gap = ans_dic['type_info_old']['gap']
+    print("  GAP", ans_dic['type_info_old']['gap'], moves)
     # 情報を取得する
     print(ans_dic["type_info"]["pattern_num"], ans_dic["type_info"]["pattern_comment"])
 
     # 順思想（【latestに対して逆方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
     tc.update_information()  # timepast等を埋めるため、まずupdateが必要
     test = {"p": line_base, "u": 20000, "posi_d": ans_dic['ans_info']['direction'] * -1,
-            "margin": 0.04, "lc": 0.05, "tp": 0.05, "latest_d": ans_dic['ans_info']['direction']}
+            "margin": 0.02, "lc": 0.06, "tp": 0.07, "latest_d": ans_dic['ans_info']['direction']}
     order_info = make_stop_order_info(test)
     print(order_info)
     # オーダー発行
     tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
     tc.plan_input(order_info)  # プラン自身を代入
     tc.make_order()
-    mes = "[1]" + order_info['memo'] + str(order_info['ask_bid']) + str(round(order_info['price'], 3))
+    mes = " baseline:" + str(line_base) + " Moves:" + str(round(moves, 3)) + ","
+    mes = mes + " [1]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
 
     # 逆思想（【latestに対して同方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
     tc_stop.update_information()  # timepast等を埋めるため、まずupdateが必要
     test = {"p": line_base, "u": 10000, "posi_d": ans_dic['ans_info']['direction'],
-            "margin": 0.04, "lc": 0.05, "tp": 0.05, "latest_d": ans_dic['ans_info']['direction']}
+            "margin": 0.04, "lc": 0.07, "tp": 0.08, "latest_d": ans_dic['ans_info']['direction']}
     order_info = make_stop_order_info(test)
     print(order_info)
     # オーダー発行
@@ -589,12 +599,12 @@ def order_setting(tc, ans_dic, tc_stop):
     tc_stop.plan_input(order_info)  # プラン自身を代入
     tc_stop.order_timeout = 15  # ５分に書き換え
     tc_stop.make_order()
-    mes = mes + "[2]" + order_info['memo']+ str(order_info['ask_bid'])  + str(round(order_info['price'], 3))
+    mes = mes + "[2]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
 
     # mes = "MID" + str(line_base) + "now" + str(gl_now_price_mid) + ", 逆" + str(round(order_price,3)) + ",順" + str(round(order_price_stop, 3))
     # mes = "MID" + str(line_base) + ",順" + str(round(order_price_stop, 3))
     tk.line_send("■折返Position！", gl_trade_num, "回目,", round(ans_dic['ans_info']['return_ratio'], 0), "%戻,",
-                 "大局向き(old):", direction * -1,
+                 "大局向き(old):", direction * -1, ":", str(old_gap),
                  datetime.datetime.now().replace(microsecond=0), mes)
 
 
@@ -643,10 +653,12 @@ def mode2():
     if fw.life == True or fw_stop.life == True or rv_stop.life == True:
         print(fw.position['state'], fw_stop.position['state'])
         if fw.position['state'] == "OPEN" and fw_stop.life:
+            print("fwstop@")
             fw_stop.close_position()
             fw_stop.close_order()
             print("   fwstopの方を消す")
         elif fw_stop.position['state'] == "OPEN" and fw.life:
+            print("fwの方")
             fw.close_position()
             fw.close_order()
             print("   fwの方を消す")
