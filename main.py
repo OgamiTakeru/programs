@@ -178,7 +178,7 @@ class order_information:
             else:
                 self.position['state'] = "CLOSED"
                 self.life_set(False)
-                tk.line_send("  注文の為？ポジション解消", self.position['id'])
+                tk.line_send("  ポジション解消", self.position['id'], self.position['pips'])
         else:
             # print("    position無し")
             oa.print_i("    position無し")
@@ -320,9 +320,10 @@ class order_information:
         p = self.position
         o = self.order
         if self.crcdo is False and self.position['state'] == "OPEN":  # ポジションのCRCDO歴がない場合⇒ポジションLC調整を行う可能性
+            # 初回と長期間保有時のLC変更
             cl_span = 60  # 1分に１回しか更新しない
             if p['pips'] > 0.025:  # ある程度のプラスがあれば、LC底上げを実施する
-                lc_border = -0.03  # プラス値でプラス域でロスカットを実施
+                self.lc_range = -0.02  # プラス値でプラス域でロスカットを実施。マイナス域でマイナス域でのロスカット
                 lc_price = round(p['price'] - self.lc_range if self.plan['ask_bid'] < 0 else p['price'] + self.lc_range, 3)
                 tp_price = round(self.now_price - self.tp_range if self.plan['ask_bid'] < 0 else self.now_price + self.tp_range, 3)  # 微＋
                 self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
@@ -346,18 +347,18 @@ class order_information:
                     oa.print_i("    [ポジ有] LC底上げ基準プラス未達（小)")
                     tk.line_send("　(LC底上げ)初回")
         elif self.crcdo:
-            # 1回は最低レベルでのTPを行う処理を実施
+            # 2回目以降のCRCDO
             # プラス方向にLCを広げる処理を実施　（セルフトレールのようなもの）
             od = 0.7
             print("    CRCDO確認",self.crcdo_sec, p['time_past'])
-            if p['time_past']-self.crcdo_sec>60:  # 30秒以上空いていれば、CRCDOを再検討する
+            if p['time_past']-self.crcdo_sec > 10:  # 前回のCRCDOよりN秒以上空いていれば、CRCDOを再検討する
                 if p['pips'] > 0.04:  # 価値ピップスのod倍の部分で利確を行う
                     temp_lc_range = p['pips'] * od  # 通常はself.lc_range
                     lc_price = round(p['price'] - temp_lc_range if self.plan['ask_bid'] < 0 else p['price'] + temp_lc_range, 3)
                     tp_price = round(self.now_price - self.tp_range if self.plan['ask_bid'] < 0 else self.now_price + self.tp_range, 3)  # 微＋
 
                     # 実行判定（向きによって変わるため）
-                    exe_crcdo = 0
+                    exe_crcdo = 0  # ばあいによってはCRCDOしない可能性があるので、フラグを０に初期化しておく。
                     if o['direction'] < 1:  # 谷方向の場合
                         if self.crcdo_lc > lc_price:
                             exe_crcdo = 1  # LCラインを押し下げる場合（プラス拡大）
@@ -372,7 +373,6 @@ class order_information:
                             print("  拡大せず（山） <", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'] )
 
                     if exe_crcdo == 1:
-
                         data = {
                             "stopLoss": {"price": str(lc_price), "timeInForce": "GTC"},
                             # "takeProfit": {"price": str(tp_price), "timeInForce": "GTC"},
@@ -556,7 +556,7 @@ def inspection_candle(ins_condition):
             "latest_ans": latest_df, "oldest_ans": oldest_df}
 
 
-def order_setting(tc, ans_dic, tc_stop):
+def order2_setting(tc, ans_dic, tc_stop):
     """
     検証し、条件達成でオーダー発行
     :param tc: ターゲットとなるクラスのインスタンス
@@ -570,15 +570,86 @@ def order_setting(tc, ans_dic, tc_stop):
     line_base = ans_dic['ans_info']['latest_late_img']  # 基準となる価格（共通）
     direction = ans_dic['ans_info']['direction']
     moves = ans_dic['type_info_old']['move_abs']
+    moves_latest = ans_dic['type_info']['move_abs']
     old_gap = ans_dic['type_info_old']['gap']
     print("  GAP", ans_dic['type_info_old']['gap'], moves)
     # 情報を取得する
     print(ans_dic["type_info"]["pattern_num"], ans_dic["type_info"]["pattern_comment"])
 
+    # 動きによってLC幅等を変える
+    if old_gap > 0.20:
+        lc_range = round(old_gap*0.3, 3)
+    else:
+        lc_range = 0.03
+
+
     # 順思想（【latestに対して逆方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
     tc.update_information()  # timepast等を埋めるため、まずupdateが必要
     test = {"p": line_base, "u": 20000, "posi_d": ans_dic['ans_info']['direction'] * -1,
-            "margin": 0.02, "lc": 0.06, "tp": 0.07, "latest_d": ans_dic['ans_info']['direction']}
+            "margin": 0.016, "lc": 0.05, "tp": 0.07, "latest_d": ans_dic['ans_info']['direction']}
+    order_info = make_stop_order_info(test)
+    print(order_info)
+    # オーダー発行
+    tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
+    tc.plan_input(order_info)  # プラン自身を代入
+    tc.make_order()
+    mes = " baseline:" + str(line_base) + " Moves:" + str(round(moves_latest, 3)) + ","
+    mes = mes + " [1]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
+
+    # # 逆思想（【latestに対して同方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
+    # tc_stop.update_information()  # timepast等を埋めるため、まずupdateが必要
+    # test = {"p": line_base, "u": 10000, "posi_d": ans_dic['ans_info']['direction'],
+    #         "margin": 0.04, "lc": 0.07, "tp": 0.08, "latest_d": ans_dic['ans_info']['direction']}
+    # order_info = make_stop_order_info(test)
+    # print(order_info)
+    # # オーダー発行
+    # tc_stop.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
+    # tc_stop.plan_input(order_info)  # プラン自身を代入
+    # tc_stop.order_timeout = 15  # ５分に書き換え
+    # tc_stop.make_order()
+    # mes = mes + "[2]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
+
+    # mes = "MID" + str(line_base) + "now" + str(gl_now_price_mid) + ", 逆" + str(round(order_price,3)) + ",順" + str(round(order_price_stop, 3))
+    # mes = "MID" + str(line_base) + ",順" + str(round(order_price_stop, 3))
+    tk.line_send("■折返Position！", gl_trade_num, "回目,", round(ans_dic['ans_info']['return_ratio'], 0), "%戻,",
+                 "大局向き(old):", direction * -1, ":", str(old_gap),
+                 datetime.datetime.now().replace(microsecond=0), mes)
+
+
+def order3_setting(tc, ans_dic, tc_stop):
+    """
+    検証し、条件達成でオーダー発行
+    :param tc: ターゲットとなるクラスのインスタンス
+    :return:
+    """
+
+    global gl_trade_num, gl_now_price_mid
+
+    # 共通的な物
+    gl_trade_num = gl_trade_num + 1
+    line_base = ans_dic['ans_info']['latest_late_img']  # 基準となる価格（共通）
+    direction = ans_dic['ans_info']['direction']
+    moves = ans_dic['type_info_old']['move_abs']
+    moves_latest = ans_dic['type_info']['move_abs']
+    old_gap = ans_dic['type_info_old']['gap']
+    print("  GAP", ans_dic['type_info_old']['gap'], moves)
+    # 情報を取得する
+    print(ans_dic["type_info"]["pattern_num"], ans_dic["type_info"]["pattern_comment"])
+
+    # 前の物を解消する
+    tc.close_order()
+    tc.close_position()
+
+    # 動きによってLC幅等を変える
+    if old_gap > 0.20:
+        lc_range = round(old_gap/0.3, 3)
+    else:
+        lc_range = 0.03
+
+    # 順思想（【latestに対して逆方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
+    tc.update_information()  # timepast等を埋めるため、まずupdateが必要
+    test = {"p": line_base, "u": 30000, "posi_d": ans_dic['ans_info']['direction'] * -1,
+            "margin": 0.03, "lc": 0.04, "tp": 0.07, "latest_d": ans_dic['ans_info']['direction']}
     order_info = make_stop_order_info(test)
     print(order_info)
     # オーダー発行
@@ -589,17 +660,17 @@ def order_setting(tc, ans_dic, tc_stop):
     mes = mes + " [1]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
 
     # 逆思想（【latestに対して同方向のポジション希望】）のオーダーをセットする。逆張りか順張りかはこの後に選択。
-    tc_stop.update_information()  # timepast等を埋めるため、まずupdateが必要
-    test = {"p": line_base, "u": 10000, "posi_d": ans_dic['ans_info']['direction'],
-            "margin": 0.04, "lc": 0.07, "tp": 0.08, "latest_d": ans_dic['ans_info']['direction']}
-    order_info = make_stop_order_info(test)
-    print(order_info)
-    # オーダー発行
-    tc_stop.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
-    tc_stop.plan_input(order_info)  # プラン自身を代入
-    tc_stop.order_timeout = 15  # ５分に書き換え
-    tc_stop.make_order()
-    mes = mes + "[2]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
+    # tc_stop.update_information()  # timepast等を埋めるため、まずupdateが必要
+    # test = {"p": line_base, "u": 20000, "posi_d": ans_dic['ans_info']['direction'],
+    #         "margin": 0.02, "lc": 0.04, "tp": 0.08, "latest_d": ans_dic['ans_info']['direction']}
+    # order_info = make_stop_order_info(test)
+    # print(order_info)
+    # # オーダー発行
+    # tc_stop.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
+    # tc_stop.plan_input(order_info)  # プラン自身を代入
+    # tc_stop.order_timeout = 15  # ５分に書き換え
+    # tc_stop.make_order()
+    # mes = mes + "[2]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
 
     # mes = "MID" + str(line_base) + "now" + str(gl_now_price_mid) + ", 逆" + str(round(order_price,3)) + ",順" + str(round(order_price_stop, 3))
     # mes = "MID" + str(line_base) + ",順" + str(round(order_price_stop, 3))
@@ -613,32 +684,38 @@ def mode1():
     低頻度モード（条件を検索し、４２検査を実施する）
     :return: なし
     """
-    global gl_exe_mode
     print("Mode1")
     # ポジションを２つ用意するため、二つを初期化する
     fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
     fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-    # rv_stop.update_information()
+
     # チャート分析結果を取得する
     ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # 状況を検査する（買いフラグの確認）
 
     # 新規オーダーの発行可否を確認する
     new_arrow_flag = fw.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
-    new_stop_arrow_flag = fw_stop.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
-
-    # print("   mode1,",new_arrow_flag, new_stop_arrow_flag, fw.order['time_past_continue'])
-
-    if new_arrow_flag and new_stop_arrow_flag:
+    # new_stop_arrow_flag = fw_stop.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
+    if new_arrow_flag:
+        # オーダー許可が出て場合。
         if ans_dic['ans'] == 1:
-            order_setting(fw, ans_dic, fw_stop)
+            order2_setting(fw, ans_dic, fw_stop)  # オーダーをセットする
     else:
-        print("   mode1:NoNew", new_arrow_flag, new_stop_arrow_flag)
+        print("   mode1:NoNew", new_arrow_flag)
 
-
-    # Modeを変更する検討
-    if fw.life or fw_stop.life:
-        print(" MODE2（高頻度）へ移行")
-        gl_exe_mode = 1
+    # 新規の解析(latestを３にした場合のトリガー）⇒２の順思想オーダーがアクティブでなけば実行する
+    ans_dic3 = inspection_candle({"ignore": 1, "latest_n": 3})  # 状況を検査する（買いフラグの確認）
+    if ans_dic3['ans'] == 1:
+        tk.line_send("  Latest3の達成")
+        if fw.position['state'] == "OPEN":  # 既にポジションを持っているときは、オーダーせず
+            print(" OPENの為実行せず")
+        else:
+            print(" Latest3の実行（両方向）")
+            # 既存オーダーの停止
+            fw.close_position()
+            fw.close_order()
+            order3_setting(fw, ans_dic3, fw_stop)  # オーダーをセットする
+    else:
+        pass
 
 
 def mode2():
@@ -697,29 +774,23 @@ def exe_manage():
             oa.print_i("    ▲スプレッド異常")
             sys.exit()  # 強制終了
 
-        # ■いずれは低頻度モードの実での取得になるかも
+        # ■いずれは低頻度モードのみでの取得になるかも
         # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
-        if time_min % 1 == 0 and time_sec % 6 == 0:  # 毎分8,38秒で実施
-            # print("Candle取得")
+        if time_min % 5 == 0 and time_sec == 6:  # キャンドルの確認（５分に一回）
+            print("■■■Candle調査", gl_now)  # 表示用（実行時）
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
+            mode1()
 
-        # ■■ モード毎に実行頻度を管理する
-        if gl_exe_mode == 0:  # 低頻度モード
-            # if time_min % 1 == 0 and time_sec % 5 == 0:   # (time_sec == 8 or time_sec == 38):  # 毎分8,38秒で実施
-            if time_min % 1 == 0 and (time_sec == 6 or time_sec == 36):  # 毎分8,38秒で実施
-                print("■■■", gl_now, gl_exe_mode)  # 表示用（実行時）
-                mode1()
-
-        elif gl_exe_mode == 1:  # 高頻度モード
-            if time_min % 1 == 0 and time_sec % 2 == 0:
-                print("■■■", gl_now, gl_exe_mode)  # 表示用（実行時）
+        elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
+            fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+            fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+            if fw.life or fw_stop.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
+                print("■■■", gl_now)  # 表示用（実行時）
                 mode2()
-                # gl['exe_inspect'] = 0
-                # if time_min % 5 == 0 and (time_sec == 8):
 
-        # ■　初回だけ速攻で行う
+        # ■　初回だけ実行と同時に行う
         if gl_first == 0:
             gl_first = 1
             print("■■■初回", gl_now, gl_exe_mode)  # 表示用（実行時）

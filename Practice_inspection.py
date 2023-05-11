@@ -127,6 +127,8 @@ def main_peak():
                     "oldest_latest": oldest_ans['latest_price'],
                     "oldest_oldest_image_price": oldest_ans['oldest_image_price'],
                     "oldest_latest_image_price": oldest_ans['latest_image_price'],
+                    "oldest_body": oldest_ans['type_info']["body_ave"],
+                    "oldest_move": oldest_ans['type_info']["move_abs"],
                     # "old_high": oldest_ans['high_price'],
                     # "old_low": oldest_ans['low_price'],
                     "latest_range": latest_ans['gap'],
@@ -135,12 +137,15 @@ def main_peak():
                     "latest_latest": latest_ans['latest_price'],
                     "latest_oldest_image_price": latest_ans['oldest_image_price'],
                     "latest_latest_image_price": latest_ans['latest_image_price'],
+                    "latest_body": latest_ans['type_info']["body_ave"],
+                    "latest_move": latest_ans['type_info']["move_abs"],
                     # "latest_high": latest_ans['high_price'],
                     # "latest_low": latest_ans['low_price'],
                     "direction_latest": latest_ans['direction'],
                     "return_ratio": ans_42['ans_info']['return_ratio'],
-                    # "pattern_c": latest_ans['pattern_comment'],
-                    "pattern": latest_ans['type_info']["pattern_comment"]
+                    "pattern_num": latest_ans['type_info']["pattern_num"],
+                    "pattern": latest_ans['type_info']["pattern_comment"],
+
                 }
                 print(each_res_dic['latest_oldest'])
 
@@ -277,7 +282,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 200,
+    "candle_num": 100,
     "num": 1,  # candle
     "candle_unit": "M5",
 }

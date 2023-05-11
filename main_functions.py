@@ -278,15 +278,15 @@ def range_direction_inspection(data_df):
         oldest_image_price = ans_df.iloc[-1]["inner_high"]
 
     # ■平均移動距離等を考える
-    body_ave = data_df["body_abs"].mean()
-    move_ave = data_df["moves"].mean()
+    body_ave = round(data_df["body_abs"].mean(),3)
+    move_ave = round(data_df["moves"].mean(),3)
 
     # ■　一旦格納する
     ans_dic = {
         "direction": base_direction,
-        "count": counter+1,
-        "data": ans_df,
-        "data_size": len(ans_df),
+        "count": counter+1,  # 最新時刻からスタートして同じ方向が何回続いているか
+        "data": ans_df,  # 対象となるデータフレーム（元のデータフレームではない）
+        "data_size": len(data_df),  # 元のデータサイズ
         "latest_image_price": latest_image_price,
         "oldest_image_price": oldest_image_price,
         "oldest_time_jp": ans_df.iloc[-1]["time_jp"],
@@ -294,7 +294,7 @@ def range_direction_inspection(data_df):
         "oldest_price": ans_df.iloc[-1]["open"],
         "gap": round(abs(latest_image_price - oldest_image_price), 3),
         "body_ave": body_ave,
-        "move_abs": move_ave
+        "move_abs": move_ave,
     }
 
     # ■　形状を判定する（テスト）

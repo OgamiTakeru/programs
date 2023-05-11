@@ -327,6 +327,15 @@ price_dic = oa.NowPrice_exe("USD_JPY")
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
 print(oa.NowPrice_exe("USD_JPY")['mid'])
 
+# ★データの取得（複数一括）
+mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count": 100}, 1)
+# mid_df.to_csv(tk.folder_path + 'TEST_DATA.csv', index=False, encoding="utf-8")
+# f.draw_graph(mid_df)  # グラフ化
+# print(mid_df)
+
+
+
+
 
 
 # data = {
@@ -338,7 +347,7 @@ print(oa.NowPrice_exe("USD_JPY")['mid'])
 # print(res)
 
 
-print(oa.OrderDetailsState_exe(108428))
+# print(oa.OrderDetailsState_exe(108428))
 
 
 # print("test")
@@ -390,11 +399,7 @@ print(oa.OrderDetailsState_exe(108428))
 
 
 
-# ★データの取得（複数一括）
-# mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count": 100}, 1)
-# mid_df.to_csv(tk.folder_path + 'TEST_DATA.csv', index=False, encoding="utf-8")
-# f.draw_graph(mid_df)  # グラフ化
-# print(mid_df)
+
 
 # オーダー状況確認用
 # pending_new_df = oa.OrdersWaitPending_exe()  # ペンディングオーダーの取得(利確注文等は含まない）
@@ -411,7 +416,7 @@ print(oa.OrderDetailsState_exe(108428))
 
 
 # # ★注文を発行
-oa.OrderCreate_exe(10000, 1, price_dic['mid'], 0.05, 0.09, "STOP", 0.05, " ")
+# oa.OrderCreate_exe(10000, 1, price_dic['mid'], 0.05, 0.09, "STOP", 0.05, " ")
 
 
 
