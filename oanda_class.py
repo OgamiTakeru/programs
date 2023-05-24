@@ -53,10 +53,10 @@ class Oanda:
     #  等の関数有
 
     def __init__(self, accountID, access_token, env):
-        self.accountID = accountID
-        self.access_token = access_token
-        self.environment = env  # デモ口座
-        self.api = API(access_token=access_token, environment=self.environment)
+        self.accountID = accountID  # インスタンス生成時に、引数で受け取る
+        self.access_token = access_token  # インスタンス生成時に、引数で受け取る
+        self.environment = env  # インスタンス生成時に、引数で受け取る
+        self.api = API(access_token=access_token, environment=self.environment)  # API基盤の準備
         self.print_words = ""  # 表示用。。
         self.print_words_bef = ""  # 表示用。。
 
