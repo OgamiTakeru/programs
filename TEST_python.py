@@ -1,22 +1,22 @@
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
-import pandas as pd
-from scipy.signal import argrelmin, argrelmax
-from numpy import linalg as LA
-import numpy as np
-import datetime
-
-import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
-import programs.oanda_class as oanda_class
-import programs.main_functions as f  # とりあえずの関数集
-
-class MyClass(object):
-    def __init__(self, value):
-        self.value = value
+from oandapyV20 import API
+import oandapyV20.endpoints.instruments as instruments
 
 
-newcls = type("MyDirectory", (MyClass,), {})
-obj = newcls()
+accountID = "101-009-20438763-001"  # デモ    # ★★★
+access_token = '955c62ae4f76351d24369b3aae936b35-91f898f60f4dd3e02d4dd8e62754ac61'    # ★★★
+environment = "practice"  # デモ口座 本番は"live"
 
-print(MyDirectory.value)
+api = API(access_token=access_token, environment="practice")
 
+params = {
+  "count": 5,
+  "granularity": "M5"
+}
+r = instruments.InstrumentsCandles(instrument="USD_JPY", params=params)
+res = api.request(r)
+
+# print(res)
+print(res['instrument'])
+print(res['candles'])
+for i in range(len(res['candles'])):
+    print(res['candles'][i])

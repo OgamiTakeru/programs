@@ -1,10 +1,14 @@
-import requests
+# import requests
 import datetime  # 日付関係
-from scipy.signal import argrelmin, argrelmax  # add_peaks
+# from scipy.signal import argrelmin, argrelmax  # add_peaks
 import pandas as pd  # add_peaks
 from plotly.subplots import make_subplots  # draw_graph
 import plotly.graph_objects as go  # draw_graph
-import programs.oanda_class as oa
+
+
+import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
+import programs.oanda_class as oanda_class
+import programs.main_functions as f  # とりあえずの関数集
 
 
 def draw_graph(mid_df):
@@ -163,11 +167,19 @@ def str_to_time(str_time):
 
 
 def range_direction_inspection_pattern(data_df, direction, ans_info):
+    """
+    ここでのデータは、０行目が最新データ
+    :param data_df:
+    :param direction:
+    :param ans_info:
+    :return:
+    """
     # パターン買いの一部
     ratio = 0.6
     back_slash = ans_info['gap'] * ratio  # トリガとなる戻り分を算出
 
     if len(data_df) == 2:
+        # (1) latestのパターンを計算
         if direction == 1:  # プラスの連荘＝谷の場合　（折り返し部のみの話）
             if data_df.iloc[1]['body'] >= 0 and data_df.iloc[0]['body'] >= 0:
                 pattern_comment = "afterV:UpUp"
@@ -209,10 +221,22 @@ def range_direction_inspection_pattern(data_df, direction, ans_info):
                 pattern_comment = "afterM:Error"
                 pattern = -13
                 order_line = type = 999
+
+        # （２）latestの中のoldとlatestどっちがサイズが大きいかの判別
+        older = data_df.iloc[1]['body_abs']
+        later = data_df.iloc[0]['body_abs']
+        if older <= later:
+            range_expected = 1  # レンジの予感
+        else:
+            range_expected = 0
+
+
     else:
+        # ここは全部を網羅しておくこと（初期値的に）
         pattern = -99
-        pattern_comment = "NoComment"
+        pattern_comment = "NoComment2足分以上"
         order_line = type = 999
+        range_expected = 0
 
     # LCrangeを計算する(MAX7pips, Min 3pips)
     lc_range = round(ans_info['gap'] / 2, 3)
@@ -234,23 +258,28 @@ def range_direction_inspection_pattern(data_df, direction, ans_info):
         "lc_range": lc_range,
         "gap": ans_info['gap'],
         'body_ave': body_ave,
-        "move_abs": move_ave
+        "move_abs": move_ave,
+        "range_expected": range_expected
     }
 
 
-def range_direction_inspection(data_df):
+def range_direction_inspection(data_df_origin):
     """
     渡された範囲で、何連続で同方向に進んでいるかを検証する
     :param data_df: 直近が上側（日付降順/リバース）のデータを利用
     :return: Dict形式のデータを返伽
     """
+    # コピーウォーニングのための入れ替え
+    data_df = data_df_origin.copy()
+
+    # 処理の開始
     base_direction = 0
     counter = 0
     for i in range(len(data_df)-1):
         tilt = data_df.iloc[i]['middle_price'] - data_df.iloc[i+1]['middle_price']
         if tilt == 0:
             # tiltが０になるケースは、商不可の為仮値を代入する
-            print("  TILT0発生", data_df.iloc[i]['middle_price'], data_df.iloc[i]['time_jp'], data_df.iloc[i+1]['time_jp'])
+            # print("  TILT0発生", data_df.iloc[i]['middle_price'], data_df.iloc[i]['time_jp'], data_df.iloc[i+1]['time_jp'])
             # print(data_df)
             tilt = 0.001
         tilt_direction = round(tilt / abs(tilt), 0)  # 方向のみ（念のためラウンドしておく）
@@ -268,6 +297,7 @@ def range_direction_inspection(data_df):
             break  # 連続が途切れた場合、ループを抜ける
     # ■対象のDFを取得し、情報を格納していく
     ans_df = data_df[0:counter+1]  # 同方向が続いてる範囲のデータを取得する
+
     if base_direction == 1:
         # 上り方向の場合、直近の最大価格をlatest_image価格として取得(latest価格とは異なる可能性あり）
         latest_image_price = ans_df.iloc[0]["inner_high"]
@@ -276,30 +306,37 @@ def range_direction_inspection(data_df):
         # 下り方向の場合
         latest_image_price = ans_df.iloc[0]["inner_low"]
         oldest_image_price = ans_df.iloc[-1]["inner_high"]
-
+    #
     # ■平均移動距離等を考える
     body_ave = round(data_df["body_abs"].mean(),3)
     move_ave = round(data_df["moves"].mean(),3)
+
+    # ■GAPを計算する（０の時は割る時とかに困るので、最低0.001にしておく）
+    gap = round(abs(latest_image_price - oldest_image_price), 3)
+    if gap == 0:
+        gap = 0.001
+    else:
+        gap = gap
 
     # ■　一旦格納する
     ans_dic = {
         "direction": base_direction,
         "count": counter+1,  # 最新時刻からスタートして同じ方向が何回続いているか
         "data": ans_df,  # 対象となるデータフレーム（元のデータフレームではない）
-        "data_size": len(data_df),  # 元のデータサイズ
+        "data_size": len(data_df),  # (注)元のデータサイズ
         "latest_image_price": latest_image_price,
         "oldest_image_price": oldest_image_price,
         "oldest_time_jp": ans_df.iloc[-1]["time_jp"],
         "latest_price": ans_df.iloc[0]["close"],
         "oldest_price": ans_df.iloc[-1]["open"],
-        "gap": round(abs(latest_image_price - oldest_image_price), 3),
+        "gap": gap,
         "body_ave": body_ave,
         "move_abs": move_ave,
     }
 
     # ■　形状を判定する（テスト）
-    type_info = range_direction_inspection_pattern(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
-    ans_dic["type_info"] = type_info
+    type_info_dic = range_direction_inspection_pattern(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
+    ans_dic["union_info_support_dic"] = type_info_dic
 
     return(ans_dic)
 
@@ -316,33 +353,85 @@ def compare_ranges(oldest_ans, latest_ans, now_price):
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
-            ans_info = {"return_ratio": return_ratio, "bunbo_gap": oldest_ans['gap'],
-                        "oldest_old": oldest_ans["oldest_price"], "oldest_late": oldest_ans["latest_price"],
-                        "latest_old": latest_ans["oldest_price"], "latest_late": latest_ans["latest_price"],
-                        "latest_old_img": latest_ans["oldest_image_price"], "latest_late_img": latest_ans["latest_image_price"],
-                        "oldest_old_img": latest_ans["oldest_image_price"], "oldest_late_img": latest_ans["latest_image_price"],
-                        "direction": latest_ans["direction"],
-                        "mid_price": now_price, "oldest_count": oldest_ans["count"], "latest_count": latest_ans['count'],
+            ans_info = {"return_ratio": return_ratio, "mid_price": now_price,
                         "oldest_ans": oldest_ans, "latest_ans": latest_ans}
             max_return_ratio = 50
             if return_ratio < max_return_ratio:
                 # print("  達成")
-                return {"ans": 1, "ans_info": ans_info, "memo": "達成"}
+                return {"union_ans": 1, "union_info": ans_info, "memo": "達成"}
             else:
                 # print("  戻りNG")
-                return {"ans": 0, "ans_info": ans_info, "memo": "戻り大"}
+                return {"union_ans": 0, "union_info": ans_info, "memo": "戻り大"}
         else:
             # print("  カウント未達")
-            return {"ans": 0, "ans_info": {}, "memo": "カウント未達"}
+            # ↓検証テスト用
+            ans_info = {"return_ratio": 0, "mid_price": now_price,
+                        "oldest_ans": oldest_ans, "latest_ans": latest_ans}
+
+            return {"union_ans": 0, "union_info": ans_info, "memo": "カウント未達"}
     else:
         # print("  同方向")
-        return {"ans": 0, "ans_info": {}, "memo": "同方向"}
+        # ↓検証テスト用
+        ans_info = {"return_ratio": 0, "mid_price": now_price,
+                    "oldest_ans": oldest_ans, "latest_ans": latest_ans}
+        return {"union_ans": 0, "union_info": ans_info, "memo": "同方向"}
 
 
-def make_stop_order():
+def macd_judge(data_df):
     """
-    指定の価格に順張りを入れる。もし現在価格がふさわしくない場合は、現在価格を基準に入れる
+    データフレームをもらい、Macdを付与。
+    直近からN個以内のクロスの有無、値を算出
     :return:
     """
+    n = 5  # n個以内にMacdのクロスがあるかを検討する
+    data_r_df = data_df.sort_index(ascending=False)  # 上が新しいデータにする
+    # data_r_df.to_csv(tk.folder_path + 'macd52.csv', index=False, encoding="utf-8")  # 直近保存用
+    latest_r_5 = data_r_df.head(n)  # 先頭の５列だけを取得する
+    # クロスがあるかを確認する
+    cross = 0  # 初期値を入れておく
+    counter = 0
+    for index, item in latest_r_5.iterrows():
+        if item['macd_cross'] != 0:
+            #Crossを発生があった場合、その方向を取得する(０以外で存在があることを確定させる）
+            cross = item['macd_cross']
+            cross_mae = counter
+            break
+        counter = counter + 1
+    # 先頭のMACD値を取得する
+    macd = latest_r_5.iloc[0]['macd']
+
+    res = {
+        # 0行目は確立していないはずなので、除外。latestは１を利用する（算出もおかしいかもだけど）
+        "cross": cross,
+        "latest_cross": latest_r_5.iloc[1]['macd_cross'],
+        "latest_cross_time": latest_r_5.iloc[1]['time_jp'],
+        "cross_counter": counter,
+        "macd": macd,
+        "data": latest_r_5
+    }
+
+    return res
+
+# 【MACD情報を追加する】
+def add_macd(data_df):
+    """
+    新しいデータが下の状態（APIで取得した状態）
+    InstrumentsCandles_exeで取得したデータに基本情報を付与する（EMA＝移動平均線加重平均）
+    引数はInstrumentsCandles_exeで取得した情報。返却値は、それに下記列を付与した情報
+    """
+    data_df = data_df.copy()
+    data_df['macd_ema_s'] = data_df['close'].ewm(span=12).mean()  # 初期値３
+    data_df['macd_ema_l'] = data_df['close'].ewm(span=26).mean()  # 初期値６
+    data_df['macd'] = data_df['macd_ema_s'] - data_df['macd_ema_l']
+    data_df['macd_signal'] = data_df['macd'].ewm(span=9).mean()  # 初期値 2
+    data_df['macd_gap'] = data_df['macd'] - data_df['macd_signal']
+    data_df['macd_bool'] = data_df['macd'] > data_df['macd_signal']
+    dead = (data_df['macd_bool'] != data_df['macd_bool'].shift(1)) & (data_df['macd_bool'] == False)  # is は ==も可
+    gold = (data_df['macd_bool'] != data_df['macd_bool'].shift(1)) & (data_df['macd_bool'] == True)
+    data_df['macd_cross'] = [x + y * -1 for x, y in zip(gold, dead)]
+    return data_df
+
+
+
 
 
