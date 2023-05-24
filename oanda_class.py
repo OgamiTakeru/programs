@@ -102,24 +102,11 @@ class Oanda:
         except Exception as e:
             print("API_Error", e)
 
-    # (2)キャンドルデータを取得(5000行以内)
-    def InstrumentsCandles_multi_support_exe(self, instrument, params):
-        """
-        過去情報（ローソク）の取得 （これが基本的にAPIを叩く関数）
-        InstrumentsCandles_multi_exeから呼び出される専用
-        """
-        ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
-        res_json = self.api.request(ep)  # 結果をjsonで取得
-        data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
-        data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
-        # 返却
-        return data_df
-
-    # (3)キャンドルデータを取得(5000行以上/現在から)
+    # (2)キャンドルデータを取得(5000行以内/指定複雑)
     def InstrumentsCandles_exe(self, instrument, params):
         """
         過去情報（ローソク）の取得 （これが基本的にAPIを叩く関数）
-        呼び出し:oa.InstrumentsCandles_exe("USD_JPY",{"granularity": "M15","count": 30})　Countは最大5000。
+        呼び出し方:oa.InstrumentsCandles_exe("USD_JPY",{"granularity": "M15","count": 30})　Countは最大5000。
         返却値:Dataframe[time,open.close,high,low,time_jp]の4列
         :param instrument:"USD_JPY"
         :param params:引数はそのままAPIに渡される。辞書形式となる。
@@ -138,9 +125,10 @@ class Oanda:
         # 返却
         return data_df
 
-    # (4)キャンドルデータを取得(サポート専用。通常利用無し）
+    # (3)キャンドルデータを取得(5000行以上/現在から/指定簡単（現在USD固定）)
     def InstrumentsCandles_multi_exe(self, pair, params, roop):
         """
+        呼び出し方：oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
         過去情報をまとめて持ってくる【基本的にはこれを呼び出して過去の情報を取得する。InstrumentsCandles_exeとセット利用】
         なお、基本的にはMidの価格を取得する。AskやBidがほしい場合、
          oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50, "price": "B" }
@@ -167,6 +155,19 @@ class Oanda:
         data_df = add_bb_data(data_df)
         # data_df = self.add_peak(data_df)
 
+        # 返却
+        return data_df
+
+    # (4)キャンドルデータを取得(サポート専用。通常利用無し）
+    def InstrumentsCandles_multi_support_exe(self, instrument, params):
+        """
+        過去情報（ローソク）の取得 （これが基本的にAPIを叩く関数）
+        InstrumentsCandles_multi_exeから呼び出される専用
+        """
+        ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
+        res_json = self.api.request(ep)  # 結果をjsonで取得
+        data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
+        data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
         # 返却
         return data_df
 
@@ -1063,3 +1064,4 @@ def add_bb_data(data_df):
 
     # 返却
     return data_df
+

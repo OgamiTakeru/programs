@@ -301,7 +301,7 @@ def main_peak():
             # MACD解析
             latest_macd_r_df = dr[0: 30]  # 中間に重複のないデータフレーム
             latest_macd_df = latest_macd_r_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
-            latest_macd_df = f.add_macd(latest_macd_df)  # macdを追加
+            latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
             macd_ans = f.macd_judge(latest_macd_df)
 
             if ans_42["union_ans"] == 0:
@@ -370,7 +370,7 @@ def main_peak():
                 detail_from_time_dt = latest_row_time_dt + datetime.timedelta(minutes=0)  # 開始時刻は分単位で調整可
                 detail_from_time_iso = str(detail_from_time_dt.isoformat()) + ".000000000Z"  # API形式の時刻へ（ISOで文字型。.0z付き）
                 # ★★検証データの取得
-                detail_df = oa.InstrumentsCandles_each_exe("USD_JPY",
+                detail_df = oa.InstrumentsCandles_exe("USD_JPY",
                                                            {"granularity": 'S5', "count": int(detail_range_sec/5),
                                                             "from": detail_from_time_iso})  # ★★検証範囲の取得★★
                 detail_df.drop(columns=['time'], inplace=True)
@@ -483,7 +483,6 @@ def main_peak():
     #  通常より伸びた足を取得する（通常の３倍程度の足の後は、戻しが強いので、そこを取りたい）
     # mid_df['big_foot'] = mid_df['body_abs'].apply(lambda x: '1' if x>=0.025 else '0')
 
-    f.draw_graph(mid_df)
 
 
 gl = {
@@ -495,8 +494,8 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 5000,
-    "num": 3,  # candle
+    "candle_num": 500,
+    "num": 1,  # candle
     "candle_unit": "M5",
 }
 
@@ -505,7 +504,6 @@ def graph():
     pv_order = gl['p_order']  # 極値算出の幅
     # データの取得 and peak情報付加　＋　グラフ作成
     mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": gl['candle_unit'], "count": gl['candle_num']}, gl['num'])
-    mid_df = f.add_peak(mid_df, pv_order)
     mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
     f.draw_graph(mid_df)
 

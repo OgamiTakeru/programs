@@ -465,7 +465,7 @@ def inspection_candle(ins_condition):
     #MACD解析
     latest_macd_r_df = gl_data5r_df[0: 30]  # 中間に重複のないデータフレーム
     latest_macd_df = latest_macd_r_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
-    latest_macd_df = f.add_macd(latest_macd_df)  # macdを追加
+    latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
     macd_ans = f.macd_judge(latest_macd_df)
     macd_ans["data"].to_csv(tk.folder_path + 'macd5.csv', index=False, encoding="utf-8")  # 直近保存用
 

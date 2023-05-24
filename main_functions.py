@@ -412,24 +412,6 @@ def macd_judge(data_df):
 
     return res
 
-# 【MACD情報を追加する】
-def add_macd(data_df):
-    """
-    新しいデータが下の状態（APIで取得した状態）
-    InstrumentsCandles_exeで取得したデータに基本情報を付与する（EMA＝移動平均線加重平均）
-    引数はInstrumentsCandles_exeで取得した情報。返却値は、それに下記列を付与した情報
-    """
-    data_df = data_df.copy()
-    data_df['macd_ema_s'] = data_df['close'].ewm(span=12).mean()  # 初期値３
-    data_df['macd_ema_l'] = data_df['close'].ewm(span=26).mean()  # 初期値６
-    data_df['macd'] = data_df['macd_ema_s'] - data_df['macd_ema_l']
-    data_df['macd_signal'] = data_df['macd'].ewm(span=9).mean()  # 初期値 2
-    data_df['macd_gap'] = data_df['macd'] - data_df['macd_signal']
-    data_df['macd_bool'] = data_df['macd'] > data_df['macd_signal']
-    dead = (data_df['macd_bool'] != data_df['macd_bool'].shift(1)) & (data_df['macd_bool'] == False)  # is は ==も可
-    gold = (data_df['macd_bool'] != data_df['macd_bool'].shift(1)) & (data_df['macd_bool'] == True)
-    data_df['macd_cross'] = [x + y * -1 for x, y in zip(gold, dead)]
-    return data_df
 
 
 
