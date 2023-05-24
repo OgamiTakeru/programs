@@ -47,7 +47,8 @@ class Oanda:
     #  add_ema_data：指数移動平均線の列を付与
     #  add_bb_data：ボリンジャーバンドの列を付与
     # その他、
-    #  iso_to_jstdt_single / iso_to_jstdt：ISO時刻規格をJST時刻に変換
+    #  iso_to_jstdt_single / iso_to_jstdt：ISO時刻規格をJST時刻に変換（DateFrame用、個別用）
+    #  str_to_time：文字列時刻（2023/5/24  21:55:00）をDateTimeに変換（大小比較や加減算が可能になる）
     #  cal_past_time_single：経過時間の算出
     #  等の関数有
 
@@ -113,9 +114,12 @@ class Oanda:
             granularity:足幅。M1,M5,M15等。最小はS5（五秒足）
             count: 何行とるか。以下のtoを指定しない場合、直近からcount行を取得する
             price: 指定なし可。指定なしの場合AskとBidの中央価格（Mid）を取得。"A"でAsk価格、"B"でBid価格を取得
-            to:2023-01-02T10:30:00.000000000Z の形式で指定。この時間"まで"のcount行のデータを取得する。
-            from:2023-01-02T10:30:00.000000000Z の形式で指定。この時間"から"のcount行のデータを取得する。
+            to:2023-01-02T10:30:00.000000000Z の形式(ISOのEuro時間)で指定。この時間"まで"のcount行のデータを取得する。
+            from:2023-01-02T10:30:00.000000000Z の形式(ISOのEuro時間)で指定。この時間"から"のcount行のデータを取得する。
         :return:ここではmid列が辞書形式のままのデータフレーム
+        <参考>
+        DateTime⇒ISOへの変換は以下のように実施
+        detail_from_time_iso = str(detail_from_time_dt.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
         """
         ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
         res_json = self.api.request(ep)  # 結果をjsonで取得
@@ -909,6 +913,22 @@ def iso_to_jstdt_single(iso_str):  # ISO8601→JST変換関数
         return df
 
     return dt.strftime('%Y/%m/%d %H:%M:%S')  # 文字列に再変換
+
+
+def str_to_time(str_time):
+    """
+    時刻（文字列：2023/5/24  21:55:00　形式）をDateTimeに変換する。
+    何故かDFないの日付を扱う時、isoformat関数系が使えない。。なぜだろう。
+    :param str_time:
+    :return:
+    """
+    time_dt = datetime.datetime(int(str_time[0:4]),
+                                int(str_time[5:7]),
+                                int(str_time[8:10]),
+                                int(str_time[11:13]),
+                                int(str_time[14:16]),
+                                int(str_time[17:19]))
+    return time_dt
 
 
 # 注文系や確認系で利用する関数
