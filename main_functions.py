@@ -8,7 +8,6 @@ import plotly.graph_objects as go  # draw_graph
 
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
-import programs.main_functions as f  # とりあえずの関数集
 
 
 def draw_graph(mid_df):
@@ -166,7 +165,7 @@ def str_to_time(str_time):
     return time_dt
 
 
-def range_direction_inspection_pattern(data_df, direction, ans_info):
+def figure_inspection_support(data_df, direction, ans_info):
     """
     ここでのデータは、０行目が最新データ
     :param data_df:
@@ -263,10 +262,10 @@ def range_direction_inspection_pattern(data_df, direction, ans_info):
     }
 
 
-def range_direction_inspection(data_df_origin):
+def figure_inspection(data_df_origin):
     """
     渡された範囲で、何連続で同方向に進んでいるかを検証する
-    :param data_df: 直近が上側（日付降順/リバース）のデータを利用
+    :param data_df_origin: 直近が上側（日付降順/リバース）のデータを利用
     :return: Dict形式のデータを返伽
     """
     # コピーウォーニングのための入れ替え
@@ -319,6 +318,10 @@ def range_direction_inspection(data_df_origin):
         gap = gap
 
     # ■　一旦格納する
+    # 表示等で利用する用（機能としては使わない
+    memo_time = oanda_class.str_to_time_hms(ans_df.iloc[-1]["time_jp"]) + "_" + oanda_class.str_to_time_hms(
+        ans_df.iloc[0]["time_jp"])
+    # 返却用
     ans_dic = {
         "direction": base_direction,
         "count": counter+1,  # 最新時刻からスタートして同じ方向が何回続いているか
@@ -327,21 +330,22 @@ def range_direction_inspection(data_df_origin):
         "latest_image_price": latest_image_price,
         "oldest_image_price": oldest_image_price,
         "oldest_time_jp": ans_df.iloc[-1]["time_jp"],
+        "latest_time_jp": ans_df.iloc[0]["time_jp"],
         "latest_price": ans_df.iloc[0]["close"],
         "oldest_price": ans_df.iloc[-1]["open"],
         "gap": gap,
         "body_ave": body_ave,
         "move_abs": move_ave,
+        "memo_time":memo_time
     }
 
     # ■　形状を判定する（テスト）
-    type_info_dic = range_direction_inspection_pattern(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
-    ans_dic["union_info_support_dic"] = type_info_dic
+    type_info_dic = figure_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
+    ans_dic["support_info"] = type_info_dic
+    return ans_dic
 
-    return(ans_dic)
 
-
-def compare_ranges(oldest_ans, latest_ans, now_price):
+def figure_judge(ins_condition):
     """
     old区間4,latest区間2の場合のジャッジメント
     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
@@ -349,47 +353,74 @@ def compare_ranges(oldest_ans, latest_ans, now_price):
     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
     :return:
     """
+    #
+    # ■直近データの形状の解析
+    data_r = ins_condition['data_r']  # データを格納
+    now_price = ins_condition['now_price']
+    ignore = ins_condition['figure']['ignore']  # ignore=1の場合、タイミング次第では自分を入れずに探索する（正）
+    dr_latest_n = ins_condition['figure']['latest_n']  # 2
+    dr_oldest_n = ins_condition['figure']['oldest_n']  # 10 ⇒30
+    # 各DFを解析
+    latest_df = data_r[ignore: dr_latest_n + ignore]  # 直近のn個を取得
+    oldest_df = data_r[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
+    latest_ans = figure_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する
+    oldest_ans = figure_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する
+
+    # 表示用がメインの情報まとめ
+    memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
+    memo_price = "(" + str(oldest_ans['oldest_price']) + "_" + str(latest_ans['latest_price']) + "," + str(oldest_ans['direction'])
+    memo_all = memo_time + memo_price
+    # 初期値があった方がいいもの（エラー対策）
+    return_ratio = 0
+    # 判定処理
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
-            ans_info = {"return_ratio": return_ratio, "mid_price": now_price,
-                        "oldest_ans": oldest_ans, "latest_ans": latest_ans}
             max_return_ratio = 50
             if return_ratio < max_return_ratio:
-                # print("  達成")
-                return {"union_ans": 1, "union_info": ans_info, "memo": "達成"}
+                union_ans = 1  # 達成
+                memo = "達成"
             else:
-                # print("  戻りNG")
-                return {"union_ans": 0, "union_info": ans_info, "memo": "戻り大"}
+                union_ans = 0  # 未達
+                memo = "戻大" + str(return_ratio)
         else:
-            # print("  カウント未達")
-            # ↓検証テスト用
-            ans_info = {"return_ratio": 0, "mid_price": now_price,
-                        "oldest_ans": oldest_ans, "latest_ans": latest_ans}
-
-            return {"union_ans": 0, "union_info": ans_info, "memo": "カウント未達"}
+            union_ans = 0  # 未達
+            memo = "カウント未達"
     else:
-        # print("  同方向")
-        # ↓検証テスト用
-        ans_info = {"return_ratio": 0, "mid_price": now_price,
-                    "oldest_ans": oldest_ans, "latest_ans": latest_ans}
-        return {"union_ans": 0, "union_info": ans_info, "memo": "同方向"}
+        union_ans = 0  # 未達
+        memo = "同方向"
+
+    # 返却用の辞書を作成
+    ans_dic = {
+        "union_ans": union_ans,
+        "latest_ans": latest_ans,
+        "oldest_ans": oldest_ans,
+        "return_ratio": return_ratio,
+        "memo": memo,
+        "memo_all": memo_all + "," + str(return_ratio) + ")",
+        "price": now_price
+    }
+
+    # Return
+    return ans_dic
 
 
 def macd_judge(data_df):
     """
     データフレームをもらい、Macdを付与。
+    データは関数内で降順（上が新しい）に変更するので、昇順降順どちらでもよい
     直近からN個以内のクロスの有無、値を算出
     :return:
     """
     n = 5  # n個以内にMacdのクロスがあるかを検討する
     data_r_df = data_df.sort_index(ascending=False)  # 上が新しいデータにする
-    # data_r_df.to_csv(tk.folder_path + 'macd52.csv', index=False, encoding="utf-8")  # 直近保存用
+
+    # ■直近N行で確認（クロスがあるかを確認する）
     latest_r_5 = data_r_df.head(n)  # 先頭の５列だけを取得する
-    # クロスがあるかを確認する
     cross = 0  # 初期値を入れておく
     counter = 0
+    cross_mae = 0
     for index, item in latest_r_5.iterrows():
         if item['macd_cross'] != 0:
             #Crossを発生があった場合、その方向を取得する(０以外で存在があることを確定させる）
@@ -400,19 +431,118 @@ def macd_judge(data_df):
     # 先頭のMACD値を取得する
     macd = latest_r_5.iloc[0]['macd']
 
-    res = {
-        # 0行目は確立していないはずなので、除外。latestは１を利用する（算出もおかしいかもだけど）
+    # ■直近15行程度で確認 (Ranegeの判定となるか？）
+    latest_r_long = data_r_df.head(15)  # 先頭の５列だけを取得する
+    range_counter = 0
+    range_jg = 0
+    counter = 0
+    latest_cross_flag = 0
+    latest_cross_timing = 0
+    for index, item in latest_r_long.iterrows():
+        if item['macd_cross'] != 0:
+            #Crossを発生があった場合、回数をカウントする（Rangeの場合は頻発する）
+            range_counter = range_counter + 1
+            if latest_cross_flag == 0:
+                # 初回の発見の場合、
+                latest_cross_flag = 1
+                latest_cross_timing = counter
+        counter = counter + 1
+
+    # ■レンジ判定
+    if range_counter >=3:
+        range_jg = 1  # ３回以上短期間でクロス発生の場合はレンジと判断
+
+    macd_result = {
         "cross": cross,
-        "latest_cross": latest_r_5.iloc[1]['macd_cross'],
+        "cross_mae": cross_mae,
+        "latest_cross": latest_r_5.iloc[1]['macd_cross'],# 0行目は確立していないはずなので、除外。latestは１を利用する（算出もおかしいかもだけど）
         "latest_cross_time": latest_r_5.iloc[1]['time_jp'],
-        "cross_counter": counter,
         "macd": macd,
-        "data": latest_r_5
+        "data": data_r_df,
+        "range": range_jg,
+        "range_counter": range_counter,
+        "near_cross_timing": latest_cross_timing
     }
 
-    return res
+    return macd_result
 
 
+def inspection_candle(ins_condition):
+    """
+    オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
+    ins_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
+    """
+    #条件（引数）の取得
+    data_r = ins_condition['data_r']
+
+    # ■直近データの形状の解析
+    # 直近のデータの確認　LatestとOldestの関係性を検証する
+    figure_ans = figure_judge(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
+    print("")
+    # もう一つ前のデータの確認　(上記の成立があれば）
+    figure_range = 0  # 形状を繰り返す場合はNGとしたい
+    if figure_ans['union_ans'] == 1:
+        if figure_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
+            next_inspection_range = ins_condition['figure']['ignore'] + ins_condition['figure']['latest_n'] + \
+                                 figure_ans['oldest_ans']['count'] - 2
+            next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
+            ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
+            figure_ans2 = figure_judge(ins_condition)  # ★★ネクストの調査
+            if figure_ans2['union_ans'] == 1:
+                if figure_ans2['oldest_ans']['gap'] > figure_ans['oldest_ans']['gap']:
+                    print(" 発生&包括されていそう！")
+                    c_o_ans = 1
+                    c_o_memo = "包括関係の形状発生"
+                else:
+                    c_o_ans = 0
+                    c_o_memo = "包括ではなく、大きくなっている"
+        else:
+            c_o_ans = 0
+            c_o_memo = "前回は結構前"
+    else:
+        figure_ans2 = figure_ans.copy()  # めんどくさいからとりあえず入れておく。。
+        figure_ans2['memo'] = "前達成せず（同値）"
+        c_o_ans = 0
+        c_o_memo = "現在で発生無し"
+    # 現在と過去の形状で包括関係がある場合を考慮したもの
+    c_o_result = {
+        "c_o_ans": c_o_ans,
+        "c_o_memo": c_o_memo,
+    }
+
+    # ■MACDについての解析
+    latest_macd_r_df = data_r[0: 30]  # 中間に重複のないデータフレーム
+    latest_macd_df = oanda_class.add_macd(latest_macd_r_df)  # macdを追加（データは時間昇順！！！）
+    macd_result = macd_judge(latest_macd_df)
+
+
+    # ■■■■上記内容から、Positionの取得可否を判断する■■■■
+    if figure_ans['union_ans'] == 1 and macd_result['cross'] != 0 and macd_result['range'] != 1:  # 条件を満たす
+        # if oldest_ans['direction'] == macd_result['cross']:
+        #     ans = 1  # 買いフラグ
+        # else:
+        #     ans = 0 # 保留
+        ans = 1
+
+        # 保存が必要な場合は、保存を実施する
+        if ins_condition['save']:
+            figure_ans['latest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'latest.csv', index=False, encoding="utf-8")
+            figure_ans['oldest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'oldest.csv', index=False, encoding="utf-8")
+            macd_result["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'macd.csv', index=False, encoding="utf-8")
+    else:
+        # 条件を満たさない場合(通知用（必要に応じて））
+        if figure_ans['union_ans'] == 1:
+            ans = 1
+        else:
+            ans = 0
+
+        if figure_ans['union_ans'] == 1 or macd_result['cross'] != 0:  # 表示専用
+            if ins_condition['save']:
+                print("　■Fig:", figure_ans['union_ans'], ",Macd:", macd_result['cross'], "(", macd_result['cross_mae'], ",Range:", macd_result['range'])
+                print(macd_result['data'].head(5))
+    # print(figure_ans)
+    return {"judgment": ans, "figure_result": figure_ans, "figure_result2": figure_ans2, "figure_c_o": c_o_result,
+            "macd_result": macd_result }
 
 
 

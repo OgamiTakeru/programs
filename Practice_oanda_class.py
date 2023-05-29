@@ -15,6 +15,7 @@ import programs.tokens as tk  # Token等、各自環境の設定ファイル（g
 import programs.oanda_class as oanda_class
 from time import sleep
 import pytz
+from dateutil import tz
 
 class order_information:
     total_pips = 0  # クラス変数で管理
@@ -327,8 +328,16 @@ price_dic = oa.NowPrice_exe("USD_JPY")
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
 print(oa.NowPrice_exe("USD_JPY")['mid'])
 
+euro_time = datetime.datetime(2021, 4, 1, 20, 22, 33) - datetime.timedelta(hours=9)
+euro_iso = str(euro_time.isoformat()) + ".000000000Z"
+print(euro_iso)
+param = {"granularity": "M5", "count": 10, "to": euro_iso}
+
+print(oa.InstrumentsCandles_exe("USD_JPY", param))
+
+
 # ★データの取得（複数一括）
-mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count": 100}, 1)
+# mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count": 100}, 1)
 # mid_df.to_csv(tk.folder_path + 'TEST_DATA.csv', index=False, encoding="utf-8")
 # f.draw_graph(mid_df)  # グラフ化
 # print(mid_df)

@@ -17,15 +17,16 @@ import graphviz
 
 
 
-rescsv_path = 'C:/Users/taker/Desktop/testML.csv'
+rescsv_path = 'C:/Users/taker/Desktop/inspectionml.csv'
 df = pd.read_csv(rescsv_path, sep=",", encoding="utf-8")
 print(df)
 
 #学習用ラベルの削除と登録
+target_col = "first_arrive_lo"
 # X = df.drop(['future_gap'], axis=1)
 # Y = df['future_gap']
-X = df.drop(['ans'], axis=1)
-Y = df['ans']
+X = df.drop([target_col], axis=1)
+Y = df[target_col]
 (train_x, test_x ,train_y, test_y) = train_test_split(X, Y, test_size = 0.3,random_state=123)
 
 # 決定木での分析

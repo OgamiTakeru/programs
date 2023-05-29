@@ -79,13 +79,43 @@ class order_information:
         print("　　【ORDER】", self.order)
         print("　　【POSITION】", self.position)
 
-    def plan_info_input(self, info):  # plan_info を更新する＋過去の情報を保存しておく
-        self.plan_info_before = self.plan_info  # 過去情報を保存しておく
-        print("   plan代入")
-        # 空のデータがBeforeにうわがきされる事態は発生しているので、
-        self.plan_info = info  # 現在情報新規の情報を記入する
+    def plan_info_input(self, info):  # plan_info を更新する＋過去の情報を保存しておく(plan_input_and_judge_newからのみ呼ばれる）
+        # ■初回は何も入っていない
+        if "judgment" in self.plan_info:
+            print(" NOT初")
+        else:
+            self.plan_info = info
+            print(" 初回★★")
 
-    def plan_input(self, plan):
+        # ■重大処理
+        self.plan_info_before = self.plan_info  # 過去情報を保存しておく
+        self.plan_info = info  # 現在情報新規の情報を記入する
+        # 新規のオーダーを受け入れるかを、過去の情報(Info)を元に検討する
+
+    def input_info_and_judge_new(self, new_info):  # accept_new_order
+        """
+        新規オーダーのエントリーとみなされたタイミングで呼び出される関数。実施事項は以下の通り
+        ①前回のオーダーから時間的な意味で、新規オーダーを入れてもいいかの判断を行う
+        ②新規オーダーが時間的にOKの場合、オーダー情報を最新に更新。　さらに、詳細を確認して新規を入れるかを検討する。
+        """
+        # ■時間的な制約で連続して入らないように(こっちは必須的な条件⇒同一足で毎回発生する可能性があるため)
+        wait_time_new = 6  # ６分以上で、上書きオーダーの受け入れが可能のフラグを出せる。
+        if 0 < self.order['time_past_continue'] < wait_time_new * 60:  # 0の場合はTrueなるので、不等号に＝はNG。オーダー発行時比較
+            # print(" □発行直後のオーダー等、発行できない理由あり")
+            print("時間不可")
+            new_order = False
+        else:
+            self.plan_info_input(new_info)  # 時間的に問題なければ、入れておく（2023時点、ひとつ前の山と比較するため、必要）
+            new_order = True  # 最初はこっちに行く（初期では基本こっち）
+
+        return new_order
+
+    def order_registration(self, plan):
+        """
+        オーダー情報をクラスに登録する（保存する）
+        :param plan:
+        :return:
+        """
         self.reset()
         self.plan = plan
         # r_order = {
@@ -236,7 +266,8 @@ class order_information:
             self.order['id'] = temp['order_id']
             self.order['time_str'] = temp['order_time']  # 日時（日本）の文字列版（時間差を求める場合に利用する）
             self.order['time_past'] = int(temp['order_time_past'])  # 諸事情でプラス２秒程度ある　経過時間を求める（Trueの場合）
-            self.order['time_past_continue'] = oa.cal_past_time_single(self.order['time_str'])  # 引数は元データ(文字列時刻)
+            self.order['time_past_continue'] = oanda_class.cal_past_time_single(self.order['time_str'])
+            # ↑ 引数は元データ(文字列時刻)。オーダーを解除しても継続してカウントする秒数
             self.order['units'] = int(temp['order_units'])
             self.order['price'] = float(temp['order_price'])
             self.order['state'] = temp['order_state']
@@ -246,7 +277,7 @@ class order_information:
             self.position['id'] = temp['position_id']
             self.position['time_str'] = temp['position_time']
             self.position['time_past'] = int(temp['position_time_past'])  # 諸事情でプラス２秒程度ある
-            self.position['time_past_continue'] = oa.cal_past_time_single(self.position['time_str'])
+            self.position['time_past_continue'] = oanda_class.cal_past_time_single(self.position['time_str'])
             self.position['price'] = float(temp['position_price'])
             self.position['units'] = 0  # そのうち導入したい
             self.position['state'] = temp['position_state']
@@ -282,39 +313,13 @@ class order_information:
             # オーダーからの時間は継続して取得する（ただし初期値０だとうまくいかないので除外）
             if "time_str" in self.order:
                 # print("")
-                self.order['time_past_continue'] = oa.cal_past_time_single(self.order['time_str'])  # 諸事情で＋２秒程度ある
+                self.order['time_past_continue'] = oanda_class.cal_past_time_single(self.order['time_str'])  # 諸事情で＋２秒程度ある
             else:
                 self.order['time_past_continue'] = 0
             if "time_str" in self.position:
-                self.position['time_past_continue'] = oa.cal_past_time_single(self.position['time_str'])
+                self.position['time_past_continue'] = oanda_class.cal_past_time_single(self.position['time_str'])
             else:
                 self.position['time_past_continue'] = 0
-
-    def accept_new_order(self, new_info):
-        # print(" accept[time]", self.order['time_past_continue'])
-        # 新規オーダーを受け入れるかどうか（時間的[秒指定]な物、リオーダーフラグがあるかどうか）。新規オーケーの場合、Trueを返却
-        wait_time_new = 6  # ６分以上で、上書きオーダーの受け入れが可能のフラグを出せる。
-        if 0 < self.order['time_past_continue'] < wait_time_new * 60:  # 0の場合はTrueになるので、不等号に＝はNG。
-            # print(" □発行直後のオーダー等、発行できない理由あり")
-            new_order = False
-        else:
-            new_order = True  # 最初はこっちに行く（初期では基本こっち）
-
-        # ■試し　20分以内に、現オーダー発行時のOldestGapと今回（引数）のGapを比較して、半分以下の場合は、キャンセル
-        # print("    NAZE", self.plan_info_before, new_info['ans_info'])
-        # if "gap" in self.plan_info_before and 'gap' in new_info['ans_info']:  # 初回はない可能性あり
-        #     old_gap = self.plan_info_before['gap']
-        #     new_gap = new_info['ans_info']['gap']
-        #     print(" accept[gap]", old_gap, new_gap, old_gap / 2)
-        #     if 0 < self.order['time_past_continue'] < 30 * 60 and self.plan_info_before['gao'] / 2 > new_gap:
-        #         print("    今回のGAP小さすぎ")
-        #         tk.line_send("★★今回ちいさすぎ”””")
-        #         new_order = False
-        #     else:
-        #         tk.line_send("★★f")
-        #         pass
-
-        return new_order
 
     def lc_change(self):  # ポジションのLC底上げを実施 (基本的にはUpdateで平行してする形が多いかと）
         p = self.position
@@ -410,7 +415,6 @@ class order_information:
             pass
 
 
-
 def order_line_adjustment(base_line, margin, now_d, type):
     """
     ベース価格にマージンを付けた額（＝希望価格）を計算。
@@ -436,47 +440,10 @@ def order_line_adjustment(base_line, margin, now_d, type):
     return round(base_line, 3)
 
 
-def inspection_candle(ins_condition):
-    """
-    オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
-    ins_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
-    返却値：辞書形式で以下を返却
-    inspection_ans: オーダー発行有無（０は発行無し。０以外は発行あり）
-    datas: 更に辞書形式が入っている
-            ans: ０がオーダーなし
-            orders: オーダーが一括された辞書形式
-            info: 戻り率等、共有の情報
-            memo: メモ
-    """
-    # 直近データの解析
-    ignore = ins_condition['ignore']  # ignore=1の場合、タイミング次第では自分を入れずに探索する（正）
-    dr_latest_n = ins_condition['latest_n']  # 2
-    dr_oldest_n = 10
-    latest_df = gl_data5r_df[ignore: dr_latest_n + ignore]  # 直近のn個を取得
-    oldest_df = gl_data5r_df[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
-    # print("  [ins_can]", latest_df.iloc[0]["time_jp"], latest_df.iloc[-1]["time_jp"])
-    # Latestの期間を検証する
-    latest_ans = f.range_direction_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-    # Oldestの期間を検証する
-    oldest_ans = f.range_direction_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-    # LatestとOldestの関係性を検証する
-    ans = f.compare_ranges(oldest_ans, latest_ans, gl_now_price_mid)  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
-
-    #MACD解析
-    latest_macd_r_df = gl_data5r_df[0: 30]  # 中間に重複のないデータフレーム
-    latest_macd_df = latest_macd_r_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
-    latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
-    macd_ans = f.macd_judge(latest_macd_df)
-    macd_ans["data"].to_csv(tk.folder_path + 'macd5.csv', index=False, encoding="utf-8")  # 直近保存用
-
-    return {"union_ans": ans["union_ans"], "union_info": ans["union_info"], "memo": ans['memo'],
-            "macd_info":macd_ans}
-
-
 def order_setting(ans_dic):
     """
     検証し、条件達成でオーダー発行
-    :param tc: ターゲットとなるクラスのインスタンス
+    :param ans_dic: ターゲットとなるクラスのインスタンス
     :return:
     """
 
@@ -484,20 +451,25 @@ def order_setting(ans_dic):
 
     # 共通的な物
     gl_trade_num = gl_trade_num + 1
-    line_base = ans_dic['union_info']['latest_ans']['latest_price']  # 基準となる価格（=直近のクローズ価格）
-    direction_old = ans_dic['union_info']['oldest_ans']['direction']  # Oldの方向
-    direction_latest = ans_dic['union_info']['latest_ans']['direction']  # 直近の方向
-    moves = ans_dic['union_info']['oldest_ans']['move_abs']  # old区間の各足の平均移動距離
-    moves_latest = ans_dic['union_info']['latest_ans']['move_abs']  # latest区間の各足の平均移動距離
-    old_gap = ans_dic['union_info']['oldest_ans']['gap']  # old区間の立幅
-    direction_latest = ans_dic['union_info']['latest_ans']['direction']  # old区間の立幅
-    macd_cross = ans_dic['macd_info']['cross']
-    macd =round(ans_dic['macd_info']['macd'], 3)
-    macd_latest_cross = ans_dic['macd_info']['latest_cross']
-    macd_time = ans_dic['macd_info']['latest_cross_time']
+    latest_ans = ans_dic['figure_result']['latest_ans']  # 短縮用
+    oldest_ans = ans_dic['figure_result']['oldest_ans']  # 短縮用
 
-    # Rangeが見込まれるかの判断
-    range_trend = ans_dic['union_info']['latest_ans']['union_info_support_dic']['range_expected']
+    # Figureからの情報
+    line_base = latest_ans['latest_price']  # 基準となる価格（=直近のクローズ価格）
+    direction_latest = latest_ans['direction']  # 直近の方向
+    moves_latest = latest_ans['move_abs']  # latest区間の各足の平均移動距離
+    direction_old = oldest_ans['direction']  # Oldの方向
+    moves = oldest_ans['move_abs']  # old区間の各足の平均移動距離
+    old_gap = oldest_ans['gap']  # old区間の立幅
+    # MACDの情報
+    macd_cross = ans_dic['macd_result']['cross']
+    macd =round(ans_dic['macd_result']['macd'], 3)
+    macd_latest_cross = ans_dic['macd_result']['latest_cross']
+    macd_time = ans_dic['macd_result']['latest_cross_time']
+    near_cross_timing = ans_dic['macd_result']['near_cross_timing']
+
+    # ■ポジションの方向を決定する（Range[逆思想]かTrend[順思想]か）
+    range_trend = latest_ans['support_info']['range_expected']
     if range_trend == 1:  # 順思想に行く場合
         if old_gap > 0.15:  # 15pips以上の変動後の場合
             mes = "Trend予想(大変動後のrange形状)"
@@ -508,9 +480,11 @@ def order_setting(ans_dic):
     else:  # Trend予想＝latestの方向に行く
         mes = "Trend予想"
         position_d = direction_old
+    # 現在はとりあえず、Old方向をそのまま採用に上書きする
+    position_d = direction_old
 
-    # 順張り用のオーダー（辞書形式）を作成する
-    # （別途準備中）　当面は直近価格で。
+    # ■価格を決定する
+    # 順張り用のオーダー（辞書形式）を作成する　⇒　（別途準備中）　当面は直近価格で。
     line_base = order_line_adjustment(line_base, 0.01, position_d, "STOP")  # ここでのSTOPは順思想（逆張り）
 
     # オーダー発行
@@ -526,16 +500,15 @@ def order_setting(ans_dic):
     }
     fw.update_information()  # timepast等を埋めるため、まずupdateが必要
     # オーダー発行
-    fw.plan_info_input(ans_dic['union_info'])  # プランの情報を代入
-    fw.plan_input(order_info)  # プラン自身を代入
+    fw.order_registration(order_info)  # プラン自身を代入
     fw.make_order()
-    mes = mes + " baseline:" + str(line_base) + "MACD" + str(macd_cross) + "," + str(macd) + "," + str(macd_latest_cross) + "," + str(macd_time)
-    if ans_dic['union_info']['oldest_ans']['direction'] == ans_dic['macd_info']['cross']:
+    mes = mes + " baseline:" + str(line_base) + "MACD" + str(macd_cross) + "," + str(macd) + "," + str(near_cross_timing) + "," + str(macd_time)
+    if direction_old == macd_cross:
         mes = mes + "順方向＝MACDクロス方向"
     else:
         mes = mes + "★特殊ケースの可能性（順方向とMACDクロス方向が異なる）"
 
-    tk.line_send("■折返Position！", gl_trade_num, "回目,", round(ans_dic['union_info']['return_ratio'], 0), "%戻,",
+    tk.line_send("■折返Position！", gl_trade_num, "回目,", round(ans_dic['figure_result']['return_ratio'], 0), "%戻,",
                  "大局向き(old):", direction_old, ",Old縦幅:", str(old_gap),
                  datetime.datetime.now().replace(microsecond=0), mes)
 
@@ -551,24 +524,32 @@ def mode1():
     fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
 
     # チャート分析結果を取得する
-    ans_dic = inspection_candle({"ignore": 1, "latest_n": 2})  # 状況を検査する（買いフラグの確認）
+    inspection_condition = {
+        "now_price": gl_now_price_mid,  # 現在価格を渡す
+        "data_r": gl_data5r_df,  # 対象となるデータ
+        "figure": {"ignore": 1, "latest_n": 2, "oldest_n": 30},
+        "macd": {"short": 20, "long": 30},
+        "save": True,  # データをCSVで保存するか（検証ではFalse推奨。Trueの場合は下の時刻は必須）
+        "time_str": gl_now_str,  # 記録用の現在時刻
+    }
+    ans_dic = f.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
 
-    # 新規オーダーの発行可否を確認する
-    new_arrow_flag = fw.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える(引数は結果的に利用無し）
-    # new_stop_arrow_flag = fw_stop.accept_new_order(ans_dic)  # 今回の情報を渡し、新規を行けるかどうかも考える
-    if new_arrow_flag:
-        # オーダー許可が出ている場合。
-        if ans_dic['union_ans'] == 1 and ans_dic['macd_info']['cross'] != 0:  # 条件を満たす
-            if ans_dic['union_info']['oldest_ans']['direction'] == ans_dic['macd_info']['cross']:
-                order_setting(ans_dic)  # オーダーをセットする
+    if ans_dic['figure_c_o']['c_o_ans'] == 1:
+        tk.line_send("連続的なFigureの発生", ans_dic['figure_c_o']['c_o_memo'])
+
+    # 新規オーダーのエントリータイミングと判断された場合（Candleデータから）
+    if ans_dic['judgment'] == 1 and ans_dic['figure_c_o']['c_o_ans'] != 0:  # 条件を満たす場合は、オーダーを準備
+        new_jd = fw.input_info_and_judge_new(ans_dic)  # 情報を入れつつ、新規オーダーを入れるかを判定する
+        if new_jd:
+            order_setting(ans_dic)  # オーダーをセットする
     else:
-        print("   mode1:NoNew", new_arrow_flag)
+        pass
 
 
 def mode2():
     global gl_exe_mode
-    fw.update_information()
-    fw_stop.update_information()
+    # fw.update_information()
+    # fw_stop.update_information()
     # rv_stop.update_information()
 
     print(" Mode2")
@@ -600,6 +581,7 @@ def exe_manage():
     time_hour = gl_now.hour  # 現在時刻の「時」のみを取得
     time_min = gl_now.minute  # 現在時刻の「分」のみを取得
     time_sec = gl_now.second  # 現在時刻の「秒」のみを取得
+
     # グローバル変数の宣言（編集有分のみ）
     global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df, gl_first
 
@@ -607,7 +589,7 @@ def exe_manage():
     if 3 <= time_hour < 6:
         if gl_midnight_close_flag == 0:  # 繰り返し実行しないよう、フラグで管理する
             oa.OrderCancel_All_exe()
-            oa.TradeAllColse_exe("try")
+            oa.TradeAllClose_exe()
             tk.line_send("■深夜のポジション・オーダー解消を実施")
             gl_midnight_close_flag = 1  # 実施済みフラグを立てる
     # ■実行を行う
@@ -654,11 +636,13 @@ def exe_loop(interval, fun, wait=True):
     :param wait: True固定
     :return: なし
     """
-    global gl_now
+    global gl_now, gl_now_str
     base_time = time.time()
     while True:
         # 現在時刻の取得
         gl_now = datetime.datetime.now().replace(microsecond=0)  # 現在の時刻を取得
+        gl_now_str = str(gl_now.month).zfill(2) + str(gl_now.day).zfill(2) + "_" + \
+                     str(gl_now.hour).zfill(2) + str(gl_now.minute).zfill(2) + "_" + str(gl_now.second).zfill(2)
         t = threading.Thread(target=fun)
         t.start()
         if wait:  # 時間経過待ち処理？
@@ -685,6 +669,7 @@ gl_arrow_spread = 0.008  # 実行を許容するスプレッド　＠ここ以�
 gl_first = 0
 # 変更あり群
 gl_now = 0  # 現在時刻（ミリ秒無し） @exe_loopのみで変更あり
+gl_now_str = ""
 gl_now_price_mid = 0  # 現在価格（念のための保持）　@ exe_manageでのみ変更有
 gl_midnight_close_flag = 0  # 深夜突入時に一回だけポジション等の解消を行うフラグ　＠time_manageのみで変更あり
 gl_exe_mode = 0  # 実行頻度のモード設定　＠

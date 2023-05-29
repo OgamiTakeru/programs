@@ -101,7 +101,8 @@ class Oanda:
             return res_dic
 
         except Exception as e:
-            print("API_Error", e)
+            print("API_Error（価格情報取得)", datetime.datetime.now().replace(microsecond=0))
+            return e
 
     # (2)キャンドルデータを取得(5000行以内/指定複雑)
     def InstrumentsCandles_exe(self, instrument, params):
@@ -114,12 +115,17 @@ class Oanda:
             granularity:足幅。M1,M5,M15等。最小はS5（五秒足）
             count: 何行とるか。以下のtoを指定しない場合、直近からcount行を取得する
             price: 指定なし可。指定なしの場合AskとBidの中央価格（Mid）を取得。"A"でAsk価格、"B"でBid価格を取得
-            to:2023-01-02T10:30:00.000000000Z の形式(ISOのEuro時間)で指定。この時間"まで"のcount行のデータを取得する。
+            to:2023-01-02T10:30:00.000000000Z の形式(ISOのEuro時間 JST-9)で指定。この時間"まで"のcount行のデータを取得する。
             from:2023-01-02T10:30:00.000000000Z の形式(ISOのEuro時間)で指定。この時間"から"のcount行のデータを取得する。
         :return:ここではmid列が辞書形式のままのデータフレーム
         <参考>
-        DateTime⇒ISOへの変換は以下のように実施
-        detail_from_time_iso = str(detail_from_time_dt.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+        ①指定した日本時刻をEuro時間に変更
+        euro_time_datetime = datetime.datetime(2021, 4, 1, 20, 22, 33) - datetime.timedelta(hours=9)
+        ②DateTime⇒ISOへの変換は以下のように実施
+        euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+        ③Json例
+        param = {"granularity": "M5", "count": 10, "to": euro_time_datetime_iso}
+        oa.InstrumentsCandles_exe("USD_JPY", param)
         """
         ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
         res_json = self.api.request(ep)  # 結果をjsonで取得
@@ -328,8 +334,7 @@ class Oanda:
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             return res_json
         except Exception as e:
-            print(e)
-            print("★★APIエラーFIN")
+            print("★★APIエラー（Detail）", datetime.datetime.now().replace(microsecond=0))
             return {"error": e}
 
     # (9)指定のオーダーのステータス（オーダーとトレードの詳細）を取得
@@ -931,6 +936,18 @@ def str_to_time(str_time):
     return time_dt
 
 
+def str_to_time_hms(str_time):
+    """
+    時刻（文字列：2023/5/24  21:55:00　形式）をDateTimeに変換する。
+    基本的には表示用。時刻だけにする。
+    :param str_time:
+    :return:
+    """
+    time_str = str_time[11:13] + ":" + str_time[14:16] + ":" + str_time[17:19]
+
+    return time_str
+
+
 # 注文系や確認系で利用する関数
 def cal_past_time(x):
     """
@@ -999,6 +1016,8 @@ def add_basic_data(data_df):
     # print(data_df.columns.values)
     data_df.drop(['complete'], axis=1, inplace=True)  # 不要項目の削除（volumeってなに）
     data_df.drop(['mid'], axis=1, inplace=True)
+    # JIT時刻を非表示にしたいけれど。。
+    data_df.drop(['time'], axis=1, inplace=True)
     # 返却zf
     return data_df
 
@@ -1008,8 +1027,11 @@ def add_macd(data_df):
     """
     InstrumentsCandles_exeで取得したデータ（最新時刻が下にある降順データ）に情報を付与する。
     引数はInstrumentsCandles_exeで取得したデータフレーム。返却値は、それに下記列を付与した情報
+    データが時間降順(最維が上）だとおかしくなるので、最初に必ず時間の昇順（直近が下＝取得時まま）に直す
+    よって、返り値は昇順（最新が下）のデータ
     """
     data_df = data_df.copy()  # 謎のスライスウォーニング対策
+    data_df = data_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
     data_df['macd_ema_s'] = data_df['close'].ewm(span=12).mean()  # 初期値３
     data_df['macd_ema_l'] = data_df['close'].ewm(span=26).mean()  # 初期値６
     data_df['macd'] = data_df['macd_ema_s'] - data_df['macd_ema_l']

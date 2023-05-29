@@ -6,6 +6,7 @@ from numpy import linalg as LA
 import numpy as np
 import datetime
 import math
+import matplotlib.pyplot as plt
 
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.oanda_class as oanda_class
@@ -22,12 +23,19 @@ def range_judge(dr):
     # print(dr.head(5))
 
 
-def info_from_df(detail_df, latest_ans, oldest_ans, na, macd_ans):
+def info_from_df(detail_df, ans_dic, na):
     """
     与えられた５秒足のデータから、データを取得する
     :param detail_df:test
+    :param ans_dic 情報
     :return:
     """
+    # 変数の変換
+    latest_ans = ans_dic['figure_result']['latest_ans']
+    oldest_ans = ans_dic['figure_result']['oldest_ans']
+    # figure_union = ans_dic['figure_result']
+    macd_ans = ans_dic['macd_result']
+
     res_dic = {}  # 初期化
     print(detail_df.head(2))  # 検証データ取得！
     print(detail_df.tail(2))  # 検証データ取得！
@@ -142,109 +150,6 @@ def info_from_df(detail_df, latest_ans, oldest_ans, na, macd_ans):
     res_dic['ans_pips'] = ans_pips
     res_dic['ans_timing'] = ans_timing
 
-    # upper_gap = high_ins - latest_ans['latest_image_price']
-    # lower_gap = latest_ans['latest_image_price'] - low_ins
-    # #
-    # # if latest_ans['direction'] == 1:
-    # #     # 谷方向の場合
-    # #     if high_time_datetime < low_time_datetime:
-    # #         # 最初の到達は、「高い価格」
-    # #         if upper_gap >= lc:
-    # #             # LCに相当する場合
-    # #             # ⇒レンジ方向が正解（谷＋逆思想）
-    # #             ans = "Range〇"
-    # #         elif upper_gap < lc and lower_gap < tp:
-    # #             # LCにもTPにも相当しない場合
-    # #             ans = "NoCount"
-    # #         elif lower_gap >= tp:
-    # #             ans = "Trend〇"
-    # #     # 谷方向の場合
-    # #     if high_time_datetime > low_time_datetime:
-    # #         # 最初の到達は、「低い価格」
-    # #         if lower_gap >= lc:
-    # #             # LCに相当する場合
-    # #             # ⇒レンジ方向が正解（谷＋逆思想）
-    # #             ans = "Range〇"
-    # #         elif upper_gap < lc and lower_gap < tp:
-    # #             # LCにもTPにも相当しない場合
-    # #             ans = "NoCount"
-    # #         elif lower_gap >= tp:
-    # #             ans = "Trend〇"
-    # # else:
-    # #     # 山方向の場合
-    # #     if high_time_datetime < low_time_datetime:
-    # #         # 最初の到達はHigh側
-    # #         if upper_gap >= lc:
-    # #             # upperがLCを超える場合⇒Range
-    # #             ans = "Range〇"
-    # #         elif upper_gap < lc:
-    # #             # LCに最初到達しなかった場合
-    # #             if lower_gap < tp:
-    # #                 # どっちにも触れない場合
-    # #                 ans = "No"
-    # #             else:
-    # #                 # 最後にTPに触れる場合⇒Range
-    # #                 ans = "Range"
-    #
-    # # 順思想ベースで検討する
-    # if latest_ans['direction'] == 1:  # 谷形状の場合
-    #     if high_time_datetime < low_time_datetime:  # highの方が先に来る場合
-    #         if upper_gap > tp:
-    #             ans = "Win1"
-    #             ans_time = high_time_datetime
-    #         elif upper_gap < tp and lower_gap > lc:
-    #             ans = "Lose1"
-    #             ans_time = low_time_datetime
-    #         elif upper_gap < tp and lower_gap < lc:
-    #             ans = "No1"
-    #             ans_time = ""
-    #         else:
-    #             ans = "n"
-    #             ans_time = ""
-    #     else:
-    #         if lower_gap > lc:
-    #             ans = "Lose2"
-    #             ans_time = low_time_datetime
-    #         elif lower_gap < lc and upper_gap > tp:
-    #             ans = "Win2"
-    #             ans_time = high_time_datetime
-    #         elif lower_gap < lc and upper_gap < tp:
-    #             ans = "No2"
-    #             ans_time = ""
-    #         else:
-    #             ans = "n2"
-    #             ans_time = ""
-    # else:
-    #     if high_time_datetime < low_time_datetime:  # highの方が先に来る場合
-    #         if upper_gap > tp:
-    #             ans = "Win3"
-    #             ans_time = high_time_datetime
-    #         elif upper_gap < tp and lower_gap > lc:
-    #             ans = "Lose3"
-    #             ans_time = low_time_datetime
-    #         elif upper_gap < tp and lower_gap < lc:
-    #             ans = "No3"
-    #             ans_time = ""
-    #         else:
-    #             ans = "n3"
-    #             ans_time = ""
-    #     else:
-    #         if lower_gap > lc:
-    #             ans = "Lose4"
-    #             ans_time = low_time_datetime
-    #         elif lower_gap < lc and upper_gap > tp:
-    #             ans = "Win4"
-    #             ans_time = high_time_datetime
-    #         elif lower_gap < lc and upper_gap < tp:
-    #             ans = "No4"
-    #             ans_time = ""
-    #         else:
-    #             ans = "n4"
-    #             ans_time = ""
-    #
-    # res_dic["ress"] = ans
-    # res_dic['ress_time'] = ans_time
-
     # oldestRangeをそろえると、どうなるか
     ratio_base = 0.01
     temp_minus_ratio = round((res_dic['minus' + na] * ratio_base) / oldest_ans['gap'], 3)
@@ -285,74 +190,84 @@ def main_peak():
             # 関連情報の取得（必須）]
             # print("★")
             index_graph = d.index.values[-1]  # インデックスを確認
-            dr = d.sort_index(ascending=False)  # ★dが毎回の取得と同義⇒それを逆にする（逆を意味するrをつける）
+            dr = d.sort_index(ascending=False)  # ★dが毎回の取得と同義⇒それを逆(最新が上)にする（逆を意味するrをつける）
 
-            # 4-2
-            ignore = 1  # 最初（現在を意味する）
-            dr_latest_n = 2
-            dr_oldest_n = 30
-            latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
-            oldest_df = dr[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
-            latest_ans = f.range_direction_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
-            oldest_ans = f.range_direction_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
-            ans_42 = f.compare_ranges(oldest_ans, latest_ans, dr.iloc[0]['open'])  # 引数の順番に注意！（左がOldest）⇒注文価格情報を取得
+            # ■直近のデータから、分析を実施する
+            inspection_condition = {
+                "now_price": dr.iloc[0]['open'],  # 現在価格を渡す
+                "data_r": dr,  # 時刻降順（直近が上）のデータを渡す
+                "figure": {"ignore": 1, "latest_n": 2, "oldest_n": 30},
+                "macd": {"short": 20, "long": 30},
+                "save": False,  # データをCSVで保存するか（検証ではFalse推奨。Trueの場合は以下は必須）
+                "time_str": "",  # 記録用の現在時刻
+            }
+            ans_dic = f.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
+            # ignore = 1  # 最初（現在を意味する）
+            # dr_latest_n = 2
+            # dr_oldest_n = 30
+            # latest_df = dr[ignore: dr_latest_n + ignore]  # 直近のn個を取得
+            # oldest_df = dr[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
+            # latest_ans = f.range_direction_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
+            # oldest_ans = f.range_direction_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+            # ans_42 = f.compare_ranges(oldest_ans, latest_ans, dr.iloc[0]['open'])  # 引数の順番に注意！（左がOldest）⇒注文価格情報を取得
+            #
+            # # MACDを検討する
+            # # MACD解析
+            # latest_macd_r_df = dr[0: 30]  # 中間に重複のないデータフレーム
+            # latest_macd_df = latest_macd_r_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
+            # latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
+            # macd_ans = f.macd_judge(latest_macd_df)
 
-            # MACDを検討する
-            # MACD解析
-            latest_macd_r_df = dr[0: 30]  # 中間に重複のないデータフレーム
-            latest_macd_df = latest_macd_r_df.sort_index(ascending=True)  # 一回正順に（下が新規に）
-            latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
-            macd_ans = f.macd_judge(latest_macd_df)
+            # if ans_42["union_ans"] == 0:
+            #     # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
+            #     pass
 
-            if ans_42["union_ans"] == 0:
-                # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
-                pass
-            if ans_42["union_ans"] == 1 or macd_ans['cross'] != 0:
+            if ans_dic['judgment'] != 0:
                 # タイミング発生★★★！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
                 print("★★★★")
-                print(latest_df.iloc[0]["time_jp"])
-                print(latest_ans['data'])
-
-                # ★★★★検証フェーズ
-                # 結果格納用
+                # ★★★★変数の入れ替え（深くなるため、コード短縮化の為）
+                print(ans_dic['figure_result'])
+                figure_latest = ans_dic['figure_result']['latest_ans']
+                figure_oldest = ans_dic['figure_result']['oldest_ans']
+                figure_union = ans_dic['figure_result']
+                macd = ans_dic['macd_result']
+                # ★★★★検証
                 each_res_dic = {
-                    "entry_time": latest_df.iloc[0]["time_jp"],
-                    "union_ans": ans_42['union_ans'],
-                    "oldest_range": oldest_ans['gap'],
-                    "oldest_count": oldest_ans['count'],
-                    "oldest_oldest": oldest_ans['oldest_price'],
-                    "oldest_latest": oldest_ans['latest_price'],
-                    "oldest_oldest_image_price": oldest_ans['oldest_image_price'],
-                    "oldest_latest_image_price": oldest_ans['latest_image_price'],
-                    "oldest_body": oldest_ans['union_info_support_dic']["body_ave"],
-                    "oldest_move": oldest_ans['union_info_support_dic']["move_abs"],
-                    # "old_high": oldest_ans['high_price'],
-                    # "old_low": oldest_ans['low_price'],
-                    "latest_range": latest_ans['gap'],
-                    "latest_count": latest_ans['count'],
-                    "latest_oldest": latest_ans['oldest_price'],
-                    "latest_latest": latest_ans['latest_price'],
-                    "latest_oldest_image_price": latest_ans['oldest_image_price'],
-                    "latest_latest_image_price": latest_ans['latest_image_price'],
-                    "latest_body": latest_ans['union_info_support_dic']["body_ave"],
-                    "latest_move": latest_ans['union_info_support_dic']["move_abs"],
-                    # "latest_high": latest_ans['high_price'],
-                    # "latest_low": latest_ans['low_price'],
-                    "direction_latest": latest_ans['direction'],
-                    "return_ratio": ans_42['union_info']['return_ratio'],
-                    "pattern_num": latest_ans['union_info_support_dic']["pattern_num"],
-                    "pattern_num_abs": abs(latest_ans['union_info_support_dic']["pattern_num"]),
-                    "pattern": latest_ans['union_info_support_dic']["pattern_comment"],
-                    "range_judge": latest_ans['union_info_support_dic']["range_expected"],
-                    "macd": macd_ans['macd'],
-                    "macd_mae": macd_ans['cross_counter'],
-                    "macd_cross": macd_ans['cross'],
-                    "macd_cross_latest": macd_ans['latest_cross'],
-                    "macd_cross_time": macd_ans['latest_cross_time']
+                    "entry_time": figure_latest['data'].iloc[0]["time_jp"],
+                    "union_ans": ans_dic['figure_result']['union_ans'],
+                    "oldest_range": figure_oldest['gap'],
+                    "oldest_count": figure_oldest['count'],
+                    "oldest_oldest": figure_oldest['oldest_price'],
+                    "oldest_latest": figure_oldest['latest_price'],
+                    "oldest_oldest_image_price": figure_oldest['oldest_image_price'],
+                    "oldest_latest_image_price": figure_oldest['latest_image_price'],
+                    "oldest_body": figure_oldest['support_info']["body_ave"],
+                    "oldest_move": figure_oldest['support_info']["move_abs"],
+                    "latest_range": figure_latest['gap'],
+                    "latest_count": figure_latest['count'],
+                    "latest_oldest": figure_latest['oldest_price'],
+                    "latest_latest": figure_latest['latest_price'],
+                    "latest_oldest_image_price": figure_latest['oldest_image_price'],
+                    "latest_latest_image_price": figure_latest['latest_image_price'],
+                    "latest_body": figure_latest['support_info']["body_ave"],
+                    "latest_move": figure_latest['support_info']["move_abs"],
+                    "direction_latest": figure_latest['direction'],
+                    "return_ratio": figure_union['return_ratio'],
+                    "pattern_num": figure_latest['support_info']["pattern_num"],
+                    "pattern_num_abs": abs(figure_latest['support_info']["pattern_num"]),
+                    "pattern": figure_latest['support_info']["pattern_comment"],
+                    "range_judge": figure_latest['support_info']["range_expected"],
+                    "macd": macd['macd'],
+                    "macd_mae": macd['cross_mae'],
+                    "macd_cross": macd['cross'],
+                    "macd_cross_latest": macd['latest_cross'],
+                    "macd_cross_time": macd['latest_cross_time'],
+                    "macd_range": macd['range'],
+                    "macd_range_counter": macd['range_counter']
                 }
                 # 一部の情報を上書きして修正する
-                if latest_ans['union_info_support_dic']["range_expected"] == 1:  # 順思想に行く場合
-                    if oldest_ans['gap'] > 0.15:  # 15pips以上の変動後の場合
+                if figure_latest['support_info']["range_expected"] == 1:  # 順思想に行く場合
+                    if figure_oldest['gap'] > 0.15:  # 15pips以上の変動後の場合
                         each_res_dic['range_judge'] = 0
                         each_res_dic['range_judje_re'] = "Change0"
                     else:
@@ -361,6 +276,9 @@ def main_peak():
                 else:  # Trend予想＝latestの方向に行く
                     each_res_dic['range_judge'] = 0
                     each_res_dic['range_judje_re'] = ""
+
+                print(figure_latest['data'].iloc[0]["time_jp"])
+                print(figure_latest['data'])
 
                 # ■①　検証データの取得や、グラフ化や出力を先に行う
                 # print(" entry(検証開始)",  dr.iloc[0]['time_jp'], d.iloc[-1]['time_jp'])
@@ -376,109 +294,23 @@ def main_peak():
                 detail_df.drop(columns=['time'], inplace=True)
 
                 # （１）５０分程度での検証結果を取得
-                long_dic_ans = info_from_df(detail_df, latest_ans, oldest_ans, "_lo", macd_ans)
-                each_res_dic.update(long_dic_ans)  # 辞書同士を結合（個別同士）
+                # long_dic_ans = info_from_df(detail_df, latest_ans, oldest_ans, "_lo", macd_ans)
+                # ceach_res_dic.update(long_dic_ans)  # 結果の辞書同士を結合（個別同士）
 
                 # (2)20分程度で検証結果を取得
-                # short_detail_df=detail_df[0:201]  # 20分の場合、20分×60秒÷5 = 240
-                # short_dic_ans = info_from_df(short_detail_df, latest_ans, oldest_ans, "_sh")
-                # each_res_dic.update(short_dic_ans)  # 辞書同士を結合(個別同士）
+                short_detail_df=detail_df[0:361]  # 20分の場合、20分×60秒÷5 = 240
+                short_dic_ans = info_from_df(short_detail_df, ans_dic, "_sh")
+                each_res_dic.update(short_dic_ans)  # 結果の辞書同士を結合(個別同士）
 
 
                 # 最後に全体のに結合
                 res_dic_arr.append(each_res_dic)  # 全体に結合
 
 
-                # print(detail_df.head(3))  # 検証データ取得！
-                # print(detail_df.tail(3))  # 検証データ取得！
-                # print(" [検証時刻:", detail_df.iloc[0]['time_jp'], "終了", detail_df.iloc[-1]["time_jp"])
-                # res_dic['inspect_fin_time'] = detail_df.iloc[-1]["time_jp"]
-                #
-                # # 検証を開始(検証データの値を収集）
-                # high_ins = detail_df['high'].max()  # 最高値関係を求める
-                # max_df = detail_df[detail_df['high'] == high_ins]  # max_dfは一時的な利用
-                # res_dic['high'] = high_ins
-                # res_dic['high_time'] = max_df.iloc[0]['time_jp']
-                # low_ins = detail_df['low'].min()  # 最低価格関係を求める
-                # min_df = detail_df[detail_df['low'] == low_ins]  # min_dfは一時的な利用
-                # res_dic['low'] = low_ins
-                # res_dic['low_time'] = min_df.iloc[0]['time_jp']
-                #
-                # res_dic['latest_latest_image_price'] = latest_ans['latest_image_price']
-                #
-                # if res_dic['direction_latest'] == 1:  # 直近が上り（谷形状の場合）
-                #     # 上方向に折り返し（最高値を求め、そことの距離を求める）
-                #     res_dic['minus'] = high_ins - latest_ans['latest_image_price']
-                #     res_dic['plus'] = latest_ans['latest_image_price'] - low_ins
-                # else:  # 直近が下がり（山形状の場合）
-                #     # 下方向に折り返し（最低値を求める）
-                #     res_dic['minus'] = latest_ans['latest_image_price'] - low_ins
-                #     res_dic['plus'] = high_ins - latest_ans['latest_image_price']
-                #
-                # # oldestRangeをそろえると、どうなるか
-                # ratio_base = 0.01
-                # temp_minus_ratio = round((res_dic['minus'] * ratio_base)/res_dic['oldest_range'], 3)
-                # temp_plus_ratio = round((res_dic['plus'] * ratio_base)/res_dic['oldest_range'], 3)
-                # res_dic['minus_ratio'] = temp_minus_ratio
-                # res_dic['plus_ratio'] = temp_plus_ratio
-
-                # res_dic_arr.append(res_dic)
-        #
-        #         # ■②取得価格と、目標価格を設定
-        #         direction = latest_ans['direction']
-        #         entry_f_price = latest_ans['oldest_price'] - (0.02 * direction) # 順方向のみ
-        #         tp_f_price = entry_f_price - (0.09 * direction)
-        #         lc_f_price = entry_f_price + (0.09 * direction)
-        #         entry_r_price = ans_42['info']['ref_r_entry']  # rは取り方が特殊
-        #
-        #         # ##範囲を検討する
-        #         arrive_entry_flag = 0
-        #         arrive_tp_flag = 0
-        #         arrive_lc_flag = 0
-        #
-        #         # ■③実際の検証を行う
-        #         position_flag = 0
-        #         counter = 0
-        #         for index, data in detail_df.iterrows():  # 検討範囲を検討する
-        #             counter = counter + 1
-        #             if position_flag == 0:  # ポジションがない場合
-        #                 if data['low'] < entry_f_price < data['high']:  # 範囲にエントリー価格があれば
-        #                     print(" ポジション取得")
-        #                     position_flag = 1
-        #                     mid_df.at[index_graph, "entry_f"] = dr.iloc[0]['open']  # グラフ用データ追加
-        #                     arrive_tp_flag = 1
-        #                     entry_count = entry_count + 1
-        #                     res_dic['Position_time'] = data['time_jp']
-        #                     res_dic['Position_price'] = entry_f_price
-        #                     res_dic['Position_wait_time'] = counter * 5
-        #             else:  # ポジションがある場合
-        #                 if data['low'] < lc_f_price < data['high']:  # 範囲にLC価格があれば
-        #                     print(" LC。。。")
-        #                     mid_df.at[index_graph, "f_lc"] = data['low']  # グラフ用データ追加
-        #                     res_dic['Res_time'] = data['time_jp']
-        #                     res_dic['Res'] = "lc"
-        #                     lc_count = lc_count + 1
-        #                     break
-        #                 elif data['low'] < tp_f_price < data['high']:  # 範囲にLC価格があれば
-        #                     print(" TP")
-        #                     mid_df.at[index_graph, "f_tp"] = data['low']  # グラフ用データ追加
-        #                     res_dic['Res_time'] = data['time_jp']
-        #                     res_dic['Res'] = "TP"
-        #                     tp_count = tp_count + 1
-        #                     break
-        #
-        #
-        #         res_dic_arr.append(res_dic)
-        #
-        # else:
-        #     # サイズ無しの場合
-        #     pass
-
-
     # 解析用結果の表示
     print(res_dic_arr)
     res_dic_df = pd.DataFrame(res_dic_arr)
-    res_dic_df.to_csv(tk.folder_path + 'inspection2.csv', index=False, encoding="utf-8")
+    res_dic_df.to_csv(tk.folder_path + 'inspection.csv', index=False, encoding="utf-8")
 
     #  通常より伸びた足を取得する（通常の３倍程度の足の後は、戻しが強いので、そこを取りたい）
     # mid_df['big_foot'] = mid_df['body_abs'].apply(lambda x: '1' if x>=0.025 else '0')
@@ -494,7 +326,7 @@ gl = {
     "tiltgap_pending": 0.011,  # peak線とvalley線の差が、左記数値以下なら平行以上-急なクロス以前と判断。それ以上は強いクロスとみなす
     "tilt_horizon": 0.0029,  # 単品の傾きが左記以下の場合、水平と判断。　　0.005だと少し傾き気味。。
     "tilt_pending": 0.03,  # 単品の傾きが左記以下の場合、様子見の傾きと判断。これ以上で急な傾きと判断。
-    "candle_num": 500,
+    "candle_num": 300,
     "num": 1,  # candle
     "candle_unit": "M5",
 }
@@ -510,8 +342,6 @@ def graph():
 oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
 main_peak()
 # # graph()
-
-
 
 
 mid_df = pd.read_csv('C:/Users/taker/Desktop/main_data5.csv', sep=",", encoding="utf-8")

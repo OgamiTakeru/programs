@@ -545,11 +545,11 @@ def inspection_candle(ins_condition):
     oldest_df = gl_data5r_df[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
     # print("  [ins_can]", latest_df.iloc[0]["time_jp"], latest_df.iloc[-1]["time_jp"])
     # Latestの期間を検証する
-    latest_ans = f.range_direction_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
+    latest_ans = f.figure_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）
     # Oldestの期間を検証する
-    oldest_ans = f.range_direction_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
+    oldest_ans = f.figure_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）
     # LatestとOldestの関係性を検証する
-    ans = f.compare_ranges(oldest_ans, latest_ans, gl_now_price_mid)  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
+    ans = f.figure_judge(oldest_ans, latest_ans, gl_now_price_mid)  # 引数順注意。ポジ用の価格情報取得（０は取得無し）
 
     return {"ans": ans["ans"], "ans_info": ans["ans_info"], "memo": ans['memo'],
             "type_info": latest_ans['type_info'],  "type_info_old": oldest_ans['type_info'],
@@ -591,7 +591,7 @@ def order2_setting(tc, ans_dic, tc_stop):
     print(order_info)
     # オーダー発行
     tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
-    tc.plan_input(order_info)  # プラン自身を代入
+    tc.order_registration(order_info)  # プラン自身を代入
     tc.make_order()
     mes = " baseline:" + str(line_base) + " Moves:" + str(round(moves_latest, 3)) + ","
     mes = mes + " [1]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
@@ -654,7 +654,7 @@ def order3_setting(tc, ans_dic, tc_stop):
     print(order_info)
     # オーダー発行
     tc.plan_info_input(ans_dic['ans_info'])  # プランの情報を代入
-    tc.plan_input(order_info)  # プラン自身を代入
+    tc.order_registration(order_info)  # プラン自身を代入
     tc.make_order()
     mes = " baseline:" + str(line_base) + " Moves:" + str(round(moves, 3)) + ","
     mes = mes + " [1]" + order_info['memo'] + "," + str(order_info['ask_bid']) + "," + str(round(order_info['price'], 3))
