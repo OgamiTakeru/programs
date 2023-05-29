@@ -480,7 +480,7 @@ def inspection_candle(ins_condition):
     figure_ans = figure_judge(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
     print("")
     # もう一つ前のデータの確認　(上記の成立があれば）
-    figure_range = 0  # 形状を繰り返す場合はNGとしたい
+    c_o_ans = c_o_memo = c_o_ratio = 0  # 初期化が必要な変数
     if figure_ans['union_ans'] == 1:
         if figure_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
             next_inspection_range = ins_condition['figure']['ignore'] + ins_condition['figure']['latest_n'] + \
@@ -489,6 +489,7 @@ def inspection_candle(ins_condition):
             ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
             figure_ans2 = figure_judge(ins_condition)  # ★★ネクストの調査
             if figure_ans2['union_ans'] == 1:
+                c_o_ratio = round(float(figure_ans['oldest_ans']['gap']) / float(figure_ans2['oldest_ans']['gap']), 1) # 共通
                 if figure_ans2['oldest_ans']['gap'] > figure_ans['oldest_ans']['gap']:
                     print(" 発生&包括されていそう！")
                     c_o_ans = 1
@@ -508,13 +509,13 @@ def inspection_candle(ins_condition):
     c_o_result = {
         "c_o_ans": c_o_ans,
         "c_o_memo": c_o_memo,
+        "c_o_ratio": c_o_ratio,
     }
 
     # ■MACDについての解析
     latest_macd_r_df = data_r[0: 30]  # 中間に重複のないデータフレーム
     latest_macd_df = oanda_class.add_macd(latest_macd_r_df)  # macdを追加（データは時間昇順！！！）
     macd_result = macd_judge(latest_macd_df)
-
 
     # ■■■■上記内容から、Positionの取得可否を判断する■■■■
     if figure_ans['union_ans'] == 1 and macd_result['cross'] != 0 and macd_result['range'] != 1:  # 条件を満たす

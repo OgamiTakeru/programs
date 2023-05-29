@@ -535,7 +535,7 @@ def mode1():
     ans_dic = f.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
 
     if ans_dic['figure_c_o']['c_o_ans'] == 1:
-        tk.line_send("連続的なFigureの発生", ans_dic['figure_c_o']['c_o_memo'])
+        tk.line_send("連続的なFigureの発生", ans_dic['figure_c_o']['c_o_memo'], ans_dic['figure_c_o']['c_o_ratio'])
 
     # 新規オーダーのエントリータイミングと判断された場合（Candleデータから）
     if ans_dic['judgment'] == 1 and ans_dic['figure_c_o']['c_o_ans'] != 0:  # 条件を満たす場合は、オーダーを準備
