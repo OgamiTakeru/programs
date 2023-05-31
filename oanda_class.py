@@ -986,7 +986,7 @@ def cal_past_time_single(x):
         time_past = (datetime.datetime.now() + datetime.timedelta(seconds=2) - time_dt).seconds
         return time_past
     except Exception as e:
-        print("  時刻形式が異なります", e)
+        # print("  時刻形式が異なります", e)
         return 0
 
 
@@ -1017,7 +1017,7 @@ def add_basic_data(data_df):
     data_df.drop(['complete'], axis=1, inplace=True)  # 不要項目の削除（volumeってなに）
     data_df.drop(['mid'], axis=1, inplace=True)
     # JIT時刻を非表示にしたいけれど。。
-    data_df.drop(['time'], axis=1, inplace=True)
+    # data_df.drop(['time'], axis=1, inplace=True)
     # 返却zf
     return data_df
 

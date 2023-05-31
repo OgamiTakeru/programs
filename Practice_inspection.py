@@ -31,8 +31,8 @@ def info_from_df(detail_df, ans_dic, na):
     :return:
     """
     # 変数の変換
-    latest_ans = ans_dic['figure_result']['latest_ans']
-    oldest_ans = ans_dic['figure_result']['oldest_ans']
+    latest_ans = ans_dic['figure_turn_result']['latest_turn_dic']['latest_ans']
+    oldest_ans = ans_dic['figure_turn_result']['latest_turn_dic']['oldest_ans']
     # figure_union = ans_dic['figure_result']
     macd_ans = ans_dic['macd_result']
 
@@ -218,7 +218,7 @@ def main_peak():
             # latest_macd_df = oanda_class.add_macd(latest_macd_df)  # macdを追加
             # macd_ans = f.macd_judge(latest_macd_df)
 
-            # if ans_42["union_ans"] == 0:
+            # if ans_42["turn_ans"] == 0:
             #     # print("　折り返しの該当なし", dr.iloc[0]['time_jp'])
             #     pass
 
@@ -226,15 +226,17 @@ def main_peak():
                 # タイミング発生★★★！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
                 print("★★★★")
                 # ★★★★変数の入れ替え（深くなるため、コード短縮化の為）
-                print(ans_dic['figure_result'])
-                figure_latest = ans_dic['figure_result']['latest_ans']
-                figure_oldest = ans_dic['figure_result']['oldest_ans']
-                figure_union = ans_dic['figure_result']
+                print(ans_dic['figure_turn_result'])
+                latest_turn = ans_dic['figure_turn_result']['latest_turn_dic']
+                figure_latest = ans_dic['figure_turn_result']['latest_turn_dic']['latest_ans']
+                figure_oldest = ans_dic['figure_turn_result']['latest_turn_dic']['oldest_ans']
+                line_base = ans_dic['figure_turn_result']['order_dic']['target_price']  # 基準となる価格（=直近のクローズ価格）
+                expect_direction = ans_dic['figure_turn_result']['order_dic']['direction']
                 macd = ans_dic['macd_result']
                 # ★★★★検証
                 each_res_dic = {
                     "entry_time": figure_latest['data'].iloc[0]["time_jp"],
-                    "union_ans": ans_dic['figure_result']['union_ans'],
+                    "turn_ans": ans_dic['figure_turn_result']['result_dic']['turn_ans'],  # ★変更時注意
                     "oldest_range": figure_oldest['gap'],
                     "oldest_count": figure_oldest['count'],
                     "oldest_oldest": figure_oldest['oldest_price'],
@@ -252,7 +254,7 @@ def main_peak():
                     "latest_body": figure_latest['support_info']["body_ave"],
                     "latest_move": figure_latest['support_info']["move_abs"],
                     "direction_latest": figure_latest['direction'],
-                    "return_ratio": figure_union['return_ratio'],
+                    "return_ratio": latest_turn['return_ratio'],  # ★変更時注意
                     "pattern_num": figure_latest['support_info']["pattern_num"],
                     "pattern_num_abs": abs(figure_latest['support_info']["pattern_num"]),
                     "pattern": figure_latest['support_info']["pattern_comment"],

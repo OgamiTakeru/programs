@@ -165,7 +165,7 @@ def str_to_time(str_time):
     return time_dt
 
 
-def figure_inspection_support(data_df, direction, ans_info):
+def figure_turn_each_inspection_support(data_df, direction, ans_info):
     """
     ここでのデータは、０行目が最新データ
     :param data_df:
@@ -262,7 +262,7 @@ def figure_inspection_support(data_df, direction, ans_info):
     }
 
 
-def figure_inspection(data_df_origin):
+def figure_turn_each_inspection(data_df_origin):
     """
     渡された範囲で、何連続で同方向に進んでいるかを検証する
     :param data_df_origin: 直近が上側（日付降順/リバース）のデータを利用
@@ -340,17 +340,18 @@ def figure_inspection(data_df_origin):
     }
 
     # ■　形状を判定する（テスト）
-    type_info_dic = figure_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
+    type_info_dic = figure_turn_each_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
     ans_dic["support_info"] = type_info_dic
     return ans_dic
 
 
-def figure_judge(ins_condition):
+def figure_turn_inspection(ins_condition):
     """
     old区間4,latest区間2の場合のジャッジメント
     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
     :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
+    :param ins_condition
     :return:
     """
     #
@@ -363,8 +364,8 @@ def figure_judge(ins_condition):
     # 各DFを解析
     latest_df = data_r[ignore: dr_latest_n + ignore]  # 直近のn個を取得
     oldest_df = data_r[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
-    latest_ans = figure_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する
-    oldest_ans = figure_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する
+    latest_ans = figure_turn_each_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する
+    oldest_ans = figure_turn_each_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する
 
     # 表示用がメインの情報まとめ
     memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
@@ -379,31 +380,85 @@ def figure_judge(ins_condition):
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
             max_return_ratio = 50
             if return_ratio < max_return_ratio:
-                union_ans = 1  # 達成
+                turn_ans = 1  # 達成
                 memo = "達成"
             else:
-                union_ans = 0  # 未達
+                turn_ans = 0  # 未達
                 memo = "戻大" + str(return_ratio)
         else:
-            union_ans = 0  # 未達
+            turn_ans = 0  # 未達
             memo = "カウント未達"
     else:
-        union_ans = 0  # 未達
+        turn_ans = 0  # 未達
         memo = "同方向"
+
+    memo_info = "@戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
+    memo_all = memo_all + memo_info
 
     # 返却用の辞書を作成
     ans_dic = {
-        "union_ans": union_ans,
+        "turn_ans": turn_ans,
         "latest_ans": latest_ans,
         "oldest_ans": oldest_ans,
         "return_ratio": return_ratio,
         "memo": memo,
-        "memo_all": memo_all + "," + str(return_ratio) + ")",
+        "memo_all": memo_all,
         "price": now_price
     }
 
     # Return
     return ans_dic
+
+
+def figure_turn_judge(ins_condition):
+    data_r = ins_condition['data_r']
+    # 直近のデータの確認　LatestとOldestの関係性を検証する
+    turn_ans = figure_turn_inspection(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
+    # もう一つ前のデータの確認　(上記の成立があれば）
+    c_o_ans = c_o_memo = c_o_ratio = 0  # 初期化が必要な変数
+    turn_ans2 = turn_ans.copy()  # めんどくさいからとりあえず入れておく。。
+    turn_ans2['memo'] = "（同値）"
+    if turn_ans['turn_ans'] == 1:
+        if turn_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
+            next_inspection_range = ins_condition['figure']['ignore'] + ins_condition['figure']['latest_n'] + \
+                                    turn_ans['oldest_ans']['count'] - 2
+            next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
+            ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
+            turn_ans2 = figure_turn_inspection(ins_condition)  # ★★ネクストの調査
+            if turn_ans2['turn_ans'] == 1:
+                c_o_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1) # 共通
+                if turn_ans2['oldest_ans']['gap'] > turn_ans['oldest_ans']['gap']:
+                    print(" 発生&包括されていそう！")
+                    c_o_ans = 1
+                    c_o_memo = "包括関係の形状発生"
+                else:
+                    c_o_ans = 0
+                    c_o_memo = "包括ではなく、大きくなっている"
+        else:
+            c_o_ans = 0
+            c_o_memo = "前回は結構前"
+    else:
+        c_o_ans = 0
+        c_o_memo = "現在で発生無し"
+    # 現在と過去の形状で包括関係がある場合を考慮したもの
+    c_o_result = {
+        "total_ans": c_o_ans,
+        "total_memo": c_o_memo,
+        "c_o_ratio": c_o_ratio,
+        "turn_ans": turn_ans['turn_ans'] # とりあえずターンを確認できた場合（ひとつ前の包括関係は関係なく）
+    }
+
+    ans = {
+        "result_dic": c_o_result,
+        "latest_turn_dic": turn_ans,
+        "oldest_turn_dic": turn_ans2,
+        "order_dic": {
+            "target_price": turn_ans['latest_ans']['latest_image_price'],
+            "direction": turn_ans['oldest_ans']['direction']
+        }
+    }
+
+    return ans
 
 
 def macd_judge(data_df):
@@ -453,7 +508,7 @@ def macd_judge(data_df):
         range_jg = 1  # ３回以上短期間でクロス発生の場合はレンジと判断
 
     macd_result = {
-        "cross": cross,
+        "cross": cross,  #N個以内の最初のクロスの有無と向き（１かー１）
         "cross_mae": cross_mae,
         "latest_cross": latest_r_5.iloc[1]['macd_cross'],# 0行目は確立していないはずなので、除外。latestは１を利用する（算出もおかしいかもだけど）
         "latest_cross_time": latest_r_5.iloc[1]['time_jp'],
@@ -467,6 +522,60 @@ def macd_judge(data_df):
     return macd_result
 
 
+def figure_latest3_judge(ins_condition):
+    # 最初の１行は無視する（現在の行の為）
+    data_r_all = ins_condition['data_r']
+    ignore = ins_condition['figure']['ignore']
+    data_r = data_r_all[ignore:]  # 最初の１行は無視
+    oldest = round(data_r.iloc[2]['body_abs'], 3)
+    oldest_d = data_r.iloc[2]['body'] / abs(data_r.iloc[2]['body'])
+    middle = round(data_r.iloc[1]['body_abs'], 3)
+    middle_d = data_r.iloc[1]['body'] / abs(data_r.iloc[1]['body'])
+    latest = round(data_r.iloc[0]['body_abs'], 3)
+    latest_d = data_r.iloc[0]['body'] / abs(data_r.iloc[0]['body'])
+    older_line = 0.025
+    later_line = 0.025
+    # print(oldest, oldest_d, middle, middle_d, latest, latest_d)
+    # 三つの方向が形式にあっているか（↑↑↓か、↓↓↑）を確認
+    if (oldest_d == middle_d) and oldest_d != latest_d:
+        print(" 方向性〇", oldest_d, middle_d, latest_d)
+        d = 1
+    else:
+        print(" 方向性×", oldest_d, middle_d, latest_d)
+        d = 0
+
+    if oldest > older_line and middle > older_line and latest < later_line:  # どっちも5pips以上で同方向
+        print(" 価格条件〇", oldest, middle, latest)
+        p = 1
+    else:
+        print(" 価格×", oldest, middle, latest)
+        p = 0
+
+    if 0.5 < oldest / middle < 2.5:
+        print(" 価格推移〇", round(oldest / middle, 1))
+        r = 1
+    else:
+        print(" 価格推移×", round(oldest / middle, 1))
+        r = 0
+
+    if d == 1 and p == 1 and r == 1:
+        print("   完全 dpr⇒", d, p, r)
+        latest3_figure = 1
+        order = {
+            "target_price": data_r.iloc[0]['open'],
+            "direction": oldest_d
+        }
+    else:
+        latest3_figure = 0
+        order = {
+            "target_price": 0,
+            "direction": 0
+        }
+        print("   未達成 dpr⇒", d, p, r)
+
+    return {"result": latest3_figure, "order_dic": order}
+
+
 def inspection_candle(ins_condition):
     """
     オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
@@ -476,41 +585,10 @@ def inspection_candle(ins_condition):
     data_r = ins_condition['data_r']
 
     # ■直近データの形状の解析
-    # 直近のデータの確認　LatestとOldestの関係性を検証する
-    figure_ans = figure_judge(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
-    print("")
-    # もう一つ前のデータの確認　(上記の成立があれば）
-    c_o_ans = c_o_memo = c_o_ratio = 0  # 初期化が必要な変数
-    if figure_ans['union_ans'] == 1:
-        if figure_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
-            next_inspection_range = ins_condition['figure']['ignore'] + ins_condition['figure']['latest_n'] + \
-                                 figure_ans['oldest_ans']['count'] - 2
-            next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
-            ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
-            figure_ans2 = figure_judge(ins_condition)  # ★★ネクストの調査
-            if figure_ans2['union_ans'] == 1:
-                c_o_ratio = round(float(figure_ans['oldest_ans']['gap']) / float(figure_ans2['oldest_ans']['gap']), 1) # 共通
-                if figure_ans2['oldest_ans']['gap'] > figure_ans['oldest_ans']['gap']:
-                    print(" 発生&包括されていそう！")
-                    c_o_ans = 1
-                    c_o_memo = "包括関係の形状発生"
-                else:
-                    c_o_ans = 0
-                    c_o_memo = "包括ではなく、大きくなっている"
-        else:
-            c_o_ans = 0
-            c_o_memo = "前回は結構前"
-    else:
-        figure_ans2 = figure_ans.copy()  # めんどくさいからとりあえず入れておく。。
-        figure_ans2['memo'] = "前達成せず（同値）"
-        c_o_ans = 0
-        c_o_memo = "現在で発生無し"
-    # 現在と過去の形状で包括関係がある場合を考慮したもの
-    c_o_result = {
-        "c_o_ans": c_o_ans,
-        "c_o_memo": c_o_memo,
-        "c_o_ratio": c_o_ratio,
-    }
+    figure_turn_ans = figure_turn_judge(ins_condition)
+
+    # ■直近データの形状の確認（5pip以上の同方向が二つの後に、5pips以内の戻りがあった場合、順張りする）
+    figure_latest3_ans = figure_latest3_judge(ins_condition)
 
     # ■MACDについての解析
     latest_macd_r_df = data_r[0: 30]  # 中間に重複のないデータフレーム
@@ -518,32 +596,30 @@ def inspection_candle(ins_condition):
     macd_result = macd_judge(latest_macd_df)
 
     # ■■■■上記内容から、Positionの取得可否を判断する■■■■
-    if figure_ans['union_ans'] == 1 and macd_result['cross'] != 0 and macd_result['range'] != 1:  # 条件を満たす
-        # if oldest_ans['direction'] == macd_result['cross']:
-        #     ans = 1  # 買いフラグ
-        # else:
-        #     ans = 0 # 保留
+    print("　　■Fig:", figure_turn_ans['result_dic']['turn_ans'], ",Macd:", macd_result['cross'], "(", macd_result['cross_mae'], ",Range:",
+          macd_result['range'], ",BefCur:", figure_turn_ans['result_dic']['total_ans'])
+    if figure_turn_ans['result_dic']['turn_ans'] == 1 or figure_latest3_ans['result'] == 1:  # 条件を満たす(購入許可タイミング）
         ans = 1
-
+        print(macd_result['data'].head(5))
         # 保存が必要な場合は、保存を実施する
         if ins_condition['save']:
-            figure_ans['latest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'latest.csv', index=False, encoding="utf-8")
-            figure_ans['oldest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'oldest.csv', index=False, encoding="utf-8")
+            figure_turn_ans['latest_turn_dic']['latest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'latest.csv', index=False, encoding="utf-8")
+            figure_turn_ans['latest_turn_dic']['oldest_ans']["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'oldest.csv', index=False, encoding="utf-8")
             macd_result["data"].to_csv(tk.folder_path + str(ins_condition['time_str']) + 'macd.csv', index=False, encoding="utf-8")
-    else:
-        # 条件を満たさない場合(通知用（必要に応じて））
-        if figure_ans['union_ans'] == 1:
-            ans = 1
-        else:
-            ans = 0
 
-        if figure_ans['union_ans'] == 1 or macd_result['cross'] != 0:  # 表示専用
-            if ins_condition['save']:
-                print("　■Fig:", figure_ans['union_ans'], ",Macd:", macd_result['cross'], "(", macd_result['cross_mae'], ",Range:", macd_result['range'])
-                print(macd_result['data'].head(5))
+    elif macd_result['cross'] != 0:  # クロスがある場合、表示だけはしておく
+        ans = 0
+        print(" クロスの実の発生")
+        print(macd_result['data'].head(5))
+    else:
+        ans = 0
+
     # print(figure_ans)
-    return {"judgment": ans, "figure_result": figure_ans, "figure_result2": figure_ans2, "figure_c_o": c_o_result,
-            "macd_result": macd_result }
+    return {"judgment": ans,
+            "figure_turn_result": figure_turn_ans,
+            "macd_result": macd_result,
+            "latest3_figure_result": figure_latest3_ans
+            }
 
 
 

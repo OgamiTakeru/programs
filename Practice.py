@@ -18,45 +18,51 @@ print(jp_time)
 print(euro_time_datetime)
 param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
 df = oa.InstrumentsCandles_exe("USD_JPY", param)
-# df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
+df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
 df_r = df.sort_index(ascending=False)
 print(df_r.head(5))
 
 
-# Figure機能のテスト
-inspection_condition = {
-    "now_price": 100,  # 現在価格を渡す
-    "data_r": df_r,  # 対象となるデータ
-    "figure": {"ignore": 1, "latest_n": 2, "oldest_n": 30},
-    "macd": {"short": 20, "long": 30},
-    "save": False,  # データをCSVで保存するか（検証ではFalse推奨。Trueの場合は下の時刻は必須）
-    "time_str": "",  # 記録用の現在時刻
-}
-ans = f.inspection_candle(inspection_condition)
+data_r = df_r
 
-f1 = ans['figure_result']
-f2 = ans['figure_result2']
+print(data_r[1:].head(5))
+oldest = data_r.iloc[0]['body_abs']
+oldest_d = data_r.iloc[0]['body'] / abs(data_r.iloc[0]['body'])
+middle = data_r.iloc[1]['body_abs']
+middle_d = data_r.iloc[1]['body'] / abs(data_r.iloc[1]['body'])
+latest = data_r.iloc[2]['body_abs']
+latest_d = data_r.iloc[2]['body'] / abs(data_r.iloc[2]['body'])
+older_line = 0.05
+later_line = 0.05
+print(oldest, oldest_d, middle, middle_d, latest, latest_d)
+# 三つの方向が形式にあっているか（↑↑↓か、↓↓↑）を確認
+if (oldest_d == middle_d) and oldest_d != latest_d:
+    print(" 方向性〇")
+    d = 1
+else:
+    print(" 方向性×")
+    d = 0
 
-print(f1['latest_ans']['count'], f1['latest_ans']['data'])
-print(f1['oldest_ans']['count'], f1['oldest_ans']['data'])
-print(ans['figure_result']['union_ans'])
-print(ans['figure_result']['memo'])
-cur_gap = f1['oldest_ans']['gap']
-print(f1['oldest_ans']['gap'])
-print(ans['figure_result']['memo_all'])
+if oldest > older_line and middle > older_line and latest < later_line :  # どっちも5pips以上で同方向
+    print(" 価格条件〇")
+    p = 1
+else:
+    print(" 価格×")
+    p = 0
 
-print(f2['latest_ans']['count'], f2['latest_ans']['data'])
-print(f2['oldest_ans']['count'], f2['oldest_ans']['data'])
-print(ans['figure_result2']['union_ans'])
-print(ans['figure_result2']['memo'])
-bef_gap = f2['oldest_ans']['gap']
-print(ans['figure_result2']['memo_all'])
+if 0.8 < oldest / middle < 1.2:
+    print(" 価格推移〇")
+    r = 1
+else:
+    print(" 価格推移×")
+    r = 0
 
-print("kokokara")
-if ans['figure_c_o']['c_o_ans'] == 1:
-    print(" 発生！！")
-
-
+if d == 1 and p == 1 and r == 1:
+    print("完全 dpr⇒", d, p, r)
+    latest3_figure = 1
+else:
+    latest3_figure = 0
+    print("未達成 dpr⇒", d, p, r)
 
 # def peaks_collect(df_r):
 #     """
