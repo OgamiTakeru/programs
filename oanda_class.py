@@ -522,7 +522,7 @@ class Oanda:
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
         except Exception as e:
-            print("★★APIエラー★★", e)
+            print("★★APIエラー★★(指定トレードの詳細)")
             return 0
 
     # (14)指定のトレードの変更
@@ -568,7 +568,7 @@ class Oanda:
             res_df = func_make_dic(res_json)  # 必要項目の抜出
             return res_df
         except Exception as e:
-            print("★★APIエラー★★", e)
+            print("★★APIエラー★★ 指定トレードの決済")
             return 0
 
     # (16)トレードを全て決済

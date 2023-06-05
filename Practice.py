@@ -22,47 +22,23 @@ df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 3
 df_r = df.sort_index(ascending=False)
 print(df_r.head(5))
 
+t1 = {"lc": 1, "tp": 2}
+t2 = {"lc": 2, "tp": 1}
 
-data_r = df_r
+test = []
+test.append({"lc": 1, "tp": 2})
+test.append({"lc": 2, "tp": 1})
+test.append({"lc": 2, "tp": 10})
 
-print(data_r[1:].head(5))
-oldest = data_r.iloc[0]['body_abs']
-oldest_d = data_r.iloc[0]['body'] / abs(data_r.iloc[0]['body'])
-middle = data_r.iloc[1]['body_abs']
-middle_d = data_r.iloc[1]['body'] / abs(data_r.iloc[1]['body'])
-latest = data_r.iloc[2]['body_abs']
-latest_d = data_r.iloc[2]['body'] / abs(data_r.iloc[2]['body'])
-older_line = 0.05
-later_line = 0.05
-print(oldest, oldest_d, middle, middle_d, latest, latest_d)
-# 三つの方向が形式にあっているか（↑↑↓か、↓↓↑）を確認
-if (oldest_d == middle_d) and oldest_d != latest_d:
-    print(" 方向性〇")
-    d = 1
-else:
-    print(" 方向性×")
-    d = 0
+print(test)
 
-if oldest > older_line and middle > older_line and latest < later_line :  # どっちも5pips以上で同方向
-    print(" 価格条件〇")
-    p = 1
-else:
-    print(" 価格×")
-    p = 0
+test_list = sorted(test, key=lambda x: x['lc'], reverse=True)  # LCで降順
+print(test_list)
+print("↓")
+ea = list(filter(lambda item : item['lc'] == 2, test_list))
+print(ea)
 
-if 0.8 < oldest / middle < 1.2:
-    print(" 価格推移〇")
-    r = 1
-else:
-    print(" 価格推移×")
-    r = 0
 
-if d == 1 and p == 1 and r == 1:
-    print("完全 dpr⇒", d, p, r)
-    latest3_figure = 1
-else:
-    latest3_figure = 0
-    print("未達成 dpr⇒", d, p, r)
 
 # def peaks_collect(df_r):
 #     """

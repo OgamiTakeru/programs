@@ -28,11 +28,12 @@ class order_information:
         self.crcdo_tp = 0  # ロスカ変更後のTPライン
         self.pips_max = 0  # 最高プラスが額を記録
         self.pips_min = 0  # 最低のマイナス額を記録
+        self.pips_res_arr = []  # 過去の結果を登録しておく
         self.now_price = 0  # 直近の価格を記録しておく（APIを叩かなくて済むように）
         self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回まで
 
         # リセット対象外（規定値がある物）
-        self.order_timeout = 15  # リセ無。分で指定。この時間が過ぎたらオーダーをキャンセルする
+        self.order_timeout = 20  # リセ無。分で指定。この時間が過ぎたらオーダーをキャンセルする
         self.lc_border = 0.03  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
         self.tp_border = 0.1  # リセ無。プラス値でプラス域でロスカットを実施 マイナス値でその分のマイナスを許容する Default=0.03
         self.lc_range = 0.01  # CDCRO時、最低のライン（プラス値で最低の利益の確保）
@@ -112,7 +113,7 @@ class order_information:
     def judge_new(self):
         # ■時間的な制約で連続して入らないように(こっちは必須的な条件⇒同一足で毎回発生する可能性があるため)
         wait_time_new = 5  # ６分以上で、上書きオーダーの受け入れが可能のフラグを出せる。
-        print("  TIME JD",self.order['time_past_continue'], "<", wait_time_new * 59 , "成立で不可")
+        # print("  TIME JD",self.order['time_past_continue'], "<", wait_time_new * 59 , "成立で不可")
         if 0 < self.order['time_past_continue'] < wait_time_new * 59:  # 0の場合はTrueなるので、不等号に＝はNG。オーダー発行時比較
             # print(" □発行直後のオーダー等、発行できない理由あり")
             print("時間不可")
@@ -246,7 +247,7 @@ class order_information:
             if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現orderあり⇒約定（取得時）
                 oa.print_i("  ★position取得！")
                 direction_t = self.order['units'] / abs(self.order['units'])
-                # tk.line_send("  (取得)", float(temp['position_price']), direction_t, datetime.datetime.now().replace(microsecond=0))
+                tk.line_send("  (取得)", datetime.datetime.now().replace(microsecond=0))
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['position_state'] == 'CLOSED':  # 現orderあり⇒ポジクローズ
                 oa.print_i("  ★即ポジ即解消済！")
@@ -256,12 +257,14 @@ class order_information:
             elif self.position['state'] == "OPEN" and temp['position_state'] == "CLOSED":  # 現ポジあり⇒ポジ無し（終了時）
                 oa.print_i("  ★position解消")
                 self.life_set(False)
+                self.pips_res_arr.append(temp['position_pips'])
                 gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)  # トータル計算
                 if temp['position_pips'] >=0 :
                     gl_trade_win += 1  # トータルプラス計算
-                for_view_temp = "w" + str(gl_trade_win) + "/" + str(gl_trade_num) + ",TotalPips" + str(gl_total_pips) + ",P-M" + str(self.pips_min) + "," + str(self.pips_max)
-                tk.line_send(" ▲解消", temp['position_close_price'], temp['position_pips'], for_view_temp, " time:",
-                             datetime.datetime.now().replace(microsecond=0))
+                res1 = "【結果】" + str(temp['position_pips']) + "(決済価格:" + str(temp['position_close_price']) + "), "
+                res2 = "【Total】" + str(gl_total_pips) + "," + "【Win/All】" + str(gl_trade_win) + "/" + str(gl_trade_num)
+                res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.pips_min) + "/ー域:" + str(self.pips_max)
+                tk.line_send(" ▲解消:", datetime.datetime.now().replace(microsecond=0), res1, res2, res3)
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
                 # oa.print_i("  ★orderCancel")
@@ -441,7 +444,6 @@ def order_line_adjustment(base_line, margin, now_d, type):
     :param type STOP or LIMIT
     :return:
     """
-
     old_dir = now_d * -1  # 逆にする
     if type == "STOP":  # 大局(Old)への順張りの場合（＝順思想)
         base_line = base_line + (margin * old_dir)
@@ -449,6 +451,7 @@ def order_line_adjustment(base_line, margin, now_d, type):
         base_line = base_line - (margin * old_dir)
 
     return round(base_line, 3)
+
 
 def order_line_adjustment_simple(base_line, margin, direction):
     """
@@ -469,7 +472,7 @@ def order_line_adjustment_simple(base_line, margin, direction):
 def order_setting(order_info_temp, ans_dic):
     """
     検証し、条件達成でオーダー発行
-    :order_info_temp: 色々
+    :param order_info_temp: 色々
     :param ans_dic: ターゲットとなるクラスのインスタンス
     :return:
     """
@@ -483,18 +486,23 @@ def order_setting(order_info_temp, ans_dic):
     expect_direction = order_info_temp['expect_dir']
     margin = order_info_temp['margin']
     lc = order_info_temp['lc']
-    memo_turn = ans_dic['figure_turn_result']['latest_turn_dic']['memo_all']
+    tp = 0.09  # order_info_temp['lc']
+    if order_info_temp['kinds'] == 1:  # パターンで送信するコメントを変更する
+        # Turnの場合
+        memo = ans_dic['figure_turn_result']['latest_turn_dic']['memo_all']
+    else:
+        # Turn未遂の場合
+        memo = ans_dic['latest3_figure_result']['memo']
 
     # ■価格を決定する
     # 順張り用のオーダー（辞書形式）を作成する　⇒　（別途準備中）　当面は直近価格で。
-
     line_base = order_line_adjustment_simple(line_base, margin, expect_direction)  # ここでのSTOPは順思想（逆張り）
 
     # オーダー発行
     order_info = {
         "price": line_base,
         "lc_range": lc,
-        "tp_range": 0.09,
+        "tp_range": tp,
         "ask_bid": expect_direction,  # 順思想
         "units": 20000,
         "type": "STOP",  # ここはストップ（順張り）専用！
@@ -508,7 +516,8 @@ def order_setting(order_info_temp, ans_dic):
     mes = " baseline:" + str(line_base)
 
     tk.line_send("■折返Position！", gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
-                 "トリガー:", order_info_temp['memo'], "、情報:", mes, memo_turn)
+                 "トリガー:", order_info_temp['memo'], ",", mes, ",情報:", memo, ",MACD:", order_info_temp['macd'],
+                 ",前回の結果", order_info_temp['r'])
 
 
 def mode1():
@@ -516,7 +525,7 @@ def mode1():
     低頻度モード（条件を検索し、４２検査を実施する）
     :return: なし
     """
-    print("Mode1")
+    print("  Mode1")
     # ポジションを２つ用意するため、二つを初期化する
     fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
     fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
@@ -543,45 +552,56 @@ def mode1():
     latest3_target_price = ans_dic['latest3_figure_result']['order_dic']['target_price']
     latest3_expect_direction = ans_dic['latest3_figure_result']['order_dic']['direction']
 
-    if turn_ans_temp == 1:  # ターンが確認された場合（最優先）
-        print("  ターンを確認")
-        if turn_ans == 1:  # そのさらに直前のターンが発生がある場合
-            print("   その直前にもターンを確認⇒オーダー無し")
-            new_jd = fw.input_info_and_judge_new(ans_dic)  # 情報を入れつつ、新規オーダーを入れるかを判定する
-            if new_jd:
+    # 前回の結果次第で、LCやＴＰに倍率をかける
+    if len(fw.pips_res_arr) >= 1:
+        before_res = fw.pips_res_arr[-1]  # 最後尾が直近
+        if before_res < 0:
+            r = 2  # 前回負けの場合は二倍でやる
+        else:
+            r = 1
+    else:
+        r = 1
+
+    new_jd = fw.judge_new()
+    if new_jd:
+        if turn_ans_temp == 1:  # ターンが確認された場合（最優先）
+            print("  ターンを確認")
+            if turn_ans == 1:  # そのさらに直前のターンが発生がある場合
+                print("   その直前にもターンを確認⇒オーダー無し")
                 tk.line_send("Range状態のターンの為、オーダー無し")
             else:
-                print("  時間制約あり")
-        else:
-            new_jd = fw.input_info_and_judge_new(ans_dic)  # 情報を入れつつ、新規オーダーを入れるかを判定する
-            if new_jd:
                 print("   ★オーダー発行")
+                oa.OrderCancel_All_exe()  # 露払い
+                oa.TradeAllClose_exe()  # 露払い
                 order_temp = {
                     "line_base": turn_target_price,
                     "expect_dir": turn_expect_direction,
                     "lc": 0.045,  # 少し狭い目のLC
                     "margin": 0.02,
-                    "memo": "ターン起点"
+                    "memo": "ターン起点",
+                    "kinds": 1,
+                    "r": r,
+                    "macd": ans_dic['macd_result']['cross']
                 }
                 order_setting(order_temp, ans_dic)  # オーダー発行
-            else:
-                # print(" 時間的制約で発行せず　turn")
-                pass
-    elif latest3_ans == 1:  # ターン未遂が確認された場合（早い場合）
-        print("  ターン未遂を確認　★オーダー発行")
-        new_jd = fw.input_info_and_judge_new(ans_dic)  # 情報を入れつつ、新規オーダーを入れるかを判定する
-        if new_jd:
+        elif latest3_ans == 1:  # ターン未遂が確認された場合（早い場合）
+            print("  ターン未遂を確認　★オーダー発行")
             order_temp = {
                 "line_base": latest3_target_price,
                 "expect_dir": latest3_expect_direction,
                 "lc": 0.025,  # 非常に狭いLC
                 "margin": 0.02,
-                "memo": "ターン未遂起点"
+                "memo": "ターン未遂起点",
+                "kinds": 2,
+                "r": r,
+                "macd": ans_dic['macd_result']['cross']
             }
             order_setting(order_temp, ans_dic)  # オーダー発行
-        else:
-            # print(" 時間的制約で発行せず　figure3")
-            pass
+    else:
+        if turn_ans_temp == 1:  # ターンが確認された場合（最優先）
+            print("  ターンを確認(時間で不可）")
+        elif latest3_ans == 1:  # ターン未遂が確認された場合（早い場合）
+            print("  ターン未遂を確認　（時間で不可）")
 
 
 def mode2():
@@ -591,8 +611,6 @@ def mode2():
     # rv_stop.update_information()
 
     # print(" Mode2")
-
-
 
 
 def exe_manage():

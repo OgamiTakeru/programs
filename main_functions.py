@@ -527,53 +527,76 @@ def figure_latest3_judge(ins_condition):
     data_r_all = ins_condition['data_r']
     ignore = ins_condition['figure']['ignore']
     data_r = data_r_all[ignore:]  # 最初の１行は無視
-    oldest = round(data_r.iloc[2]['body_abs'], 3)
-    oldest_d = data_r.iloc[2]['body'] / abs(data_r.iloc[2]['body'])
-    middle = round(data_r.iloc[1]['body_abs'], 3)
-    middle_d = data_r.iloc[1]['body'] / abs(data_r.iloc[1]['body'])
-    latest = round(data_r.iloc[0]['body_abs'], 3)
-    latest_d = data_r.iloc[0]['body'] / abs(data_r.iloc[0]['body'])
-    older_line = 0.025
-    later_line = 0.025
+
+    # 下らないエラー対策
+    if data_r.iloc[2]['body'] == 0:
+        oldest_body_temp = 0.0000001
+    else:
+        oldest_body_temp = data_r.iloc[2]['body']
+
+    if data_r.iloc[1]['body'] == 0:
+        middle_body_temp = 0.0000001
+    else:
+        middle_body_temp = data_r.iloc[1]['body']
+
+    if data_r.iloc[0]['body'] == 0:
+        latest_body_temp = 0.0000001
+    else:
+        latest_body_temp = data_r.iloc[0]['body']
+
+    oldest = round(oldest_body_temp, 3)
+    oldest_d = oldest_body_temp / abs(oldest_body_temp)
+    middle = round(middle_body_temp, 3)
+    middle_d = middle_body_temp / abs(middle_body_temp)
+    latest = round(latest_body_temp, 3)
+    latest_d = latest_body_temp / abs(latest_body_temp)
+    older_line = 0.02
+    later_line = 0.02
+    if middle == 0:
+        middle = 0.0000001
+
     # print(oldest, oldest_d, middle, middle_d, latest, latest_d)
     # 三つの方向が形式にあっているか（↑↑↓か、↓↓↑）を確認
     if (oldest_d == middle_d) and oldest_d != latest_d:
-        print(" 方向性〇", oldest_d, middle_d, latest_d)
         d = 1
     else:
-        print(" 方向性×", oldest_d, middle_d, latest_d)
         d = 0
 
     if oldest > older_line and middle > older_line and latest < later_line:  # どっちも5pips以上で同方向
-        print(" 価格条件〇", oldest, middle, latest)
         p = 1
     else:
-        print(" 価格×", oldest, middle, latest)
         p = 0
 
-    if 0.5 < oldest / middle < 2.5:
-        print(" 価格推移〇", round(oldest / middle, 1))
+    if 0.4 < oldest / middle < 2.5:
         r = 1
     else:
-        print(" 価格推移×", round(oldest / middle, 1))
         r = 0
 
     if d == 1 and p == 1 and r == 1:
-        print("   完全 dpr⇒", d, p, r)
+        # print("   完全 dpr⇒", d, p, r)
+        res_memo = "Trun未遂達成"
         latest3_figure = 1
         order = {
             "target_price": data_r.iloc[0]['open'],
             "direction": oldest_d
         }
     else:
+        res_memo = "Trun未遂未達"
         latest3_figure = 0
         order = {
             "target_price": 0,
             "direction": 0
         }
-        print("   未達成 dpr⇒", d, p, r)
+        # print("   未達成 dpr⇒", d, p, r)
 
-    return {"result": latest3_figure, "order_dic": order}
+    memo1 = " ,Dir:" + str(oldest_d) + str(middle_d) + str(latest_d)
+    memo2 = " ,Body:" + str(oldest) + str(middle) + str(latest)
+    memo3 = " ,body率" + str(round(oldest / middle, 1))
+    memo4 = ", TargetPrice:" + str(order['target_price'])
+    memo_all = "  " + res_memo + memo4 + memo1 + memo2 + memo3 + memo4
+    print(memo_all)
+
+    return {"result": latest3_figure, "order_dic": order, "memo": memo_all}
 
 
 def inspection_candle(ins_condition):
@@ -596,8 +619,8 @@ def inspection_candle(ins_condition):
     macd_result = macd_judge(latest_macd_df)
 
     # ■■■■上記内容から、Positionの取得可否を判断する■■■■
-    print("　　■Fig:", figure_turn_ans['result_dic']['turn_ans'], ",Macd:", macd_result['cross'], "(", macd_result['cross_mae'], ",Range:",
-          macd_result['range'], ",BefCur:", figure_turn_ans['result_dic']['total_ans'])
+    print("　　Fig:", figure_turn_ans['result_dic']['turn_ans'], "(", figure_turn_ans['result_dic']['total_ans'], ") Macd:"
+          , macd_result['cross'], "(", macd_result['cross_mae'], ",Range:",macd_result['range'], ",Nturn:", figure_latest3_ans['result'])
     if figure_turn_ans['result_dic']['turn_ans'] == 1 or figure_latest3_ans['result'] == 1:  # 条件を満たす(購入許可タイミング）
         ans = 1
         print(macd_result['data'].head(5))
@@ -609,7 +632,7 @@ def inspection_candle(ins_condition):
 
     elif macd_result['cross'] != 0:  # クロスがある場合、表示だけはしておく
         ans = 0
-        print(" クロスの実の発生")
+        print(" クロスのみの発生")
         print(macd_result['data'].head(5))
     else:
         ans = 0
