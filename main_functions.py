@@ -414,6 +414,13 @@ def figure_turn_judge(ins_condition):
     data_r = ins_condition['data_r']
     # 直近のデータの確認　LatestとOldestの関係性を検証する
     turn_ans = figure_turn_inspection(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
+    # 初期値の設定
+    include_ans = 0  # 最初は０
+    include_memo = "0"
+    expected_direction = turn_ans['oldest_ans']['direction']  # 購入の初期値は、Oldestと同方向（順思想）
+    expected_lc_range = 0  # Range判断の場合に利用するが、共通の辞書返却の為
+    expected_tp_range = 0  # Range判断の場合に利用するが、共通の辞書返却の為
+    include_ratio = 0
     # もう一つ前のデータの確認　(上記の成立があれば）
     c_o_ans = c_o_memo = c_o_ratio = 0  # 初期化が必要な変数
     turn_ans2 = turn_ans.copy()  # めんどくさいからとりあえず入れておく。。
@@ -426,35 +433,51 @@ def figure_turn_judge(ins_condition):
             ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
             turn_ans2 = figure_turn_inspection(ins_condition)  # ★★ネクストの調査
             if turn_ans2['turn_ans'] == 1:
-                c_o_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1) # 共通
+                include_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1)  # 共通
                 if turn_ans2['oldest_ans']['gap'] > turn_ans['oldest_ans']['gap']:
-                    print(" 発生&包括されていそう！")
-                    c_o_ans = 1
-                    c_o_memo = "包括関係の形状発生"
+                    include_ans = 1
+                    expected_direction = expected_direction * -1  # レンジに入ると予想するため、逆方向
+                    oldest_gap = turn_ans['oldest_ans']['gap']
+                    latest_gap = turn_ans['latest_ans']['gap']
+                    expected_lc_range = latest_gap  # LCはlatest_gap
+                    expected_tp_range = round(oldest_gap - latest_gap - (oldest_gap * 0.1), 3)  # 指定方法は、OldestのGapから、latest戻り分(=latestGap)と縮小分(oldestの１割)を引いた数。
+                    include_memo = "Turn発生&包括関係の形状発生"
+                    print(" 発生&包括されていそう！", expected_direction, expected_tp_range, expected_lc_range)
                 else:
-                    c_o_ans = 0
-                    c_o_memo = "包括ではなく、大きくなっている"
+                    include_ans = 0
+                    include_memo = "Turn発生&前回turnより大きくなっている"
         else:
-            c_o_ans = 0
-            c_o_memo = "前回は結構前"
+            include_ans = 0
+            include_memo = "Turn発生&前回turnは結構前"
     else:
-        c_o_ans = 0
-        c_o_memo = "現在で発生無し"
-    # 現在と過去の形状で包括関係がある場合を考慮したもの
-    c_o_result = {
+        include_ans = 0
+        include_memo = "現在でTurnの発生無し"
+
+    print("  ", include_memo)
+
+    # 現在と過去の形状で包括関係の情報
+    include_result = {
         "total_ans": c_o_ans,
-        "total_memo": c_o_memo,
-        "c_o_ratio": c_o_ratio,
-        "turn_ans": turn_ans['turn_ans'] # とりあえずターンを確認できた場合（ひとつ前の包括関係は関係なく）
+        "total_memo": include_memo,
+        "include_ratio": include_ratio,
+    }
+
+    # 結果を辞書形式にまとめる
+    result_dic = {
+        "result_turn": turn_ans['turn_ans'],
+        "result_include": include_ans,
     }
 
     ans = {
-        "result_dic": c_o_result,
+        "result_dic": result_dic,
         "latest_turn_dic": turn_ans,
         "oldest_turn_dic": turn_ans2,
+        "include_dic": include_result,
         "order_dic": {
-            "target_price": turn_ans['latest_ans']['latest_image_price'],
-            "direction": turn_ans['oldest_ans']['direction']
+            "base_price": turn_ans['latest_ans']['latest_image_price'],
+            "direction": expected_direction,
+            "tp_range": expected_tp_range,
+            "lc_range": expected_lc_range
         }
     }
 
@@ -619,9 +642,9 @@ def inspection_candle(ins_condition):
     macd_result = macd_judge(latest_macd_df)
 
     # ■■■■上記内容から、Positionの取得可否を判断する■■■■
-    print("　　Fig:", figure_turn_ans['result_dic']['turn_ans'], "(", figure_turn_ans['result_dic']['total_ans'], ") Macd:"
+    print("　　Fig:", figure_turn_ans['result_dic']['result_turn'], "(", figure_turn_ans['result_dic']['result_include'], ") Macd:"
           , macd_result['cross'], "(", macd_result['cross_mae'], ",Range:",macd_result['range'], ",Nturn:", figure_latest3_ans['result'])
-    if figure_turn_ans['result_dic']['turn_ans'] == 1 or figure_latest3_ans['result'] == 1:  # 条件を満たす(購入許可タイミング）
+    if figure_turn_ans['result_dic']['result_turn'] == 1 or figure_latest3_ans['result'] == 1:  # 条件を満たす(購入許可タイミング）
         ans = 1
         print(macd_result['data'].head(5))
         # 保存が必要な場合は、保存を実施する

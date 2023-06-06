@@ -230,7 +230,7 @@ class order_information:
         # STATEの種類
         # order "PENDING" "CANCELLED" "FILLED"
         # position "OPEN" "CLOSED"
-        global gl_total_pips, gl_now_price_mid, gl_trade_win
+        global gl_total_pips, gl_now_price_mid, gl_trade_win, gl_total_yen
         if self.life:  # LifeがTrueの場合は、必ずorderIDが入っている
             oa.print_i(" □□情報を更新します", self.name)
             # ★現在価格を求めておく
@@ -259,12 +259,14 @@ class order_information:
                 self.life_set(False)
                 self.pips_res_arr.append(temp['position_pips'])
                 gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)  # トータル計算
+                gl_total_yen = gl_total_yen + self.position['realizePL']
                 if temp['position_pips'] >=0 :
                     gl_trade_win += 1  # トータルプラス計算
                 res1 = "【結果】" + str(temp['position_pips']) + "(決済価格:" + str(temp['position_close_price']) + "), "
                 res2 = "【Total】" + str(gl_total_pips) + "," + "【Win/All】" + str(gl_trade_win) + "/" + str(gl_trade_num)
                 res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.pips_min) + "/ー域:" + str(self.pips_max)
-                tk.line_send(" ▲解消:", datetime.datetime.now().replace(microsecond=0), res1, res2, res3)
+                res4 = "【Unit・合計損益】" + str(self.order['units']) + "," + str(gl_total_yen)
+                tk.line_send(" ▲解消:", datetime.datetime.now().replace(microsecond=0), res1, res2, res3, res4)
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
                 # oa.print_i("  ★orderCancel")
@@ -341,8 +343,8 @@ class order_information:
         if self.crcdo is False and self.position['state'] == "OPEN":  # ポジションのCRCDO歴がない場合⇒ポジションLC調整を行う可能性
             # 初回と長期間保有時のLC変更
             cl_span = 60  # 1分に１回しか更新しない
-            if p['pips'] > 0.025:  # ある程度のプラスがあれば、LC底上げを実施する
-                self.lc_range = -0.02  # プラス値でプラス域でロスカットを実施。マイナス域でマイナス域でのロスカット
+            if p['pips'] > 0.025 and self.name=="mini":  # ある程度のプラスがあれば、LC底上げを実施する
+                self.lc_range = 0.02  # プラス値でプラス域でロスカットを実施。マイナス域でマイナス域でのロスカット
                 lc_price = round(p['price'] - self.lc_range if self.plan['ask_bid'] < 0 else p['price'] + self.lc_range, 3)
                 tp_price = round(self.now_price - self.tp_range if self.plan['ask_bid'] < 0 else self.now_price + self.tp_range, 3)  # 微＋
                 self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
@@ -364,63 +366,63 @@ class order_information:
                     self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
                     self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
                     oa.print_i("    [ポジ有] LC底上げ基準プラス未達（小)")
-                    # tk.line_send("　(LC底上げ)初回")
-        # elif self.crcdo:
-        #     # 2回目以降のCRCDO
-        #     # プラス方向にLCを広げる処理を実施　（セルフトレールのようなもの）
-        #     od = 0.7
-        #     print("    CRCDO確認",self.crcdo_sec, p['time_past'])
-        #     if p['time_past']-self.crcdo_sec > 10:  # 前回のCRCDOよりN秒以上空いていれば、CRCDOを再検討する
-        #         if p['pips'] > 0.04:  # 価値ピップスのod倍の部分で利確を行う
-        #             temp_lc_range = p['pips'] * od  # 通常はself.lc_range
-        #             lc_price = round(p['price'] - temp_lc_range if self.plan['ask_bid'] < 0 else p['price'] + temp_lc_range, 3)
-        #             tp_price = round(self.now_price - self.tp_range if self.plan['ask_bid'] < 0 else self.now_price + self.tp_range, 3)  # 微＋
-        #
-        #             # 実行判定（向きによって変わるため）
-        #             exe_crcdo = 0  # ばあいによってはCRCDOしない可能性があるので、フラグを０に初期化しておく。
-        #             if o['direction'] < 1:  # 谷方向の場合
-        #                 if self.crcdo_lc > lc_price:
-        #                     exe_crcdo = 1  # LCラインを押し下げる場合（プラス拡大）
-        #                     print("   CDCRO実行へ　谷　>", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
-        #                 else:
-        #                     print("  拡大せず（谷） >", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
-        #             else:
-        #                 if self.crcdo_lc < lc_price:
-        #                     exe_crcdo = 1  # LCラインを押し下げる場合（プラス拡大）
-        #                     print("   CDCRO実行へ　山　<", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
-        #                 else:
-        #                     print("  拡大せず（山） <", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'] )
-        #
-        #             if exe_crcdo == 1:
-        #                 data = {
-        #                     "stopLoss": {"price": str(lc_price), "timeInForce": "GTC"},
-        #                     # "takeProfit": {"price": str(tp_price), "timeInForce": "GTC"},
-        #                     # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
-        #                 }
-        #                 res = oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
-        #                 print(res)
-        #
-        #                 if type(res) is int:
-        #                     tk.line_send("CRCDミス", self.api_try_num)
-        #                     if self.api_try_num < 0:
-        #                         oa.print_i(" ★CRCDC諦め")
-        #                         self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
-        #                     self.api_try_num = self.api_try_num - 1
-        #                 else:
-        #                     self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
-        #                     self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
-        #                     oa.print_i("    (LC底上げ)二回目以降")
-        #                     # tk.line_send("　(LC底上げ)二回目以降")
-        #
-        #                 self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
-        #                 self.crcdo_tp = tp_price  # ロスカ変更後のTPラインを保存
-        #
-        #             else:
-        #                 # exe_code=0
-        #                 pass
-        #
-        #         else:
-        #             print("     CRCRO再実行確認⇒なし",p['pips'])
+                    tk.line_send("　(LC底上げ)初回", self.name)
+        elif self.crcdo and self.name=="mini":
+            # 2回目以降のCRCDO
+            # プラス方向にLCを広げる処理を実施　（セルフトレールのようなもの）
+            od = 0.7
+            print("    CRCDO確認",self.crcdo_sec, p['time_past'])
+            if p['time_past']-self.crcdo_sec > 10:  # 前回のCRCDOよりN秒以上空いていれば、CRCDOを再検討する
+                if p['pips'] > 0.04:  # 価値ピップスのod倍の部分で利確を行う
+                    temp_lc_range = p['pips'] * od  # 通常はself.lc_range
+                    lc_price = round(p['price'] - temp_lc_range if self.plan['ask_bid'] < 0 else p['price'] + temp_lc_range, 3)
+                    tp_price = round(self.now_price - self.tp_range if self.plan['ask_bid'] < 0 else self.now_price + self.tp_range, 3)  # 微＋
+
+                    # 実行判定（向きによって変わるため）
+                    exe_crcdo = 0  # ばあいによってはCRCDOしない可能性があるので、フラグを０に初期化しておく。
+                    if o['direction'] < 1:  # 谷方向の場合
+                        if self.crcdo_lc > lc_price:
+                            exe_crcdo = 1  # LCラインを押し下げる場合（プラス拡大）
+                            print("   CDCRO実行へ　谷　>", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
+                        else:
+                            print("  拡大せず（谷） >", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
+                    else:
+                        if self.crcdo_lc < lc_price:
+                            exe_crcdo = 1  # LCラインを押し下げる場合（プラス拡大）
+                            print("   CDCRO実行へ　山　<", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'])
+                        else:
+                            print("  拡大せず（山） <", self.crcdo_lc, lc_price, p['pips'], temp_lc_range, p['price'],self.plan['ask_bid'] )
+
+                    if exe_crcdo == 1:
+                        data = {
+                            "stopLoss": {"price": str(lc_price), "timeInForce": "GTC"},
+                            # "takeProfit": {"price": str(tp_price), "timeInForce": "GTC"},
+                            # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
+                        }
+                        res = oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
+                        print(res)
+
+                        if type(res) is int:
+                            tk.line_send("CRCDミス", self.api_try_num)
+                            if self.api_try_num < 0:
+                                oa.print_i(" ★CRCDC諦め")
+                                self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
+                            self.api_try_num = self.api_try_num - 1
+                        else:
+                            self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
+                            self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
+                            oa.print_i("    (LC底上げ)二回目以降", self.name)
+                            # tk.line_send("　(LC底上げ)二回目以降")
+
+                        self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
+                        self.crcdo_tp = tp_price  # ロスカ変更後のTPラインを保存
+
+                    else:
+                        # exe_code=0
+                        pass
+
+                else:
+                    print("     CRCRO再実行確認⇒なし",p['pips'])
 
         elif self.position['state'] != "OPEN":
             # print("  　 ポジション無し")
@@ -481,12 +483,12 @@ def order_setting(order_info_temp, ans_dic):
     print(" order_setting", order_info_temp)
 
     # 代表的なものを変数に入れておく
-    gl_trade_num = gl_trade_num + 1
+    gl_trade_num = gl_trade_num + 2  # 一回で二つ取る場合は２
     line_base = order_info_temp['line_base']
     expect_direction = order_info_temp['expect_dir']
     margin = order_info_temp['margin']
     lc = order_info_temp['lc']
-    tp = 0.09  # order_info_temp['lc']
+    tp = order_info_temp['tp']  # order_info_temp['lc']
     if order_info_temp['kinds'] == 1:  # パターンで送信するコメントを変更する
         # Turnの場合
         memo = ans_dic['figure_turn_result']['latest_turn_dic']['memo_all']
@@ -509,15 +511,30 @@ def order_setting(order_info_temp, ans_dic):
         "tr_range": 0.2,  # ↑ここまでオーダー
         "memo": ""
     }
-    fw.update_information()  # timepast等を埋めるため、まずupdateが必要
-    # オーダー発行
+    # fw.update_information()  # timepast等を埋めるため、まずupdateが必要
     fw.order_registration(order_info)  # プラン自身を代入
     fw.make_order()
-    mes = " baseline:" + str(line_base)
 
+    # オーダーMINI発行
+    order_info = {
+        "price": line_base,
+        "lc_range": lc,
+        "tp_range": tp * 0.5,
+        "ask_bid": expect_direction,  # 順思想
+        "units": 30000,
+        "type": "STOP",  # ここはストップ（順張り）専用！
+        "tr_range": 0.05,  # ↑ここまでオーダー
+        "memo": ""
+    }
+    # fw.update_information()  # timepast等を埋めるため、まずupdateが必要
+    fw_mini.order_registration(order_info)  # プラン自身を代入
+    fw_mini.make_order()
+
+
+    mes = " targetline:" + str(line_base)
     tk.line_send("■折返Position！", gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
                  "トリガー:", order_info_temp['memo'], ",", mes, ",情報:", memo, ",MACD:", order_info_temp['macd'],
-                 ",前回の結果", order_info_temp['r'])
+                 ",前回の結果", order_info_temp['r'], "TP情報", tp, round(tp*0.5, 3))
 
 
 def mode1():
@@ -528,7 +545,7 @@ def mode1():
     print("  Mode1")
     # ポジションを２つ用意するため、二つを初期化する
     fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-    fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+    fw_mini.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
 
     # チャート分析結果を取得する
     inspection_condition = {
@@ -543,10 +560,12 @@ def mode1():
 
     # 一旦整理。。
     ans = ans_dic['judgment']
-    turn_ans_temp = ans_dic['figure_turn_result']['result_dic']['turn_ans']  # 直近のターンがあるかどうか（連続性の考慮無し）
-    turn_ans = ans_dic['figure_turn_result']['result_dic']['total_ans']  # 連続性を考慮したうえでのターン判定
+    turn_exist = ans_dic['figure_turn_result']['result_dic']['result_turn']  # 直近のターンがあるかどうか（連続性の考慮無し）
+    turn_include_exist = ans_dic['figure_turn_result']['result_dic']['result_include']  # 連続性を考慮したうえでのターン判定
     turn_target_price = ans_dic['figure_turn_result']['order_dic']['target_price']
     turn_expect_direction = ans_dic['figure_turn_result']['order_dic']['direction']
+    turn_expect_lc = ans_dic['figure_turn_result']['order_dic']['lc_range']
+    turn_expect_tp = ans_dic['figure_turn_result']['order_dic']['tp_range']
     macd_ans = ans_dic['macd_result']['cross']
     latest3_ans = ans_dic['latest3_figure_result']['result']
     latest3_target_price = ans_dic['latest3_figure_result']['order_dic']['target_price']
@@ -564,10 +583,24 @@ def mode1():
 
     new_jd = fw.judge_new()
     if new_jd:
-        if turn_ans_temp == 1:  # ターンが確認された場合（最優先）
+        if turn_exist == 1:  # ターンが確認された場合（最優先）
             print("  ターンを確認")
-            if turn_ans == 1:  # そのさらに直前のターンが発生がある場合
-                print("   その直前にもターンを確認⇒オーダー無し")
+            if turn_include_exist == 1:  # そのさらに直前のターンが発生がある場合
+                print("   ★オーダー発行(IncludeのRange)")
+                oa.OrderCancel_All_exe()  # 露払い
+                oa.TradeAllClose_exe()  # 露払い
+                order_temp = {
+                    "line_base": turn_target_price,
+                    "expect_dir": turn_expect_direction,
+                    "lc": turn_expect_lc,  # 少し狭い目のLC
+                    "tp": turn_expect_tp,
+                    "margin": 0.01,
+                    "memo": "ターン起点",
+                    "kinds": 1,
+                    "r": r,
+                    "macd": ans_dic['macd_result']['cross']
+                }
+                order_setting(order_temp, ans_dic)  # オーダー発行
                 tk.line_send("Range状態のターンの為、オーダー無し")
             else:
                 print("   ★オーダー発行")
@@ -577,7 +610,8 @@ def mode1():
                     "line_base": turn_target_price,
                     "expect_dir": turn_expect_direction,
                     "lc": 0.045,  # 少し狭い目のLC
-                    "margin": 0.02,
+                    "tp": 0.09,
+                    "margin": 0.01,
                     "memo": "ターン起点",
                     "kinds": 1,
                     "r": r,
@@ -590,7 +624,8 @@ def mode1():
                 "line_base": latest3_target_price,
                 "expect_dir": latest3_expect_direction,
                 "lc": 0.025,  # 非常に狭いLC
-                "margin": 0.02,
+                "tp": 0.05,
+                "margin": 0.01,
                 "memo": "ターン未遂起点",
                 "kinds": 2,
                 "r": r,
@@ -598,7 +633,7 @@ def mode1():
             }
             order_setting(order_temp, ans_dic)  # オーダー発行
     else:
-        if turn_ans_temp == 1:  # ターンが確認された場合（最優先）
+        if turn_exist == 1:  # ターンが確認された場合（最優先）
             print("  ターンを確認(時間で不可）")
         elif latest3_ans == 1:  # ターン未遂が確認された場合（早い場合）
             print("  ターン未遂を確認　（時間で不可）")
@@ -655,8 +690,8 @@ def exe_manage():
 
         elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
             fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-            fw_stop.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-            if fw.life or fw_stop.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
+            fw_mini.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+            if fw.life or fw_mini.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
                 # print("■■■", gl_now)  # 表示用（実行時）
                 mode2()
 
@@ -715,14 +750,14 @@ gl_now_price_mid = 0  # 現在価格（念のための保持）　@ exe_manage�
 gl_midnight_close_flag = 0  # 深夜突入時に一回だけポジション等の解消を行うフラグ　＠time_manageのみで変更あり
 gl_exe_mode = 0  # 実行頻度のモード設定　＠
 gl_total_pips = 0  # totalの合計値
+gl_total_yen = 0  # Unit含めたトータル損益（円の完全）
 gl_data5r_df = 0  # 毎回複数回ローソクを取得は時間無駄なので１回を使いまわす　＠exe_manageで取得
 gl_trade_num = 0  # 取引回数をカウントする
 gl_trade_win = 0  # プラスの回数を記録する
 
 # ■ポジションクラスの生成
 fw = order_information("逆思想", oa)  # 順思想のオーダーを入れるクラス
-fw_stop = order_information("順思想", oa)  # 順思想のオーダーを入れるクラス
-rv_stop = order_information("rv_stop", oa)  # 順思想のオーダーを入れるクラス
+fw_mini = order_information("mini", oa)  # 順思想のオーダーを入れるクラス
 
 # ■処理の開始
 oa.OrderCancel_All_exe()  # 露払い

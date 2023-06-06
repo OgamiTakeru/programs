@@ -329,12 +329,15 @@ class Oanda:
         :param order_id: 注文のID
         :return: あまり利用しないので、Jsonのままで返却
         """
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+
         try:
             ep = OrderDetails(accountID=self.accountID, orderID=order_id)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            # print("   (Detail実行時間)", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
             return res_json
         except Exception as e:
-            print("★★APIエラー（Detail）", datetime.datetime.now().replace(microsecond=0))
+            print("★★APIエラー（Detail）", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
             return {"error": e}
 
     # (9)指定のオーダーのステータス（オーダーとトレードの詳細）を取得
