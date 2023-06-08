@@ -273,8 +273,8 @@ class order_information:
                     gl_trade_win += 1  # トータルプラス計算
                 res1 = "【結果】" + str(temp['position_pips']) + "(決済価格:" + str(temp['position_close_price']) + "), "
                 res2 = "【Total】" + str(gl_total_pips) + "," + "【Win/All】" + str(gl_trade_win) + "/" + str(gl_trade_num)
-                res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.pips_min) + "/ー域:" + str(self.pips_max)
-                res4 = "【Unit/今回損益/合計損益】" + str(self.order['units']) + "," + str(yen_result) + "円,計" + str(gl_total_yen) + "円"
+                res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.pips_min) + "/ー域:" + str(self.pips_max) + "【Unit】" + str(self.order['units'])
+                res4 = "【今回損益/合計損益】" + str(yen_result) + "円,計" + str(gl_total_yen) + "円"
                 id_info = "【orderID】" + str(self.order['id'])
                 tk.line_send(" ▲解消:", datetime.datetime.now().replace(microsecond=0), res1, res2, res3, id_info, res4)
                 change_flag = 1  # 結果の可視化フラグ
@@ -515,7 +515,7 @@ def order_setting(order_info_temp, target_class):
         "tp_range": tp,
         "ask_bid": expect_direction,  # 順思想
         "units": units,
-        "type": "STOP",  #order_type,  # ここはストップ（順張り）専用！
+        "type": order_type,  #order_type,  # ここはストップ（順張り）専用！
         "tr_range": 0.2,  # ↑ここまでオーダー
         "memo": ""
     }
