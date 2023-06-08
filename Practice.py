@@ -14,30 +14,19 @@ oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # クラス�
 jp_time = datetime.datetime(2023, 5, 29, 19, 20, 00)
 euro_time_datetime = jp_time - datetime.timedelta(hours=9)
 euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-print(jp_time)
-print(euro_time_datetime)
 param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
 df = oa.InstrumentsCandles_exe("USD_JPY", param)
 df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)
 df_r = df.sort_index(ascending=False)
 print(df_r.head(5))
+### ↑これより上は消さない
 
-t1 = {"lc": 1, "tp": 2}
-t2 = {"lc": 2, "tp": 1}
+print(oa.OrderDetails_exe(114160))  # 113961
 
-test = []
-test.append({"lc": 1, "tp": 2})
-test.append({"lc": 2, "tp": 1})
-test.append({"lc": 2, "tp": 10})
+print(oa.TradeDetails_exe(114080))  # 113961
 
-print(test)
 
-test_list = sorted(test, key=lambda x: x['lc'], reverse=True)  # LCで降順
-print(test_list)
-print("↓")
-ea = list(filter(lambda item : item['lc'] == 2, test_list))
-print(ea)
-
+#
 
 
 # def peaks_collect(df_r):

@@ -102,7 +102,7 @@ class Oanda:
 
         except Exception as e:
             print("API_Error（価格情報取得)", datetime.datetime.now().replace(microsecond=0))
-            return e
+            return {"error": e}
 
     # (2)キャンドルデータを取得(5000行以内/指定複雑)
     def InstrumentsCandles_exe(self, instrument, params):
@@ -201,70 +201,70 @@ class Oanda:
           LIMIT:指値。逆張り（現価格より低い値段で買い、現価格より高い値段で売りの指値）、また、利確
           MARKET:成り行き。この場合、priceは設定しても無視される（ただし引数としてはテキトーな数字を入れる必要あり）。
         """
-        try:
+        # try:
             # 念のため、初期値を入れておく。
-            data = {  # ロスカ、利確ありのオーダー
-                "order": {
-                    "instrument": "USD_JPY",
-                    "units": 10,
-                    "type": "",  # "STOP(逆指)" or "LIMIT"
-                    "positionFill": "DEFAULT",
-                    "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
-                }
+        data = {  # ロスカ、利確ありのオーダー
+            "order": {
+                "instrument": "USD_JPY",
+                "units": 10,
+                "type": "",  # "STOP(逆指)" or "LIMIT"
+                "positionFill": "DEFAULT",
+                "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
             }
-            data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
-            data['order']['type'] = info['type']  # 必須
-            if info['type'] != "MARKET":
-                # 成り行き注文以外
-                data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
-            if info['tp_range'] != 0:
-                # 利確設定ありの場合
-                data['order']['takeProfitOnFill'] = {}
-                data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
-                                                                       (info['tp_range'] * info['ask_bid']), 3))  # 利確
-                data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
-            if info['lc_range'] != 0:
-                # ロスカ設定ありの場合
-                data['order']['stopLossOnFill'] = {}
-                data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
-                                                                     (info['lc_range'] * info['ask_bid']), 3))  # ロスカット
-                data['order']['stopLossOnFill']['timeInForce'] = "GTC"
-            if info['tr_range'] != 0:
-                # トレールストップロス設定ありの場合
-                data['order']['trailingStopLossOnFill'] = {}
-                data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
-                data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
+        }
+        data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
+        data['order']['type'] = info['type']  # 必須
+        if info['type'] != "MARKET":
+            # 成り行き注文以外
+            data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+        if info['tp_range'] != 0:
+            # 利確設定ありの場合
+            data['order']['takeProfitOnFill'] = {}
+            data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
+                                                                   (info['tp_range'] * info['ask_bid']), 3))  # 利確
+            data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
+        if info['lc_range'] != 0:
+            # ロスカ設定ありの場合
+            data['order']['stopLossOnFill'] = {}
+            data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
+                                                                 (info['lc_range'] * info['ask_bid']), 3))  # ロスカット
+            data['order']['stopLossOnFill']['timeInForce'] = "GTC"
+        if info['tr_range'] != 0:
+            # トレールストップロス設定ありの場合
+            data['order']['trailingStopLossOnFill'] = {}
+            data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
+            data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
 
-            # 実行
-            ep = OrderCreate(accountID=self.accountID, data=data)  #
-            res_json = eval(json.dumps(self.api.request(ep), indent=2))
-            if 'orderCancelTransaction' in res_json:
-                print("   ■■■CANCELあり")
-                print(res_json)
-                canceled = True
-                order_id = 0
-                order_time = 0
-            else:
-                # 正確にオーダーが入ったためオーダーIDを取得
-                canceled = False
-                order_id = res_json['orderCreateTransaction']['id']
-                order_time = res_json['orderCreateTransaction']['time']
+        # 実行
+        ep = OrderCreate(accountID=self.accountID, data=data)  #
+        res_json = eval(json.dumps(self.api.request(ep), indent=2))
+        if 'orderCancelTransaction' in res_json:
+            print("   ■■■CANCELあり")
+            print(res_json)
+            canceled = True
+            order_id = 0
+            order_time = 0
+        else:
+            # 正確にオーダーが入ったためオーダーIDを取得
+            canceled = False
+            order_id = res_json['orderCreateTransaction']['id']
+            order_time = res_json['orderCreateTransaction']['time']
 
-            # オーダー情報履歴をまとめておく
-            order_info = {"price": str(round(info['price'], 3)),
-                          "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
-                          "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
-                          "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
-                          "type": info['type'],
-                          "cancel": canceled,
-                          "order_id": order_id,
-                          "order_time": order_time
-                          }
-            return order_info
+        # オーダー情報履歴をまとめておく
+        order_info = {"price": str(round(info['price'], 3)),
+                      "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
+                      "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
+                      "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
+                      "type": info['type'],
+                      "cancel": canceled,
+                      "order_id": order_id,
+                      "order_time": order_time
+                      }
+        return order_info
 
-        except Exception as e:
-            print(e)
-            print("★★APIエラー★★orderCreate")
+        # except Exception as e:
+        #     print(e)
+        #     print("★★APIエラー★★orderCreate")
 
     # (6)オーダーのキャンセル
     def OrderCancel_exe(self, order_id):
@@ -337,8 +337,8 @@ class Oanda:
             # print("   (Detail実行時間)", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
             return res_json
         except Exception as e:
-            print("★★APIエラー（Detail）", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
-            return {"error": e}
+            print("★★APIエラー（Detail）", order_id, (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
+            return {"error": e, "id": order_id}
 
     # (9)指定のオーダーのステータス（オーダーとトレードの詳細）を取得
     def OrderDetailsState_exe(self, order_id):
@@ -358,7 +358,7 @@ class Oanda:
                 "order_time_past": 0,
                 "order_units": 0,
                 "order_price": 0.0,  # Marketでは存在しない
-                "order_state": 0,
+                "order_state": "error",  # ★エラーの場合はここにエラーが入る
                 "position_id": 0,
                 "position_time": 0,
                 "position_time_past": 0,

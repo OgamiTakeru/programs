@@ -528,7 +528,7 @@ def make_limit_order_info(dic):
 def inspection_candle(ins_condition):
     """
     オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
-    ins_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
+    figure_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
     返却値：辞書形式で以下を返却
     inspection_ans: オーダー発行有無（０は発行無し。０以外は発行あり）
     datas: 更に辞書形式が入っている

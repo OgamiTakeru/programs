@@ -342,25 +342,29 @@ def figure_turn_each_inspection(data_df_origin):
     # ■　形状を判定する（テスト）
     type_info_dic = figure_turn_each_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
     ans_dic["support_info"] = type_info_dic
+
+    # ■　形状からターゲットラインを求める。
     return ans_dic
 
 
-def figure_turn_inspection(ins_condition):
+def figure_turn_inspection(figure_condition):
     """
     old区間4,latest区間2の場合のジャッジメント
     :param oldest_ans:第一引数がOldestであること。直近部より前の部分が、どれだけ同一方向に進んでいるか。
     :param latest_ans:第二引数がLatestであること。直近部がどれだけ連続で同一方向に進んでいるか
     :param now_price: 途中で追加した機能（現在の価格を取得し、成り行きに近いようなオーダーを出す）　230105追加
-    :param ins_condition
+    :param figure_condition
     :return:
     """
     #
     # ■直近データの形状の解析
-    data_r = ins_condition['data_r']  # データを格納
-    now_price = ins_condition['now_price']
-    ignore = ins_condition['figure']['ignore']  # ignore=1の場合、タイミング次第では自分を入れずに探索する（正）
-    dr_latest_n = ins_condition['figure']['latest_n']  # 2
-    dr_oldest_n = ins_condition['figure']['oldest_n']  # 10 ⇒30
+    data_r = figure_condition['data_r']  # データを格納
+    ignore = figure_condition['ignore']  # ignore=1の場合、タイミング次第では自分を入れずに探索する（正）
+    dr_latest_n = figure_condition['latest_n']  # 2
+    dr_oldest_n = figure_condition['oldest_n']  # 10 ⇒30
+    max_return_ratio = figure_condition['return_ratio']
+    # now_price = figure_condition['now_price']
+
     # 各DFを解析
     latest_df = data_r[ignore: dr_latest_n + ignore]  # 直近のn個を取得
     oldest_df = data_r[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
@@ -378,7 +382,6 @@ def figure_turn_inspection(ins_condition):
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
             return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
-            max_return_ratio = 50
             if return_ratio < max_return_ratio:
                 turn_ans = 1  # 達成
                 memo = "達成"
@@ -395,25 +398,49 @@ def figure_turn_inspection(ins_condition):
     memo_info = "@戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
     memo_all = memo_all + memo_info
 
+    # ■注文する場合の情報を記載しておく
+    if turn_ans != 0:
+        # 注文情報
+        order_dic = {
+            "base_price": latest_ans['latest_price'],
+            "direction": oldest_ans['direction'],
+            "tp_range": 0,
+            "lc_range": 0,
+            "margin": 0,
+        }
+    else:
+        # 注文情報（全て０の形式合わせ）
+        order_dic = {
+            "tp_range": 0,
+            "lc_range": 0,
+            "margin": 0,
+        }
+
     # 返却用の辞書を作成
+    if return_ratio == 0:
+        rr = 1
+    else:
+        rr = return_ratio
     ans_dic = {
-        "turn_ans": turn_ans,
+        "turn_ans": turn_ans,  # 結果として、ターン認定されるかどうか
         "latest_ans": latest_ans,
         "oldest_ans": oldest_ans,
         "return_ratio": return_ratio,
         "memo": memo,
         "memo_all": memo_all,
-        "price": now_price
+        "1percent_range": round(latest_ans['gap']/rr, 3),
+        "to_half_percent": round(50-return_ratio)
+        # "price": now_price
     }
 
     # Return
     return ans_dic
 
 
-def figure_turn_judge(ins_condition):
-    data_r = ins_condition['data_r']
+def figure_turn_judge(figure_condition):
+    data_r = figure_condition['data_r']
     # 直近のデータの確認　LatestとOldestの関係性を検証する
-    turn_ans = figure_turn_inspection(ins_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
+    turn_ans = figure_turn_inspection(figure_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
     # 初期値の設定
     include_ans = 0  # 最初は０
     include_memo = "0"
@@ -427,11 +454,11 @@ def figure_turn_judge(ins_condition):
     turn_ans2['memo'] = "（同値）"
     if turn_ans['turn_ans'] == 1:
         if turn_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
-            next_inspection_range = ins_condition['figure']['ignore'] + ins_condition['figure']['latest_n'] + \
+            next_inspection_range = figure_condition['ignore'] + figure_condition['latest_n'] + \
                                     turn_ans['oldest_ans']['count'] - 2
             next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
-            ins_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
-            turn_ans2 = figure_turn_inspection(ins_condition)  # ★★ネクストの調査
+            figure_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
+            turn_ans2 = figure_turn_inspection(figure_condition)  # ★★ネクストの調査
             if turn_ans2['turn_ans'] == 1:
                 include_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1)  # 共通
                 if turn_ans2['oldest_ans']['gap'] > turn_ans['oldest_ans']['gap']:
@@ -442,7 +469,7 @@ def figure_turn_judge(ins_condition):
                     expected_lc_range = latest_gap  # LCはlatest_gap
                     expected_tp_range = round(oldest_gap - latest_gap - (oldest_gap * 0.1), 3)  # 指定方法は、OldestのGapから、latest戻り分(=latestGap)と縮小分(oldestの１割)を引いた数。
                     include_memo = "Turn発生&包括関係の形状発生"
-                    print(" 発生&包括されていそう！", expected_direction, expected_tp_range, expected_lc_range)
+                    print(" 発生&包括！", expected_direction, expected_tp_range, expected_lc_range)
                 else:
                     include_ans = 0
                     include_memo = "Turn発生&前回turnより大きくなっている"
@@ -474,7 +501,7 @@ def figure_turn_judge(ins_condition):
         "oldest_turn_dic": turn_ans2,
         "include_dic": include_result,
         "order_dic": {
-            "base_price": turn_ans['latest_ans']['latest_image_price'],
+            "base_price": turn_ans['latest_ans']['latest_price'],
             "direction": expected_direction,
             "tp_range": expected_tp_range,
             "lc_range": expected_lc_range
@@ -482,6 +509,49 @@ def figure_turn_judge(ins_condition):
     }
 
     return ans
+
+
+# def figure_turn3_judge(figure_condition):
+#     # 3足含めて、戻した場合（インクルードは考えない）
+#     data_r = figure_condition['data_r']
+#     # 直近のデータの確認　LatestとOldestの関係性を検証する
+#     turn_ans = figure_turn_inspection(figure_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
+#     # 初期値の設定
+#     include_ans = 0  # 最初は０
+#     include_memo = "0"
+#     expected_direction = turn_ans['oldest_ans']['direction']  # 購入の初期値は、Oldestと同方向（順思想）
+#     expected_lc_range = 0  # Range判断の場合に利用するが、共通の辞書返却の為
+#     expected_tp_range = 0  # Range判断の場合に利用するが、共通の辞書返却の為
+#     include_ratio = 0
+#
+#
+#     # 現在と過去の形状で包括関係の情報
+#     include_result = {
+#         "total_ans": c_o_ans,
+#         "total_memo": include_memo,
+#         "include_ratio": include_ratio,
+#     }
+#
+#     # 結果を辞書形式にまとめる
+#     result_dic = {
+#         "result_turn": turn_ans['turn_ans'],
+#         "result_include": include_ans,
+#     }
+#
+#     ans = {
+#         "result_dic": result_dic,
+#         "latest_turn_dic": turn_ans,
+#         "oldest_turn_dic": turn_ans2,
+#         "include_dic": include_result,
+#         "order_dic": {
+#             "base_price": turn_ans['latest_ans']['latest_price'],
+#             "direction": expected_direction,
+#             "tp_range": expected_tp_range,
+#             "lc_range": expected_lc_range
+#         }
+#     }
+#
+#     return ans
 
 
 def macd_judge(data_df):
@@ -600,14 +670,14 @@ def figure_latest3_judge(ins_condition):
         res_memo = "Trun未遂達成"
         latest3_figure = 1
         order = {
-            "target_price": data_r.iloc[0]['open'],
+            "base_price": data_r.iloc[0]['open'],
             "direction": oldest_d
         }
     else:
         res_memo = "Trun未遂未達"
         latest3_figure = 0
         order = {
-            "target_price": 0,
+            "base_price": 0,
             "direction": 0
         }
         # print("   未達成 dpr⇒", d, p, r)
@@ -615,7 +685,7 @@ def figure_latest3_judge(ins_condition):
     memo1 = " ,Dir:" + str(oldest_d) + str(middle_d) + str(latest_d)
     memo2 = " ,Body:" + str(oldest) + str(middle) + str(latest)
     memo3 = " ,body率" + str(round(oldest / middle, 1))
-    memo4 = ", TargetPrice:" + str(order['target_price'])
+    memo4 = ", TargetPrice:" + str(order['base_price'])
     memo_all = "  " + res_memo + memo4 + memo1 + memo2 + memo3 + memo4
     print(memo_all)
 
@@ -625,13 +695,16 @@ def figure_latest3_judge(ins_condition):
 def inspection_candle(ins_condition):
     """
     オーダーを発行するかどうかの判断。オーダーを発行する場合、オーダーの情報も返却する
-    ins_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
+    figure_condition:探索条件を辞書形式（ignore:無視する直近足数,latest_n:直近とみなす足数)
     """
     #条件（引数）の取得
     data_r = ins_condition['data_r']
 
-    # ■直近データの形状の解析
-    figure_turn_ans = figure_turn_judge(ins_condition)
+    # ■直近ターンの形状（２戻し）の解析
+    figure_turn_ans = figure_turn_judge(ins_condition['figure'])
+
+    # ■直近ターン形状（３戻し）の解析
+    # figure_turn3_ans = figure_turn3_judge(ins_condition['figure3'])
 
     # ■直近データの形状の確認（5pip以上の同方向が二つの後に、5pips以内の戻りがあった場合、順張りする）
     figure_latest3_ans = figure_latest3_judge(ins_condition)
