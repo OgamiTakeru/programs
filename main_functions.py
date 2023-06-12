@@ -343,6 +343,10 @@ def figure_turn_each_inspection(data_df_origin):
     type_info_dic = figure_turn_each_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
     ans_dic["support_info"] = type_info_dic
 
+    if len(data_df) == 2:
+        print("Latestが５分足りてない現象の検証用")
+        print(data_df)
+
     # ■　形状からターゲットラインを求める。
     return ans_dic
 
