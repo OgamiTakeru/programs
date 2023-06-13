@@ -13,6 +13,7 @@ from oandapyV20.endpoints.orders import OrderCreate, OrderDetails, OrdersPending
 from oandapyV20.endpoints.positions import OpenPositions, PositionDetails, PositionClose
 from oandapyV20.endpoints.pricing import PricingInfo
 from oandapyV20.endpoints.trades import TradeCRCDO, TradeDetails, TradeClose, OpenTrades
+import oandapyV20.endpoints.transactions as trans
 
 
 class Oanda:
@@ -667,6 +668,97 @@ class Oanda:
         df = df[from_index:to_index]
         df = df.sort_index(ascending=False)
         return df
+
+    # (23) トランザクションデータを取得する（N　×　Row分）
+    def get_base_data_multi(self, roop, num):
+        """
+        最新のデータから、N個さかのぼった分のデータをトランザクションデータを取得する。
+        処理としては、まず最新の取引IDを取得し、そこからnum個分のデータを、roop回数取得する。
+        numの最大値は、500(OandaのAPIの仕様上限。get_base_dataを利用してAPIを叩く事になる）
+        例えば、num=3でroop=5とした場合、直近から３回分の取引データを５回分、ようするに直近１５回分の取引データを取得する。
+        :param roop: N
+        :param num:
+        :return:
+        """
+        # 返却用DF
+        for_ans = None
+        # 最も新しいIDを取得する（TOに入れる用）
+        ep = trans.TransactionIDRange(accountID=self.accountID, params={"to": 40746, "from": 40746})
+        resp = self.api.request(ep)
+        latestT = resp['lastTransactionID']
+
+        for i in range(roop):
+            params_temp = {
+                "to": int(latestT),
+                "from": int(latestT) - num + 1
+            }
+            ep = trans.TransactionIDRange(accountID=self.accountID, params=params_temp)
+            resp = self.api.request(ep)
+            # params内、toの変更
+            latestT = int(latestT) - num
+
+            # transactionの内の配列データを取得する
+            transactions = resp['transactions']
+            print(len(transactions))
+
+            all_info = []
+            for item in transactions:
+                print("id=", item["id"])
+                # print(item)
+                # 考えるのめんどいので、必要項目だけ辞書形式にしてしまう
+                dict = {
+                    "id": item["id"],
+                    "time": item["time"],
+                    "type": item["type"],
+                    # "reason": item["reason"],
+                }
+                # たまにreasonがないのが存在する。。41494とか
+                if "reason" in item:
+                    dict["reason"] = item["reason"]
+                else:
+                    dict["reason"] = 0
+                #
+                if "units" in item:
+                    dict["units"] = item["units"]
+                else:
+                    dict["units"] = 0
+                # ポジションオーダー時にある項目
+                if "takeProfitOnFill" in item:
+                    if "price" in item["takeProfitOnFill"]:
+                        dict["price_tp"] = item["takeProfitOnFill"]["price"]
+                    else:
+                        dict["price_tp"] = "N"
+                else:
+                    dict["price_tp"] = 0
+
+                if "stopLossOnFill" in item:
+                    if "price" in item["stopLossOnFill"]:
+                        dict["price_lc"] = item["stopLossOnFill"]["price"]
+                    else:
+                        dict["price_lc"] = "N"
+                else:
+                    dict["price_lc"] = 0
+                # priceを含む場合（オーダーのキャンセル以外はpriceが入る）
+                if "price" in item:
+                    dict['price'] = item['price']
+                else:
+                    dict['price'] = 0
+                # ポジション解消時にある項目
+                if "pl" in item:
+                    dict["pl"] = item["pl"]
+                else:
+                    dict["pl"] = 0
+
+                # 配列に追加する
+                all_info.append(dict)
+
+            t_df = pd.DataFrame(all_info)
+            t_df['time_jp'] = t_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻を追加する
+
+            for_ans = pd.concat([t_df, for_ans])  # 結果用dataframeに蓄積（時間はテレコ状態）
+
+        print("トランザクションデータ取得完了")
+        return for_ans
 
     # 【Roll等を使い、過去足との平均値等を算出】
     # def add_roll_info(self, data_df):

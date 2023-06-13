@@ -535,7 +535,7 @@ def order_setting(class_order_arr):
 
         if target_class.name != "mini":  # 連続にならないように、Miniの場合は送付しない
             mes = " targetline:" + str(line_base)
-            tk.line_send("■折返Position！", gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
+            tk.line_send("■折返Position！", gl_live, gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
                          "トリガー:", trigger, "指定価格",price, "情報:", memo, ",", mes, ",MACD:", order_info_temp['macd'])
 
 
@@ -784,7 +784,7 @@ def exe_manage():
         # ■いずれは低頻度モードのみでの取得になるかも
         # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
         if time_min % 5 == 0 and time_sec == 6:  # キャンドルの確認（５分に一回）
-            print("■■■Candle調査", gl_now)  # 表示用（実行時）
+            print("■■■Candle調査", gl_live, gl_now)  # 表示用（実行時）
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
@@ -795,13 +795,13 @@ def exe_manage():
             fw.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
             fw_mini.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
             if fw.life or fw_mini.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
-                print("■■■", gl_now)  # 表示用（実行時）
+                print("■■■", gl_live, gl_now)  # 表示用（実行時）
                 mode2()
 
         # ■　初回だけ実行と同時に行う
         if gl_first == 0:
             gl_first = 1
-            print("■■■初回", gl_now, gl_exe_mode)  # 表示用（実行時）
+            print("■■■初回", gl_now, gl_exe_mode, gl_live)  # 表示用（実行時）
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
             # jp_time = datetime.datetime(2023, 5, 29, 19, 20, 00)
@@ -841,12 +841,6 @@ def test_exe():
     for i in range(10):
         print(i)
 
-# ■オアンダクラスの設定
-fx_mode = 1  # 1=practice, 0=Live
-if fx_mode == 1:  # practice
-    oa = oanda_class.Oanda(tk.accountID, tk.access_token, tk.environment)  # インスタンス生成
-else:  # Live
-    oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # インスタンス生成
 
 # ■グローバル変数の宣言等
 # 変更なし群
@@ -865,6 +859,16 @@ gl_data5r_df = 0  # 毎回複数回ローソクを取得は時間無駄なので
 gl_trade_num = 0  # 取引回数をカウントする
 gl_trade_win = 0  # プラスの回数を記録する
 gl_error_order_id = []  # エラーを起こしたIDをためておく（後で確認するため）
+gl_live = "Pra"
+
+# ■オアンダクラスの設定
+fx_mode = 0  # 1=practice, 0=Live
+if fx_mode == 1:  # practice
+    oa = oanda_class.Oanda(tk.accountID, tk.access_token, tk.environment)  # インスタンス生成
+    gl_live = "Pra"
+else:  # Live
+    oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # インスタンス生成
+    gl_live = "Live"
 
 # ■ポジションクラスの生成
 fw = order_information("Main", oa)  # 順思想のオーダーを入れるクラス
@@ -873,6 +877,6 @@ fw_mini = order_information("mini", oa)  # 順思想のオーダーを入れる�
 # ■処理の開始
 oa.OrderCancel_All_exe()  # 露払い
 oa.TradeAllClose_exe()  # 露払い
-tk.line_send("■■新規スタート")
+tk.line_send("■■新規スタート", gl_live)
 # main()
 exe_loop(1, exe_manage)  # exe_loop関数を利用し、exe_manage関数を1秒ごとに実行

@@ -21,9 +21,9 @@ df_r = df.sort_index(ascending=False)
 print(df_r.head(5))
 ### ↑これより上は消さない
 
-print(oa.OrderDetails_exe(114160))  # 113961
-
-print(oa.TradeDetails_exe(114080))  # 113961
+# print(oa.OrderDetails_exe(114160))  # 113961
+#
+# print(oa.TradeDetails_exe(114080))  # 113961
 
 
 #

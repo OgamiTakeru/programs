@@ -19,8 +19,8 @@ from oandapyV20.endpoints.trades import TradeCRCDO
 import oandapyV20.endpoints.transactions as trans
 
 # 初期設定＋oandaクラスインスタンス生成
-accountID = "101-009-20438763-001"  # デモ
-access_token = '955c62ae4f76351d24369b3aae936b35-91f898f60f4dd3e02d4dd8e62754ac61'
+accountID = tk.accountID
+access_token = tk.access_token
 environment = "practice"  # デモ口座 本番は"live"
 oa = oanda_class.Oanda(accountID, access_token,environment)  # クラスインスタンス生成
 api = API(access_token=access_token, environment=environment)

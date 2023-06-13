@@ -81,7 +81,7 @@ def get_inspection_data(time_base):
     """
     # print(" entry(検証開始)",  dr.iloc[0]['time_jp'], d.iloc[-1]['time_jp'])
     # mid_df.at[index_graph, "entry42"] = dr.iloc[0]['open']  # グラフ用データ追加
-    folder_path_cache = 'C:/Users/taker/Desktop/oanda_details/'  # キャッシュ保存用
+    folder_path_cache = tk.inspection_data_cache_folder_path  # キャッシュ保存用
     detail_range_sec = 3600  # ★　N行×5S の検証を行う。 この数字は、検証をしたい分数×60
     latest_row_time_dt = f.str_to_time(time_base[:26])  # 時刻を変換する
     detail_from_time_dt = latest_row_time_dt + datetime.timedelta(minutes=0)  # 開始時刻は分単位で調整可
@@ -539,7 +539,6 @@ def order_future_inspection_loop(detail_df, ans_dic):
 def main_inspection():
     # データの取得 and peak情報付加　＋　グラフ作成
     mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": gl['candle_unit'], "count": gl['candle_num']}, gl['num'])
-    mid_df.to_csv('C:/Users/taker/Desktop/Peak_TEST_DATA.csv', index=False, encoding="utf-8")
     # データの取得２
     # jp_time = datetime.datetime(2023, 6, 5, 11, 5, 00)
     # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
