@@ -48,7 +48,7 @@ class order_information:
         self.position = {"id": 0, "state": "", "time_past": 0}  # ポジション情報 (idとステートは初期値を入れておく））
         self.reorder = 1
         self.reorder_waiting = 0  # リオーダー待ちフラグ
-        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回までself.crcdo = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
+        self.api_try_num = 3  # APIのエラー（今回はLC底上げに利用）は３回までself.crcdo_history = False  # ポジションを変更履歴があるかどうか(複数回の変更を考えるならIntにすべき？）
         self.crcdo_sec = 0  # ポジション所有から何秒後に、最新のCRCDOを行ったかを記録する。
         self.crcdo_lc = 0  # ロスカ変更後のLCライン
         self.crcdo_tp = 0  # ロスカ変更後のTPライン
@@ -391,7 +391,7 @@ class order_information:
                             self.crcdo_set(True)  # main本体で、ポジションを取る関数で解除する
                             self.crcdo_sec = p['time_past']  # 変更時の経過時点を記録しておく
                             oa.print_i("    (LC底上げ)二回目以降")
-                            # tk.line_send("　(LC底上げ)二回目移行", lc_price,self.crcdo_lc, gl_now )
+                            # tk.line_send("　(LC底上げ)二回目移行", lc_price,self.crcdo_lc_price, gl_now )
                             tk.line_send("　(LC底上げ)二回目以降")
 
                         self.crcdo_lc = lc_price  # ロスカ変更後のLCラインを保存
