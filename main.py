@@ -170,7 +170,9 @@ class order_information:
                 "tp_price": float(order_ans['tp']),
                 "lc_price": float(order_ans['lc']),
                 "units": float(order_ans['unit']),
-                "direction": float(order_ans['unit'])/abs(float(order_ans['unit']))
+                "direction": float(order_ans['unit'])/abs(float(order_ans['unit'])),
+                "tp_range": order_ans['tp_range'],
+                "lc_range": order_ans['lc_range']
             }
             self.plan['tp_price'] = float(order_ans['tp'])  # 念のため入れておく（元々計算で入れられるけど。。）
             self.plan['lc_price'] = float(order_ans['lc'])  # 念のため入れておく（元々計算で入れられるけど。。）
@@ -374,7 +376,8 @@ class order_information:
                     else:
                         self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
                         self.crcdo_history = True
-                        tk.line_send("　(LC底上げ)初回", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price)
+                        tk.line_send("　(LC底上げ)初回", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price,
+                                     "Border:", self.crcdo_border, "保証", self.crcdo_guarantee)
         elif self.crcdo_self_trail_exe and self.crcdo_history:  # 一回すでにCDCRO実施済みが前提。
             # 2回目以降のCRCDO　プラス方向にLCを広げる処理を実施　（セルフトレールのようなもの）
             od = 0.5  # %
@@ -413,7 +416,9 @@ class order_information:
                         pass
 
                 else:
-                    print("     CRCRO再実行確認⇒なし",p['pips'])
+                    # print("     CRCRO再実行確認⇒なし", p['pips'], self.name)
+                    pass
+
         elif self.position['state'] != "OPEN":
             # print("  　 ポジション無し")
             pass
@@ -508,7 +513,9 @@ def order_setting(class_order_arr):
         target_class.make_order()
         # 送信用
         o = target_class.order
-        memo_each = "【" + target_class.name + "】,dir:" + str(o['units']) + "," + str(price) + ",tp-lc:" + str(o['tp_price']) + "-" + str(o['lc_price'])
+        memo_each = "【" + target_class.name + "】:" + str(price) + ",tp-lc:" + str(o['tp_price']) + "-" + str(
+            o['lc_price']) + "(" + str(o['tp_range']) + "-"  + str(o['lc_range']) + ")," + str(o['units'])
+
         o_memo = o_memo + ", " + memo_each
         # その他条件をインプットする(本当はクラスメソッドで入れたいけど）
         target_class.crcdo_border = order_info_temp['crcdo_border']
@@ -529,9 +536,6 @@ def mode1():
     :return: なし
     """
     print("  Mode1")
-    # ポジションを２つ用意するため、二つを初期化する
-    main_c.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-    second_c.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
 
     # チャート分析結果を取得する
     inspection_condition = {
@@ -567,7 +571,8 @@ def mode1():
         if result_range_turn == 1:  # そのさらに直前のターンが発生がある場合
             print("   ★オーダー発行(RangeTurnパターン)⇒一つだけにする？")
             order_info_temp = ans_dic['figure_turn_result']['range_dic']['order_dic']  # RangeTurnのオーダー
-            order1 = {  # ターン起点（インクルードパターン）
+            # メインオーダーの作成
+            order = {  # ターン起点（インクルードパターン）
                 "name": "レンジ",
                 "target_class": main_c,  # 対象となるクラス
                 "line_base": order_info_temp['base_price'],
@@ -582,77 +587,86 @@ def mode1():
                 "kinds": 1,
                 "macd": ans_dic['macd_result']['cross'],
                 "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-                "crcdo_guarantee": 0.035,  # crcdoLINEを超えた場合、このラインを最低の利確ラインとする
-                "order_timeout": 20,
+                "crcdo_guarantee": -0.03,  # crcdoLINEを超えた場合、このラインを最低の利確ラインとする
+                "order_timeout": 20,  # 20分経過でオーダーを解除する
                 "crcdo_self_trail_exe": False,  # トレールは実施しない
             }
-            # order_mini = { # ターン起点（インクルードパターン）MINIオーダー
-            #     "target_class": second_c,  # 対象となるクラス
-            #     "line_base": order_info_temp['base_price'],
-            #     "expect_dir": order_info_temp['direction'],
-            #     "lc": order_info_temp['lc_range'],  # MINIの為小さめ
-            #     "tp": order_info_temp['tp_range'],  # MINIの為小さめ
-            #     "units": 10000,
-            #     "type": "STOP",  # 順張り
-            #     "margin": 0.01,
-            #     "trigger": "ターン（インクルード）",
-            #     "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
-            #     "kinds": 1,  # 検証用
-            #     "macd": ans_dic['macd_result']['cross'],
-            #     "crcdo_border": 0.015,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            #     "crcdo_guarantee": 0.01,  # crcdoLINEを超えた場合、このラインを最低の利確ラインとする
-            #     "order_timeout": 20,
-            #     "crcdo_self_trail_exe": True,  #
-            # }
-            order_pair = [{"class": main_c, "order": order1}]
+            # MINIオーダーの作成
+            order_mini = order.copy()
+            order_mini['name'] = order['name'] + "mini"
+            order_mini['units'] = 25000
+            order_mini['lc'] = order['lc'] * 0.7
+            order_mini['crcdo_border'] = 0.025
+            order_mini['crcdo_guarantee'] = 0.01
+            order_mini['crcdo_self_trail_exe'] = True
+            # オーダーの集約
+            order_pair = [{"class": main_c, "order": order},
+                          {"class": second_c, "order": order_mini}]
 
         else:
             print("   ★オーダー発行（ターン起点）")
             order_info_temp = ans_dic['figure_turn_result']['latest_turn_dic']['order_dic']  # RangeTurnのオーダー
-            order1 = {  # ターン起点(Reverse)
-                "name": order_info_temp['rev']['name'],
-                "target_class": main_c,  # 対象となるクラス
-                "line_base": order_info_temp['rev']['base_price'],
-                "expect_dir": order_info_temp['rev']['direction'],
-                "lc": order_info_temp['rev']['lc_range'],  # 0.046,  # 少し狭い目のLC
-                "tp": 0.09,
-                "units": order_info_temp['rev']['units'],
-                "type": order_info_temp['rev']['type'],  # 逆張りで試してみようかな。。
-                "margin": 0,
-                "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
-                "trigger": "ターン",
-                "kinds": 1,
-                "macd": ans_dic['macd_result']['cross'],
-                "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-                "crcdo_guarantee": 0.020,
-                "order_timeout": 20,
-                "crcdo_self_trail_exe": False,  # トレールは実施しない
-            }
-            order_mini= {  # ターン起点
-                "name": order_info_temp['mini']['name'],
+            # メインオーダーの作成
+            main_order = order_info_temp['main']
+            order = {  # ターン起点(順か逆か、状況で変る。)
+                "name": main_order['name'],
                 "target_class": second_c,  # 対象となるクラス
-                "line_base": order_info_temp['mini']['base_price'],
-                "expect_dir": order_info_temp['mini']['direction'],
-                "lc": order_info_temp['mini']['lc_range'],   # 0.055,  # 少し狭い目のLC
+                "line_base": main_order['base_price'],
+                "expect_dir": main_order['direction'],
+                "lc": main_order['lc_range'],   # 0.055,  # 少し狭い目のLC
                 "tp": 0.09,
-                "units": order_info_temp['mini']['units'],
-                "type": order_info_temp['mini']['type'],  # 順張り
+                "units": main_order['units'],
+                "type": main_order['type'],  # 順張り
                 "margin": 0,
                 "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
                 "trigger": "ターン",
                 "kinds": 1,
                 "macd": ans_dic['macd_result']['cross'],
                 "crcdo_border": 0.02,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-                "crcdo_guarantee": 0.01,
+                "crcdo_guarantee": -0.01,
                 "order_timeout": 20,
                 "crcdo_self_trail_exe": True,  # トレールは実施しない
             }
-            order_pair = [{"class": main_c, "order": order1}, {"class": second_c, "order": order_mini}]
+            # MINIオーダーの作成
+            order_mini = order.copy()
+            order_mini['name'] = order['name'] + "mini"
+            order_mini['units'] = 25000
+            order_mini['lc'] = order['lc'] * 0.7
+            order_mini['crcdo_border'] = 0.025
+            order_mini['crcdo_guarantee'] = 0.01
+            order_mini['crcdo_self_trail_exe'] = True
+            # 可変オーダーの作成
+            junc_order = order_info_temp['junc']
+            order2 = {  # ターン起点(Reverse)
+                "name": junc_order['name'],
+                "target_class": main_c,  # 対象となるクラス
+                "line_base": junc_order['base_price'],
+                "expect_dir": junc_order['direction'],
+                "lc": junc_order['lc_range'],  # 0.046,  # 少し狭い目のLC
+                "tp": 0.09,
+                "units": junc_order['units'],
+                "type": junc_order['type'],  # 逆張りで試してみようかな。。
+                "margin": 0,
+                "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
+                "trigger": "ターン",
+                "kinds": 1,
+                "macd": ans_dic['macd_result']['cross'],
+                "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
+                "crcdo_guarantee": -0.030,
+                "order_timeout": 20,
+                "crcdo_self_trail_exe": False,  # トレールは実施しない
+            }
+            # オーダーの集約
+            order_pair = [{"class": main_c, "order": order},
+                          {"class": second_c, "order": order_mini},
+                          {"class": third_c, "order": order2}
+                          ]
 
     elif rename_latest3 == 1:  # ターン未遂が確認された場合（早い場合）
         print("  ★オーダー発行 ターン未遂を確認　")
         order_info_temp = ans_dic['latest3_figure_result']['order_dic']
-        order1 = {
+        # メインオーダーの作成
+        order = {
             "name": "順思想（ターン未遂）",
             "target_class": main_c,  # 対象となるクラス
             "line_base": order_info_temp['base_price'],
@@ -671,35 +685,26 @@ def mode1():
             "order_timeout": 6,  # 分で指定
             "crcdo_self_trail_exe": False,  # トレールは実施しない
         }
-        # order_mini = {
-        #     "target_class": second_c,  # 対象となるクラス
-        #     "line_base": order_info_temp['base_price'],
-        #     "expect_dir": order_info_temp['direction'],
-        #     "lc": 0.03,  # 非常に狭いLC(ターンミスの場合は、ストレートに下がることを期待しているため）
-        #     "tp": 0.03,
-        #     "units": 30000,
-        #     "type": "STOP",  # 順張り
-        #     "margin": 0,
-        #     "memo": ans_dic['latest3_figure_result']['memo'],
-        #     "trigger": "ターン未遂",
-        #     "kinds": 2,
-        #     "macd": ans_dic['macd_result']['cross'],
-        #     "crcdo_border": 0.02,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-        #     "crcdo_guarantee": 0.015,
-        #     "order_timeout": 6,
-        #     "crcdo_self_trail_exe": True,  # トレールは実施しない
-        # }
-        order_pair = [{"class": main_c, "order": order1}]
+        # MINIオーダーの作成
+        order_mini = order.copy()
+        order_mini['name'] = order['name'] + "mini"
+        order_mini['units'] = 25000
+        order_mini['lc'] = order['lc'] * 0.7
+        order_mini['crcdo_border'] = 0.025
+        order_mini['crcdo_guarantee'] = 0.01
+        order_mini['crcdo_self_trail_exe'] = True
+        order_pair = [{"class": main_c, "order": order}]
+        # オーダーの集約
+        order_pair = [{"class": main_c, "order": order},
+                      {"class": second_c, "order": order_mini},
+                      ]
 
     # ■実際の発行が可能かを判断し、オーダーを作成する
     new_jd = main_c.judge_new()
     if new_jd:
         if result_turn == 1:  # ターンが確認された場合（最優先）
             print("  ターンOrder")
-            oa.OrderCancel_All_exe()  # 露払い
-            oa.TradeAllClose_exe()  # 露払い
-            main_c.update_information()  # 露払い時の変更を取得しておく（エラーが出たら、、どうしよう）
-            second_c.update_information()
+            reset_all_position()  # ポジションのリセット&情報アップデート
             if result_range_turn == 1:  # そのさらに直前のターンが発生がある場合
                 print("   ★オーダー発行(Incudeパターン)")
                 order_setting(order_pair)  # オーダー発行
@@ -718,9 +723,6 @@ def mode1():
 
 def mode2():
     global gl_exe_mode
-    # fw.update_information()
-    # fw_stop.update_information()
-    # rv_stop.update_information()
 
     # print(" Mode2")
 
@@ -762,6 +764,7 @@ def exe_manage():
         # ■いずれは低頻度モードのみでの取得になるかも
         # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
         if time_min % 5 == 0 and time_sec == 6:  # キャンドルの確認（５分に一回）
+            all_update_information()  # 情報アップデート
             print("■■■Candle調査", gl_live, gl_now)  # 表示用（実行時）
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
@@ -770,8 +773,7 @@ def exe_manage():
             mode1()
 
         elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
-            main_c.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
-            second_c.update_information()  # 初期値を入れるために一回は必要（まぁ毎回やっていい）
+            all_update_information()  # 情報アップデート
             if main_c.life or second_c.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
                 # print("■■■", gl_live, gl_now)  # 表示用（実行時）
                 mode2()
@@ -780,6 +782,7 @@ def exe_manage():
         if gl_first == 0:
             gl_first = 1
             print("■■■初回", gl_now, gl_exe_mode, gl_live)  # 表示用（実行時）
+            all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
             # jp_time = datetime.datetime(2023, 6, 21, 11, 25, 00)
@@ -815,9 +818,25 @@ def exe_loop(interval, fun, wait=True):
         next_time = ((base_time - time.time()) % 1) or 1
         time.sleep(next_time)
 
-def test_exe():
-    for i in range(10):
-        print(i)
+
+def all_update_information():
+    """
+    全ての情報を更新する
+    :return:
+    """
+    main_c.update_information()  # 露払い時の変更を取得しておく（エラーが出たら、、どうしよう）
+    second_c.update_information()
+    third_c.update_information()
+
+
+def reset_all_position():
+    """
+    全てのオーダー、ポジションをリセットして、更新する
+    :return:
+    """
+    oa.OrderCancel_All_exe()  # 露払い
+    oa.TradeAllClose_exe()  # 露払い
+    all_update_information()  # 関数呼び出し（アップデート）
 
 
 # ■グローバル変数の宣言等
@@ -849,12 +868,12 @@ else:  # Live
     gl_live = "Live"
 
 # ■ポジションクラスの生成
-main_c = order_information("順思想方向", oa)  # 順思想のオーダーを入れるクラス
-second_c = order_information("レンジ方向", oa)  # 順思想のオーダーを入れるクラス
+main_c = order_information("1", oa)  # 順思想のオーダーを入れるクラス
+second_c = order_information("2", oa)  # 順思想のオーダーを入れるクラス
+third_c = order_information("3", oa)  # 順思想のオーダーを入れるクラス
 
 # ■処理の開始
-oa.OrderCancel_All_exe()  # 露払い
-oa.TradeAllClose_exe()  # 露払い
+reset_all_position()  # 開始時は全てのオーダーを解消し、初期アップデートを行う
 tk.line_send("■■新規スタート", gl_live)
 # main()
 exe_loop(1, exe_manage)  # exe_loop関数を利用し、exe_manage関数を1秒ごとに実行

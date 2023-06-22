@@ -256,6 +256,8 @@ class Oanda:
                       "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
                       "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
                       "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
+                      "tp_range": round(info['tp_range'], 3),
+                      "lc_range": round(info['lc_range'], 3),
                       "type": info['type'],
                       "cancel": canceled,
                       "order_id": order_id,

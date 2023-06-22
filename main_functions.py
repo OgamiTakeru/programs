@@ -539,8 +539,8 @@ def figure_turn_inspection(figure_condition):
     if turn_ans != 0:
         # 注文情報 通常のターンの場合は　二つ出る。　　(通常の順方向）
         # ①順方向
-        mini = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
-            "name": "順思想",
+        main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
+            "name": "順",
             "base_price": latest_ans['direction'] * -1 * cal_min(0.02, latest_ans['body_ave'] * 0.5) + latest_ans['latest_price'],  # 基本順方向にMerginを取る
             "direction": oldest_ans['direction'],
             "type": "STOP",
@@ -552,8 +552,8 @@ def figure_turn_inspection(figure_condition):
         if reach > 0.06:  # 戻り幅が大きい場合は、戻りきらずに折り返す（順思想）をみなす
             base_price = latest_ans['direction'] * reach + latest_ans['oldest_image_price']  # LC計算に使用するので、一旦計算
             print(" TEST NEW REACH", reach, latest_ans['oldest_image_price'], base_price)
-            rev = {
-                "name": "順思想rev",
+            junc = {
+                "name": "40%から順",
                 "base_price": base_price,
                 "direction": latest_ans['direction'] * -1,
                 "type": "LIMIT",
@@ -561,22 +561,22 @@ def figure_turn_inspection(figure_condition):
                 "units": 22000,
             }
             # rev['lc_range'] = 0.04
-            print("  Old大につき、戻りきらず、順思想とみなす", abs(mini['base_price']-base_price))
+            print("  Old大につき、戻りきらず、順思想とみなす", abs(main['base_price']-base_price))
         else:  # 戻り幅が小さい場合は、戻る可能性あり（約半分が0.05なので、OldGapとしては10pips以内程度となる）
             base_price = latest_ans['direction'] * oldest_ans['gap'] * 0.4 + latest_ans['oldest_image_price']
             print(" TEST 逆",latest_ans['oldest_image_price'], base_price)
-            rev = {  # 逆思想（Range方向！！latest方向同方向へのオーダー）　LCが順方向のBasePriceに被らないようにしないといけない）
-                "name": "逆思想(Ran)",
+            junc = {  # 逆思想（Range方向！！latest方向同方向へのオーダー）　LCが順方向のBasePriceに被らないようにしないといけない）
+                "name": "レンジ（逆)",
                 "base_price": base_price,
                 "direction": latest_ans['direction'],
                 "type": "STOP",
-                "lc_range": abs(mini['base_price']-base_price) - 0.004,
+                "lc_range": abs(main['base_price']-base_price) - 0.004,
                 "units": 20000,
             }
-            rev['lc_range'] = abs(latest_ans['oldest_image_price'] - rev['base_price'])  # latest_oldest(image)がLCprice。その値との差分を登録する
-            print("  Old小につきRange狙い 計算上のLC⇒", abs(mini['base_price']-base_price))
+            junc['lc_range'] = abs(latest_ans['oldest_image_price'] - junc['base_price'])  # latest_oldest(image)がLCprice。その値との差分を登録する
+            print("  Old小につきRange狙い 計算上のLC⇒", abs(main['base_price']-base_price))
         print("★★Base", latest_ans['oldest_image_price'], latest_ans['body_ave'], oldest_ans['gap'], reach)
-        print("★★★順思", mini['base_price'], mini['direction'], "逆(Range)" ,rev['base_price'], rev['direction'])
+        print("★★★順思", main['base_price'], main['direction'], "逆(Range)" ,junc['base_price'], junc['direction'])
     else:
         mini = {}
         rev = {}
