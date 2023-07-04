@@ -324,17 +324,22 @@ def figure_turn_each_inspection(data_df_origin):
         # 上り方向の場合、直近の最大価格をlatest_image価格として取得(latest価格とは異なる可能性あり）
         latest_image_price = ans_df.iloc[0]["inner_high"]
         oldest_image_price = ans_df.iloc[-1]["inner_low"]
+        latest_peak_price = ans_df.iloc[0]["high"]
+        oldest_peak_price = ans_df.iloc[-1]["low"]
     else:
         # 下り方向の場合
         latest_image_price = ans_df.iloc[0]["inner_low"]
         oldest_image_price = ans_df.iloc[-1]["inner_high"]
+        latest_peak_price = ans_df.iloc[0]["low"]
+        oldest_peak_price = ans_df.iloc[-1]["high"]
     #
     # ■平均移動距離等を考える
     body_ave = round(data_df["body_abs"].mean(),3)
     move_ave = round(data_df["moves"].mean(),3)
 
     # ■GAPを計算する（０の時は割る時とかに困るので、最低0.001にしておく）
-    gap = round(abs(latest_image_price - oldest_image_price), 3)
+    # gap = round(abs(latest_image_price - oldest_image_price), 3)  # MAXのサイズ感
+    gap = round(abs(latest_image_price - ans_df.iloc[-1]["close"]), 3)  # 直近の価格（クローズの価格&向き不問）
     if gap == 0:
         gap = 0.001
     else:
@@ -357,131 +362,83 @@ def figure_turn_each_inspection(data_df_origin):
         "latest_time_jp": ans_df.iloc[0]["time_jp"],
         "latest_price": ans_df.iloc[0]["close"],
         "oldest_price": ans_df.iloc[-1]["open"],
+        "latest_peak_price": latest_peak_price,
+        "oldest_peak_price": oldest_peak_price,
         "gap": gap,
         "body_ave": body_ave,
         "move_abs": move_ave,
-        "memo_time":memo_time
+        "memo_time": memo_time
     }
 
     # ■　形状を判定する（テスト）
     type_info_dic = figure_turn_each_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
-    ans_dic["support_info"] = type_info_dic
+    ans_dic["support_info"] = type_info_dic  # あくまでメイン解析の要素の一つとして渡す
 
     # ■　形状からターゲットラインを求める。
     return ans_dic
 
 
-def figure_turn_each_inspection_skip(data_df_origin, direction, before_price):
+def figure_turn_each_inspection_skip(df_r):
     """
-     渡された範囲で、何連続で同方向に進んでいるかを検証する
-     :param data_df_origin: 直近が上側（日付降順/リバース）のデータを利用
-     :return: Dict形式のデータを返伽
-     """
-    # コピーウォーニングのための入れ替え
-    data_df = data_df_origin.copy()
-    print("Func呼び出し", data_df.head(3))
-
-    # 処理の開始
-    base_direction = 0
-    counter = 0
-    for i in range(len(data_df) - 1):
-        tilt = data_df.iloc[i]['middle_price'] - data_df.iloc[i + 1]['middle_price']
-        if tilt == 0:
-            tilt = 0.001
-        tilt_direction = round(tilt / abs(tilt), 0)  # 方向のみ（念のためラウンドしておく）
-        # ■初回の場合の設定。１行目と２行目の変化率に関する情報を取得、セットする
-        if counter == 0:
-            if direction == 0:  # 再帰の親
-                base_direction = tilt_direction
-                saiki_flag = 0
-            else:  # 再帰の時は、呼び出し元の方向がDirection
-                print("再帰")
-                base_direction = direction
-                saiki_flag = 1
-
-        # ■カウントを進めていく
-        if tilt_direction == base_direction:  # 通常のカウント。初回と動きの方向が続く場合
-            counter += 1
+    渡された範囲で、何連続で同方向に進んでいるかを検証する（ただし、skipありは、２つのみの戻りはスキップして検討する）
+    :param df_r: 直近が上側（日付降順/リバース）のデータを利用
+    :return: Dict形式のデータを返伽
+    """
+    for i in range(5):  # とりあえず５回分。。本当は再帰とかがベストだと思う
+        if i == 0:  # 初回は実行。一番根本となるデータを取得する
+            ans_current = figure_turn_each_inspection(df_r)  # 再起用に０渡しておく。。
+            next_from = ans_current['count'] - 1
         else:
-            print(" ★★　とりあえず", counter)
-            # ■Temp
-            temp_df = data_df[0:counter + 1]  # 同方向が続いてる範囲のデータを取得する
-            if base_direction == 1:
-                # 上り方向の場合、直近の最大価格をlatest_image価格として取得(latest価格とは異なる可能性あり）
-                latest_image_price = temp_df.iloc[0]["inner_high"]
-                oldest_image_price = temp_df.iloc[-1]["inner_low"]
+            next_from = 0  # NextFromのリセット
+        # 次の調査対象（ここの長さは一つの判断材料）
+        ans_next_jd = figure_turn_each_inspection(df_r[next_from:])  # 再起用に０渡しておく。。
+        next_from = next_from + ans_next_jd['count'] - 1
+        # 次の調査対象（ここの区間の開始価格は判断材料）
+        ans_next_next_jd = figure_turn_each_inspection(df_r[next_from:])  # 再起用に０渡しておく。。
+        next_from = next_from + ans_next_next_jd['count'] - 1
+
+        # 判定(次回の幅が２足分、次々回の方向が現在と同一、次々回のスタート(old)価格が現在のスタート(old)価格より高い)
+        merge = 0
+        # print("条件", ans_next_jd['count'], ans_next_next_jd['direction'], ans_current['direction'])
+        if ans_next_jd['count'] <= 2 and ans_next_next_jd['direction'] == ans_current['direction']:
+            if ans_current['direction'] == 1:  # 上向きの場合
+                if ans_current['oldest_image_price'] > ans_next_next_jd['data'].iloc[-1]["inner_low"]:  # 価格が昔(調査的には次々回のスタート価格)より上昇
+                    # print("SKIP対象　Up")
+                    merge = 1
+            else:  # 下向きの場合
+                if ans_current['oldest_image_price'] < ans_next_next_jd['data'].iloc[-1]["inner_high"]:  # 価格が昔(調査的には次々回のスタート価格)より下落
+                    # print("SKIP対象　Down")
+                    merge = 1
+        # ここからマージ処理
+        if merge == 1:  # 現在(currentと次々回調査分(時系列的には過去）は結合して考える（一つ戻りが間にあるだけ）
+            # データフレームの結合（一番もとになるans_currentを更新していく）,情報の更新（Oldの部分を更新していく）
+            ans_current['data'] = pd.concat([ans_current['data'], ans_next_jd['data']])  # １行ラップするけど
+            ans_current['data'] = pd.concat([ans_current['data'], ans_next_next_jd['data']])  # １行ラップするけど
+            ans_current['count'] = len(ans_current['data']) - 2  # 2は調整。。これは大まかな数字
+            ans_current['oldest_image_price'] = ans_next_next_jd['oldest_image_price']
+            ans_current['oldest_time_jp'] = ans_next_next_jd['oldest_time_jp']
+            ans_current['oldest_peak_price'] = ans_next_next_jd['oldest_peak_price']
+            ans_current['data_remain'] = df_r[next_from:]  # 残りのデータ
+            # gapの計算
+            gap = round(abs(ans_current['latest_image_price'] - ans_current['oldest_image_price']), 3)
+            if gap == 0:
+                gap = 0.001
             else:
-                # 下り方向の場合
-                latest_image_price = temp_df.iloc[0]["inner_low"]
-                oldest_image_price = temp_df.iloc[-1]["inner_high"]
-            # ■判定
-            if saiki_flag == 1:  # 再帰の場合、戻るかを判定する
-                # 今回分が２個以下の場合、かつ、最終価格が
-                if counter > 2:
-                    if 1 < base_direction == 1 and oldest_image_price >= before_price:  # 価格的条件OK
-                        print("　次の物も条件を満たしている（上り）", counter, data_df.iloc[i + 1]['time_jp'])
-                    elif base_direction == -1 and oldest_image_price <= before_price:
-                        print(" 次の物も条件を満たしている（下し）")
-                else:
-                    print("FNI")
+                gap = gap
+            ans_current['gap'] = gap
+            # 備忘録用のメモを作っておく
+            ans_df = ans_current['data']
+            memo_time = oanda_class.str_to_time_hms(ans_df.iloc[-1]["time_jp"]) + "_" + oanda_class.str_to_time_hms(
+                        ans_df.iloc[0]["time_jp"])
+            ans_current['memo_time'] = memo_time
+            # 次のループに向け、dr_fを更新
+            df_r = df_r[next_from :]  # 残りのデータ
+            # print("次回調査対象",df_r.head(5))
+        else:
+            # print(" 終了")
+            break
 
-            else:  # 再帰じゃない場合（親の場合）は、一回は再帰を呼び出す
-                print(" 再帰よび", data_df[counter + 1::])
-                jd_price = oldest_image_price  # 比較をする際の価格を設定しておく（古いイメージ金額）
-                next_ans = figure_turn_each_inspection_skip(data_df[counter + 1::], base_direction, jd_price)
-                break
-
-    # ■対象のDFを取得し、情報を格納していく
-    ans_df = data_df[0:counter + 1]  # 同方向が続いてる範囲のデータを取得する
-    ans_other_df = data_df[counter:]  # 残りのデータ
-
-    if base_direction == 1:
-        # 上り方向の場合、直近の最大価格をlatest_image価格として取得(latest価格とは異なる可能性あり）
-        latest_image_price = ans_df.iloc[0]["inner_high"]
-        oldest_image_price = ans_df.iloc[-1]["inner_low"]
-    else:
-        # 下り方向の場合
-        latest_image_price = ans_df.iloc[0]["inner_low"]
-        oldest_image_price = ans_df.iloc[-1]["inner_high"]
-    #
-    # ■平均移動距離等を考える
-    body_ave = round(data_df["body_abs"].mean(), 3)
-    move_ave = round(data_df["moves"].mean(), 3)
-
-    # ■GAPを計算する（０の時は割る時とかに困るので、最低0.001にしておく）
-    gap = round(abs(latest_image_price - oldest_image_price), 3)
-    if gap == 0:
-        gap = 0.001
-    else:
-        gap = gap
-
-
-    # 返却用
-    ans_dic = {
-        "direction": base_direction,
-        "count": counter + 1,  # 最新時刻からスタートして同じ方向が何回続いているか
-        "data": ans_df,  # 対象となるデータフレーム（元のデータフレームではない）
-        "data_remain": ans_other_df,  # 対象以外の残りのデータフレーム
-        "data_size": len(data_df),  # (注)元のデータサイズ
-        "latest_image_price": latest_image_price,
-        "oldest_image_price": oldest_image_price,
-        "oldest_time_jp": ans_df.iloc[-1]["time_jp"],
-        "latest_time_jp": ans_df.iloc[0]["time_jp"],
-        "latest_price": ans_df.iloc[0]["close"],
-        "oldest_price": ans_df.iloc[-1]["open"],
-        "gap": gap,
-        "body_ave": body_ave,
-        "move_abs": move_ave,
-    }
-
-    # ■　形状を判定する（テスト）
-    type_info_dic = figure_turn_each_inspection_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
-    ans_dic["support_info"] = type_info_dic
-
-    # ■必要に応じて再帰検証する
-     # 連続が途切れた場合、再帰で先を確認する
-
-    return ans_dic
+    return ans_current
 
 
 def figure_turn_inspection(figure_condition):
@@ -505,10 +462,12 @@ def figure_turn_inspection(figure_condition):
     # 各DFを解析
     latest_df = data_r[ignore: dr_latest_n + ignore]  # 直近のn個を取得
     oldest_df = data_r[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
-    latest_ans = figure_turn_each_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する
-    oldest_ans = figure_turn_each_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する
+    latest_ans = figure_turn_each_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する(主に個のみ）
+    # oldest_ans = figure_turn_each_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
+    oldest_ans = figure_turn_each_inspection_skip(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
 
     # 表示用がメインの情報まとめ
+    print(oldest_ans['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans['oldest_price'])
     memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
     memo_price = "(" + str(oldest_ans['oldest_price']) + "_" + str(latest_ans['latest_price']) + "," + str(oldest_ans['direction'])
     memo_all = memo_time + memo_price
@@ -533,53 +492,72 @@ def figure_turn_inspection(figure_condition):
         memo = "同方向"
 
     memo_info = "@戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
+    memo_info = memo_info + ",Body平均O-L:" + str(oldest_ans['body_ave']) + "," +str(latest_ans['body_ave'])
     memo_all = memo_all + memo_info + "," + memo
 
     # ■注文する場合の情報を記載しておく
+    oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # ★現在価格の取得
+    now_price = oa.NowPrice_exe("USD_JPY")['mid']  # ★現在価格の取得
     if turn_ans != 0:
-        # 注文情報 通常のターンの場合は　二つ出る。　　(通常の順方向）
-        # ①順方向
-        main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
-            "name": "順",
-            "base_price": latest_ans['direction'] * -1 * cal_min(0.02, latest_ans['body_ave'] * 0.5) + latest_ans['latest_price'],  # 基本順方向にMerginを取る
-            "direction": oldest_ans['direction'],
+        # ★注文（基準情報の収集）
+        # ①理論上の理想値
+        return_unit_yen = oldest_ans['gap']/100
+        # レンジ方向(戻り　＝　逆思想）
+        base_price2 = now_price  # 基準となる価格（マージン込み）
+        margin2 = 0.016 * latest_ans['direction']   # ０の場合は成り行きを意味する
+        lc_range2 = cal_min(0.02, round(latest_ans['gap'] *0.5, 3)) * latest_ans['direction'] * -1  # 最低でも0.02pipsを確保
+        tp_range2 = (lc_range2 + 0.02) * latest_ans['direction']
+        temp_target2 = base_price2 + margin2
+        # 順方向
+        base_price = latest_ans['latest_price']
+        margin = cal_min(0.013, latest_ans['body_ave'] * 0.5) * latest_ans['direction'] * -1
+        lc_range = 0.035 * latest_ans['direction']
+        tp_range = 0.050 * latest_ans['direction'] * -1
+        temp_target = base_price + margin
+        # レンジor順思想の互いのLCが、互いのBasePriceと干渉しないようにする
+        temp_gap = abs(temp_target2 - temp_target) + 0.01  # お互いのターゲットプライス + 余裕度0.01を足しておく
+        if lc_range2 < temp_gap and lc_range < temp_gap:  # 両方とも満たしている場合⇒何もせず
+            print("  マージン調整不要", temp_gap, lc_range2, lc_range)
+            pass
+        else:
+            if lc_range2 > temp_gap:  # レンジ側のLCが大きく、条件を満たさない場合
+                adj = abs(temp_target - (temp_target2 + lc_range2))  # 対局のTargetPriceと自身のLC価格の差を求め、マージンに足す。
+                print("  レンジ方向のマージンの調整", margin2)
+                margin2 = margin2 + (adj * latest_ans['direction'])
+                print("  ⇒", margin2)
+            if lc_range > temp_gap:  # 順思想のLCが大きく、条件を満たさない場合
+                adj = abs(temp_target2 - (temp_target + lc_range))
+                print("  順方向のマージンの調整", margin)
+                margin = margin + adj
+                print("  ⇒", margin)
+
+        # ②オーダーを生成
+        junc = {
+            "name": "レンジ方向",
+            "base_price": base_price2,
+            "target_price": temp_target2,  # 基本渡した先では使わない
+            "margin": margin2,  # BasePriceに足せばいい数字（方向もあっている）
+            "direction": latest_ans['direction'],
             "type": "STOP",
-            "lc_range": 0.055,
+            "lc_range": lc_range2,
+            "tp_range": tp_range2,
             "units": 30000,
         }
-        # ②逆orレンジ思想の注文情報
-        reach = oldest_ans['gap'] * 0.4  # 戻る距離として利用（latest_oldestからの幅となる）
-        if reach > 0.06:  # 戻り幅が大きい場合は、戻りきらずに折り返す（順思想）をみなす
-            base_price = latest_ans['direction'] * reach + latest_ans['oldest_image_price']  # LC計算に使用するので、一旦計算
-            print(" TEST NEW REACH", reach, latest_ans['oldest_image_price'], base_price)
-            junc = {
-                "name": "40%から順",
-                "base_price": base_price,
-                "direction": latest_ans['direction'] * -1,
-                "type": "LIMIT",
-                "lc_range": 0.04,
-                "units": 22000,
-            }
-            # rev['lc_range'] = 0.04
-            print("  Old大につき、戻りきらず、順思想とみなす", abs(main['base_price']-base_price))
-        else:  # 戻り幅が小さい場合は、戻る可能性あり（約半分が0.05なので、OldGapとしては10pips以内程度となる）
-            base_price = latest_ans['direction'] * oldest_ans['gap'] * 0.4 + latest_ans['oldest_image_price']
-            print(" TEST 逆",latest_ans['oldest_image_price'], base_price)
-            junc = {  # 逆思想（Range方向！！latest方向同方向へのオーダー）　LCが順方向のBasePriceに被らないようにしないといけない）
-                "name": "レンジ（逆)",
-                "base_price": base_price,
-                "direction": latest_ans['direction'],
-                "type": "STOP",
-                "lc_range": abs(main['base_price']-base_price) - 0.004,
-                "units": 20000,
-            }
-            junc['lc_range'] = abs(latest_ans['oldest_image_price'] - junc['base_price'])  # latest_oldest(image)がLCprice。その値との差分を登録する
-            print("  Old小につきRange狙い 計算上のLC⇒", abs(main['base_price']-base_price))
-        print("★★Base", latest_ans['oldest_image_price'], latest_ans['body_ave'], oldest_ans['gap'], reach)
-        print("★★★順思", main['base_price'], main['direction'], "逆(Range)" ,junc['base_price'], junc['direction'])
+        main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
+            "name": "順思想",
+            "base_price": base_price,
+            "target_price": temp_target,  # 基本順方向にMerginを取る
+            "margin": margin,  # BasePriceに足せばいい数字（方向もあっている）
+            "direction": oldest_ans['direction'],
+            "type": "STOP",
+            "lc_range": lc_range,
+            "tp_range": tp_range,
+            "units": 20000,
+        }
+
     else:
-        mini = {}
-        rev = {}
+        main = {}
+        junc = {}
 
     # 返却用の辞書を作成
     if return_ratio == 0:
@@ -596,8 +574,8 @@ def figure_turn_inspection(figure_condition):
         "1percent_range": round(latest_ans['gap']/rr, 3),
         "to_half_percent": round(50-return_ratio),
         "order_dic": {
-            "mini": mini,
-            "rev": rev,
+            "main": main,
+            "junc": junc,
         }
     }
 
@@ -661,7 +639,8 @@ def figure_turn_judge(figure_condition):
             "base_price": turn_ans['latest_ans']['latest_price'],
             "direction": expected_direction,
             "tp_range": expected_tp_range,
-            "lc_range": expected_lc_range
+            "lc_range": expected_lc_range,
+            "margin": 0.0015,
         }
     }
 
@@ -835,20 +814,28 @@ def figure_latest3_judge(ins_condition):
     else:
         r = 0
 
+    # 方向によるマージン等の修正に利用する
+    if oldest_d == 1:  # old部分が上昇方向の場合
+        margin = 1
+    else:
+        margin = -1
+
     if d == 1 and p == 1 and r == 1:
         # print("   完全 dpr⇒", d, p, r)
         res_memo = "Trun未遂達成"
         latest3_figure = 1
         order = {
             "base_price": data_r.iloc[0]['open'],
-            "direction": oldest_d
+            "direction": oldest_d,
+            "margin": 0.008,
         }
     else:
         res_memo = "Trun未遂未達"
         latest3_figure = 0
         order = {
             "base_price": 0,
-            "direction": 0
+            "direction": 0,
+            "margin": 0.008,
         }
         # print("   未達成 dpr⇒", d, p, r)
     memo0 = "Oldest" + str(data_r.iloc[2]['time_jp']) + "," + str(data_r.iloc[0]['time_jp'])

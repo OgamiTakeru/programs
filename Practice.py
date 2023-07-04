@@ -9,7 +9,7 @@ import programs.main_functions as f  # とりあえずの関数集
 
 oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # クラスの定義
 
-jp_time = datetime.datetime(2023, 6, 20, 15, 10, 00)
+jp_time = datetime.datetime(2023, 6, 23, 12, 00, 00)
 euro_time_datetime = jp_time - datetime.timedelta(hours=9)
 euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
 param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
@@ -22,41 +22,99 @@ print("↓↓")
 ### ↑これより上は消さない
 
 
-def peaks_collect2(df_r):
+
+# def jd_yokoyoko(df_r):
+#     """
+#     :param df_r: リバース（上が
+#     :return:
+#     """
+
+
+def peaks_collect_skip(df_r):
     """
     リバースされたデータフレーム（直近が上）から、極値をN回分求める
-    基本的にトップとボトムが交互になる
+    基本的にトップとボトムが交互になる.一瞬の戻し（１足分）はスキップできる
     :return:
     """
     peaks = []
-    for i in range(20):
-        print(" ★★★↓各調査")
-        print(df_r)
-        print("★★★↑")
-        ans = f.figure_turn_each_inspection_skip(df_r, 0,0)  # 再起用に０渡しておく。。
-        df_r = df_r[ans['count']-1:]
-        if ans['direction'] == 1:
-            # 上向きの場合
-            peak_latest = ans['data'].iloc[0]["inner_high"]
-            peak_oldest = ans['data'].iloc[-1]["inner_low"]
 
+    counter = 0
+    for i in range(20):
+        ans_current = f.figure_turn_each_inspection(df_r)  # 再起用に０渡しておく。。
+        if ans_current['direction'] == 1:
+            # 上向きの場合
+            peak_latest = ans_current['data'].iloc[0]["inner_high"]
+            peak_oldest = ans_current['data'].iloc[-1]["inner_low"]
         else:
             # 下向きの場合
-            peak_latest = ans['data'].iloc[0]["inner_low"]
-            peak_oldest = ans['data'].iloc[-1]["inner_high"]
-
+            peak_latest = ans_current['data'].iloc[0]["inner_low"]
+            peak_oldest = ans_current['data'].iloc[-1]["inner_high"]
+        # 情報の収集
+        next_from = ans_current['count']-1
         temp_all = {
-            'time_latest': ans['data'].iloc[0]['time_jp'],
+            'time_latest': ans_current['data'].iloc[0]['time_jp'],
             'peak_latest': peak_latest,
-            'time_oldest': ans['data'].iloc[-1]['time_jp'],
+            'time_oldest': ans_current['data'].iloc[-1]['time_jp'],
             'peak_oldest': peak_oldest,
-            'direction': ans['direction'],
-            'data': ans['data'],
-            'ans': ans,
+            'direction': ans_current['direction'],
+            'data': ans_current['data'],
+            'ans': ans_current,
         }
 
-        print("★", ans['data'])
+        # (２回目以降の実行）今回のピークブロックが、２個以下の場合は除外検討を行う
+        skip = 0
+        if counter != 0 and ans_current['count'] <= 2:
+            before_direction = peaks[-1]["direction"]  # ひとつ前に調査した方向（時系列的には直近）
+            before_open_price = peaks[-1]["peak_oldest"]  # ひとつ前に調査した部分の開始価格
+            ans_next = f.figure_turn_each_inspection(df_r[ans_current['count']-1:])  # 一つ先を見る。
+            if ans_next['direction'] == before_direction and ans_next['count'] > 2:  # ひとつ前とNextの方向が同じ、２以上
+                if ans_next['direction'] == 1:  # 上向きの場合
+                    if before_open_price > ans_next['data'].iloc[-1]["inner_low"]:  # 価格が上昇している
+                        print("SKIP対象　Up")
+                        skip = 1
+                else:  # 下向きの場合
+                    if before_open_price < ans_next['data'].iloc[-1]["inner_high"]:
+                        print("SKIP対象　Down")
+                        skip = 1
+        if skip == 1:  # スキップ判定があったばあい、DFのリビルド(ひとつ前の物に、今回＋Nextをする）を行い、Next最後尾までスキップ
+            before_ans = peaks[-1]
+            before_ans['data'] = pd.concat([before_ans['data'], ans_current['data']])  # １行ラップするけど
+            before_ans['data'] = pd.concat([before_ans['data'], ans_next['data']])  # １行ラップするけど
+            print("Before")
+            print(before_ans['data'])
+
+            if before_ans['direction'] == 1:
+                # 上向きの場合
+                peak_latest = before_ans['data'].iloc[0]["inner_high"]
+                peak_oldest = before_ans['data'].iloc[-1]["inner_low"]
+            else:
+                # 下向きの場合
+                peak_latest = before_ans['data'].iloc[0]["inner_low"]
+                peak_oldest = before_ans['data'].iloc[-1]["inner_high"]
+            # 情報の収集
+            temp_all = {
+                'time_latest': before_ans['data'].iloc[0]['time_jp'],
+                'peak_latest': peak_latest,
+                'time_oldest': before_ans['data'].iloc[-1]['time_jp'],
+                'peak_oldest': peak_oldest,
+                'direction': before_ans['direction'],
+                'data': before_ans['data'],
+                'ans': "書き換え済み",
+            }
+            # print(ans_next['data'])
+            next_from = next_from + ans_next['count'] - 1
+        else:
+            # 何もせず、今の情報を追加（スキップしない時のみ）
+            peaks.append(temp_all)
+        # 次ループへ
+        df_r = df_r[next_from:]  # 次の調査対象
+        counter += 1
+        # print("Next")
+        # print(df_r)
+        # print("★", ans['data'])
         # print(ans['data'].iloc[0]['time_jp'], peak_latest, ans['direction'])
+    for i in range(len(peaks)):
+        print(peaks[i]['time_latest'] , "@")
     return peaks
 
 
@@ -206,4 +264,4 @@ def reg1dim(x, y):
 # print(tops)
 # print(bottoms)
 
-test = peaks_collect2(df_r)
+test = figure_turn_each_inspection_skip(df_r)

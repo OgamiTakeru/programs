@@ -29,6 +29,7 @@ class order_information:
         self.crcdo_self_trail_exe = False  # 二回目以降の自動トレール（Oanda機能ではなく自作）をおこなうかどうか（Trueで実施）
         self.crcdo_lc_price = 0  # ロスカ変更後のLCライン
         self.crcdo_tp_price = 0  # ロスカ変更後のTPライン
+        self.crcdo_trail_ratio = 0.5  # トレール幅を勝ちPipsの何割にLINEを引くか
         self.pips_max = 0  # 最高プラスが額を記録
         self.pips_min = 0  # 最低のマイナス額を記録
         self.pips_res_arr = []  # 過去の結果を登録しておく
@@ -167,21 +168,20 @@ class order_information:
                 "time": order_ans['order_time'],
                 "cancel": order_ans['cancel'],
                 "state": "PENDING",  # 強引だけど初期値にPendingを入れておく
-                "tp_price": float(order_ans['tp']),
-                "lc_price": float(order_ans['lc']),
+                "tp_price": float(order_ans['tp_price']),
+                "lc_price": float(order_ans['lc_price']),
                 "units": float(order_ans['unit']),
                 "direction": float(order_ans['unit'])/abs(float(order_ans['unit'])),
                 "tp_range": order_ans['tp_range'],
                 "lc_range": order_ans['lc_range']
             }
-            self.plan['tp_price'] = float(order_ans['tp'])  # 念のため入れておく（元々計算で入れられるけど。。）
-            self.plan['lc_price'] = float(order_ans['lc'])  # 念のため入れておく（元々計算で入れられるけど。。）
+            self.plan['tp_price'] = float(order_ans['tp_price'])  # 念のため入れておく（元々計算で入れられるけど。。）
+            self.plan['lc_price'] = float(order_ans['lc_price'])  # 念のため入れておく（元々計算で入れられるけど。。）
 
             oa.print_i(" オーダー発行確定", order_ans['order_id'])
             if order_ans['cancel']:  # キャンセルされている場合は、リセットする
                 # print("  Cancel発生", self.name)
-                oa.print_i("  Cancel発生", self.name)
-                oa.print_i(order_ans)
+                print("  ★オーダーキャンセル発生", self.name)
                 tk.line_send(" 　Order不成立（今後ループの可能性）", order_ans['order_id'])
             else:
                 self.life_set(True)  # LIFEのONはここでのみ実施
@@ -191,12 +191,12 @@ class order_information:
 
     def close_order(self):
         # オーダークローズする関数 (情報のリセットは行わなず、Lifeの変更のみ）
-        print("OrderCnacel関数", self.order['id'])
+        # print("OrderCnacel関数", self.order['id'])
         res_dic = oa.OrderDetails_exe(self.order['id'])
         if "order" in res_dic:
             status = res_dic['order']['state']
             if status == "PENDING":  # orderがキャンセルできる状態の場合
-                print(" orderCancel検討")
+                # print(" orderCancel検討")
                 res = oa.OrderCancel_exe(self.order['id'])
                 if type(res) is int:
                     oa.print_i("   存在しないorder（ERROR）")
@@ -204,15 +204,15 @@ class order_information:
                 else:
                     self.order['state'] = "CANCELLED"
                     self.life_set(False)
-                    oa.print_i(" 注文の為？オーダー解消", self.order['id'])
-                    print(" 注文の為？オーダー解消", self.order['id'])
+                    oa.print_i("   注文の為？オーダー解消", self.order['id'])
+                    print("   注文の為？オーダー解消", self.order['id'])
                     # tk.line_send("  オーダー解消", self.order['id'])
             else:  # FIEELDとかCANCELLEDの場合は、lifeにfalseを入れておく
                 oa.print_i("   order無し")
                 print("   order無し")
         else:
-            oa.print_i("  order無し（APIなし）")
-            print("  order無し（APIなし）")
+            oa.print_i("   order無し（APIなし）")
+            print("   order無し（APIなし）")
 
     def close_position(self):
         # ポジションをクローズする関数 (情報のリセットは行わなず、Lifeの変更のみ）
@@ -234,13 +234,14 @@ class order_information:
         # STATEの種類
         # order "PENDING" "CANCELLED" "FILLED"
         # position "OPEN" "CLOSED"
-        global gl_total_pips, gl_now_price_mid, gl_trade_win, gl_total_yen, gl_error_order_id
+        global gl_total_pips, gl_now_price_mid, gl_trade_win, gl_total_yen
+        res = 0  # APIのエラーが多い為、エラーがない場合は０を返す。
         if self.life:  # LifeがTrueの場合は、必ずorderIDが入っている
             # print(" □□情報を更新します", self.name)
-            # ★現在価格を求めておく
+            # ★現在価格を求めておく　★APIエラーの場合終了
             price_dic = oa.NowPrice_exe("USD_JPY")
             if "error" in price_dic:  # APIエラーの場合はスキップ
-                print(" APIエラーの為情報更新せず終了（ロスカ底上げも出来ないけど）")
+                print(" APIエラーの為情報更新せず終了（ロスカ底上げも出来ないけど）", gl_now)
                 exit()
             else:
                 if self.plan['ask_bid'] > 0:  # プラス(買い) オーダーの場合
@@ -249,12 +250,11 @@ class order_information:
                     self.now_price = float(price_dic["bid"])
                 gl_now_price_mid = self.now_price
 
-            # （０）情報取得 + 変化点キャッチ（ 情報を埋める前に変化点をキャッチする）
+            # （０）情報取得 + 変化点キャッチ（ 情報を埋める前に変化点をキャッチする ★APIエラーの場合終了）
             temp = oa.OrderDetailsState_exe(self.order['id'])
-            if temp['order_state'] == "error":
-                print(" エラー発生(update)", temp['order_id'])
-                gl_error_order_id.append(temp['order_id'])
-                return -1
+            if "error" in temp:  # APIエラーの場合はスキップ
+                print(" APIエラーの為情報更新せず終了2（ロスカ底上げも出来ないけど）", gl_now)
+                exit()
             # （1-1)　変化点を算出しSTATEを変更する（ポジションの新規取得等）
             if self.order['state'] == "PENDING" and temp['order_state'] == 'FILLED':  # 現orderあり⇒約定（取得時）
                 oa.print_i("  ★position取得！", self.name, self.order['direction'])
@@ -269,18 +269,18 @@ class order_information:
             elif self.position['state'] == "OPEN" and temp['position_state'] == "CLOSED":  # 現ポジあり⇒ポジ無し（終了時）
                 oa.print_i("  ★position解消")
                 self.life_set(False)
-                self.pips_res_arr.append(temp['position_pips'])
+                self.pips_res_arr.insert(0, temp['position_pips'])  # 先頭に、結果を追加していく（先頭からの方が後々集計しやすい）
                 gl_total_pips = round(gl_total_pips + temp['position_pips'], 3)  # トータル計算 abs(int(self.order['units']))
-                yen_result = int(temp['position_pips'] * abs(self.order['units']))  # トータルの円（plだと上手く表示されないので計算する）
-                gl_total_yen = int(gl_total_yen + yen_result)
+                temp_yen_result = int(temp['position_pips'] * abs(self.order['units']))  # トータルの円（plだと上手く表示されないので計算する）
+                gl_total_yen = int(gl_total_yen + temp_yen_result)
                 if temp['position_pips'] >=0 :
                     gl_trade_win += 1  # トータルプラス計算
-                res1 = "【Unit】" + str(self.order['units']) + "【結果】" + str(temp['position_pips']) + "(決済価格:" + str(temp['position_close_price']) + ", "
+                res1 = "【Unit】" + str(self.order['units']) + "," + self.name + "【結果】" + str(temp['position_pips']) + "(決済価格:" + str(temp['position_close_price']) + ", "
                 res5 = "取得価格:" + str(self.order['price'])
                 res2 = "【Total】" + str(gl_total_pips) + "," + "【Win/All】" + str(gl_trade_win) + "/" + str(gl_trade_num)
                 res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.pips_min) + "/ー域:" + str(self.pips_max)
-                res4 = "【今回損益/合計損益】" + str(yen_result) + "円,計" + str(gl_total_yen) + "円"
-                id_info = "【orderID】" + str(self.order['id']) + "," + self.name
+                res4 = "【今回損益/合計損益】" + str(temp_yen_result) + "円,計" + str(gl_total_yen) + "円"
+                id_info = "【orderID】" + str(self.order['id'])
                 tk.line_send(" ▲解消:", datetime.datetime.now().replace(microsecond=0), res1, res5, res2, res3, id_info, res4)
                 change_flag = 1  # 結果の可視化フラグ
             elif self.order['state'] == "PENDING" and temp['order_state'] == 'CANCELLED':  # （取得時）
@@ -320,9 +320,6 @@ class order_information:
             if self.pips_max > self.position['pips']:  # 最小値更新時
                 self.pips_max = self.position['pips']
 
-            if change_flag == 1:
-                self.print_i()  # 情報の表示
-
             # (4)矛盾系の状態を解消する（部分解消などが起きた場合に、idがあるのにStateがないなど、矛盾があるケースあり。
             if self.position['id'] != 0 and self.position['state'] == 0:
                 # positionIDがあるのにStateが登録されていない⇒エラー
@@ -335,10 +332,12 @@ class order_information:
             #  状況に応じて処理を実施する
             # LCの底上げを行う
             self.lc_change()
+            # トレールの実施を行う
+            self.trail()
             # 時間による解消を行う
             if self.order['time_past'] > self.order_timeout * 60 and self.order['state'] == "PENDING":
-                print("時間解消@")
-                tk.line_send("時間解消@", self.name, self.order['time_past'])
+                print("   時間解消@")
+                tk.line_send("   @", self.name, self.order['time_past'])
                 self.close_order()
         else:
             # LifeがFalseの場合
@@ -376,14 +375,16 @@ class order_information:
                     else:
                         self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
                         self.crcdo_history = True
-                        tk.line_send("　(LC底上げ)初回", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price,
+                        tk.line_send("　(LC底上げ)", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price,
                                      "Border:", self.crcdo_border, "保証", self.crcdo_guarantee)
-        elif self.crcdo_self_trail_exe and self.crcdo_history:  # 一回すでにCDCRO実施済みが前提。
-            # 2回目以降のCRCDO　プラス方向にLCを広げる処理を実施　（セルフトレールのようなもの）
-            od = 0.5  # %
+
+    def trail(self):  # ポジションのトレールを設定（LCの底上げとは別に考える）
+        if self.crcdo_self_trail_exe and self.crcdo_history:  # 一回すでにCDCRO実施済みが前提。
+            p = self.position  # ポジションの情報
+            o = self.order  # オーダーの情報
             if p['time_past']-self.crcdo_sec_counter > 10:  # 前回のCRCDOよりN秒以上空いていれば、CRCDOを再検討する
                 if p['pips'] > 0.04:  # 勝ちpipsがＮ以上の場合、利確底上げ（トレール）を行う
-                    temp_lc_range = p['pips'] * od  # 含み益の７割（３割戻り）までを目標の戻り幅とする
+                    temp_lc_range = float(p['pips']) * self.crcdo_trail_ratio  # 含み益の７割（３割戻り）までを目標の戻り幅とする
                     temp_lc_price = round(p['price'] + (temp_lc_range * self.plan['ask_bid']), 3)  # 仮のLC価格を算出する
                     # 実行判定（ temp_lc_priceを更新する場合、更新していく。）
                     exe_crcdo = 0  # ばあいによってはCRCDOしない可能性があるので、フラグを０に初期化しておく。
@@ -409,7 +410,8 @@ class order_information:
                         else:
                             self.crcdo_set = True  # main本体で、ポジションを取る関数で解除する
                             self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
-                            tk.line_send("　(LC底上げ)TR", self.name, before_lc_price, "⇒", self.crcdo_lc_price,
+                            tk.line_send("　(TR)", self.name, before_lc_price, "⇒", self.crcdo_lc_price, ",確保:",
+                                         round(temp_lc_range, 3), ",全:", p['pips'],
                                          datetime.datetime.now().replace(microsecond=0))
                     else:
                         # exe_code=0
@@ -467,11 +469,11 @@ def order_line_adjustment_simple(base_line, margin, direction):
     return base_line
 
 
-def order_setting(class_order_arr):
+def order_setting(class_order_arr, info_l):
     """
     検証し、条件達成でオーダー発行。クラスへのオーダー作成に関するアクセスはこの関数からのみ行う。
-    :param order_info_temp: 色々
-    :param target_class: ターゲットとなるクラスのインスタンス(len(class_order_arr))
+    :param class_order_arr: 対象のクラスと、そこへの注文情報
+    :param info: その他の情報（今は負け傾向の強さ）
     :return:
     """
     global gl_trade_num, gl_now_price_mid
@@ -485,7 +487,7 @@ def order_setting(class_order_arr):
         order_info_temp = class_order_pair['order']
         target_class = class_order_pair['class']
         # 代表的なものを変数に入れておく
-        line_base = order_info_temp['line_base']
+        base_price = round(order_info_temp['base_price'], 3)
         expect_direction = order_info_temp['expect_dir']
         margin = order_info_temp['margin']
         lc = order_info_temp['lc']
@@ -495,9 +497,12 @@ def order_setting(class_order_arr):
         trigger = order_info_temp['trigger']
         order_type = order_info_temp['type']
         name = order_info_temp['name']
+        crcdo_trail_ratio = order_info_temp['crcdo_trail_ratio']
 
         # ■通常オーダー発行
-        price = order_line_adjustment_simple(line_base, margin, expect_direction)  # Margin込みの値段を計算して格納
+        # price = order_line_adjustment_simple(base_price, margin, expect_direction)  # Margin込みの値段を計算して格納
+        price = base_price + margin  # marginの方向は調整済み？
+        print(base_price, "+", margin)
         order_info = {
             "price": price,  # Margin込みの値段を計算して格納
             "lc_range": lc,
@@ -508,15 +513,16 @@ def order_setting(class_order_arr):
             "tr_range": 0.2,  # ↑ここまでオーダー
             "memo": ""
         }
-        target_class.name = name  # 名前を入れる
+        target_class.name = name  # 名前を入れる(クラス内の変更）
+        target_class.crcdo_trail_ratio = crcdo_trail_ratio
         target_class.order_registration(order_info)  # プラン自身を代入
         target_class.make_order()
         # 送信用
         o = target_class.order
         memo_each = "【" + target_class.name + "】:" + str(price) + ",tp-lc:" + str(o['tp_price']) + "-" + str(
-            o['lc_price']) + "(" + str(o['tp_range']) + "-"  + str(o['lc_range']) + ")," + str(o['units'])
+            o['lc_price']) + "(" + str(o['tp_range']) + "-" + str(o['lc_range']) + ")," + str(o['units'])
 
-        o_memo = o_memo + ", " + memo_each
+        o_memo = o_memo + memo_each + '\n'
         # その他条件をインプットする(本当はクラスメソッドで入れたいけど）
         target_class.crcdo_border = order_info_temp['crcdo_border']
         target_class.crcdo_guarantee = order_info_temp['crcdo_guarantee']
@@ -525,9 +531,10 @@ def order_setting(class_order_arr):
 
     # 送信は一回だけにしておく。
     if target_class.name != "mini":  # 連続にならないように、Miniの場合は送付しない
-        mes = " targetline:" + str(line_base)
+        mes = ""  #  targetline:" + str(base_price)
         tk.line_send("■折返Position！", gl_live, gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
-                     "トリガー:", trigger, "指定価格",price, "情報:", memo, ",", mes, ",オーダー:", o_memo)
+                     "トリガー:", trigger, "指定価格",price, "情報:", memo, ",オーダー:", '\n' , o_memo,
+                     "初回時間", gl_first_time)
 
 
 def mode1():
@@ -554,16 +561,8 @@ def mode1():
     result_range_turn = ans_dic['figure_turn_result']['result_dic']['result_range']  # 連続性を考慮したうえでのターン判定
     rename_latest3 = ans_dic['latest3_figure_result']['result']
 
-    # 前回の結果次第で、LCやＴＰに倍率をかける
-    # if len(fw.pips_res_arr) >= 1:
-    #     before_res = fw.pips_res_arr[-1]  # 最後尾が直近
-    #     if before_res < 0:
-    #         r = 2  # 前回負けの場合は二倍でやる
-    #     else:
-    #         r = 1
-    # else:
-    #     r = 1
-    r = 1
+    # 最近の負け傾向を見る
+    info_lose = recent_trends()  # 直近のプラス状況を見る
 
     # ■パターンでオーダーのベースを組み立てておく（発行可否は別途判断。パターンをとりあえず作っておく）
     if result_turn == 1:  # ターンが確認された場合（最優先）
@@ -575,13 +574,13 @@ def mode1():
             order = {  # ターン起点（インクルードパターン）
                 "name": "レンジ",
                 "target_class": main_c,  # 対象となるクラス
-                "line_base": order_info_temp['base_price'],
+                "base_price": order_info_temp['base_price'],
                 "expect_dir": order_info_temp['direction'],
                 "lc": order_info_temp['lc_range'],  # 計算通りのLC
                 "tp": order_info_temp['tp_range'],  # 計算通りのTP
                 "units": 20000,
-                "type": "STOP",  # 順張り
-                "margin": 0,
+                "type": "MARKET",  # 順張り
+                "margin": order_info_temp['margin'],
                 "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],  # 直近ターンの情報
                 "trigger": "ターン（インクルード）",
                 "kinds": 1,
@@ -589,19 +588,21 @@ def mode1():
                 "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
                 "crcdo_guarantee": -0.03,  # crcdoLINEを超えた場合、このラインを最低の利確ラインとする
                 "order_timeout": 20,  # 20分経過でオーダーを解除する
+                "crcdo_trail_ratio": 0.7,  # トレール時、勝ちのN%ラインにトレールする
                 "crcdo_self_trail_exe": False,  # トレールは実施しない
             }
             # MINIオーダーの作成
-            order_mini = order.copy()
-            order_mini['name'] = order['name'] + "mini"
-            order_mini['units'] = 25000
-            order_mini['lc'] = order['lc'] * 0.7
-            order_mini['crcdo_border'] = 0.025
-            order_mini['crcdo_guarantee'] = 0.01
-            order_mini['crcdo_self_trail_exe'] = True
+            # order_mini = order.copy()
+            # order_mini['name'] = order['name'] + "mini"
+            # order_mini['units'] = 25000
+            # order_mini['lc'] = order['lc'] * 0.7
+            # order_mini['crcdo_border'] = 0.025
+            # order_mini['crcdo_guarantee'] = 0.01
+            # order_mini['crcdo_self_trail_exe'] = True
             # オーダーの集約
-            order_pair = [{"class": main_c, "order": order},
-                          {"class": second_c, "order": order_mini}]
+            # order_pair = [{"class": main_c, "order": order},
+            #               {"class": second_c, "order": order_mini}]
+            order_pair = [{"class": main_c, "order": order}]
 
         else:
             print("   ★オーダー発行（ターン起点）")
@@ -611,13 +612,13 @@ def mode1():
             order = {  # ターン起点(順か逆か、状況で変る。)
                 "name": main_order['name'],
                 "target_class": second_c,  # 対象となるクラス
-                "line_base": main_order['base_price'],
+                "base_price": main_order['base_price'],
                 "expect_dir": main_order['direction'],
                 "lc": main_order['lc_range'],   # 0.055,  # 少し狭い目のLC
-                "tp": 0.09,
+                "tp": main_order['tp_range'],
                 "units": main_order['units'],
                 "type": main_order['type'],  # 順張り
-                "margin": 0,
+                "margin": main_order['margin'],
                 "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
                 "trigger": "ターン",
                 "kinds": 1,
@@ -625,55 +626,59 @@ def mode1():
                 "crcdo_border": 0.02,  # 0.05を超えたらCRCDOでcrcdo_guarantee
                 "crcdo_guarantee": -0.01,
                 "order_timeout": 20,
-                "crcdo_self_trail_exe": True,  # トレールは実施しない
+                "crcdo_trail_ratio": 0.3,  # トレール時、勝ちのN%ラインにトレールする
+                "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
             }
             # MINIオーダーの作成
-            order_mini = order.copy()
-            order_mini['name'] = order['name'] + "mini"
-            order_mini['units'] = 25000
-            order_mini['lc'] = order['lc'] * 0.7
-            order_mini['crcdo_border'] = 0.025
-            order_mini['crcdo_guarantee'] = 0.01
-            order_mini['crcdo_self_trail_exe'] = True
+            # order_mini = order.copy()
+            # order_mini['name'] = order['name'] + "mini"
+            # order_mini['units'] = 25000
+            # order_mini['lc'] = order['lc'] * 0.7
+            # order_mini['crcdo_border'] = 0.025
+            # order_mini['crcdo_guarantee'] = 0.01
+            # order_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
+            # order_mini['crcdo_self_trail_exe'] = True
             # 可変オーダーの作成
             junc_order = order_info_temp['junc']
             order2 = {  # ターン起点(Reverse)
                 "name": junc_order['name'],
                 "target_class": main_c,  # 対象となるクラス
-                "line_base": junc_order['base_price'],
+                "base_price": junc_order['base_price'],
                 "expect_dir": junc_order['direction'],
                 "lc": junc_order['lc_range'],  # 0.046,  # 少し狭い目のLC
-                "tp": 0.09,
+                "tp": junc_order['tp_range'],
                 "units": junc_order['units'],
                 "type": junc_order['type'],  # 逆張りで試してみようかな。。
-                "margin": 0,
+                "margin": junc_order['margin'],
                 "memo": ans_dic['figure_turn_result']['latest_turn_dic']['memo_all'],
                 "trigger": "ターン",
                 "kinds": 1,
                 "macd": ans_dic['macd_result']['cross'],
-                "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-                "crcdo_guarantee": -0.030,
+                "crcdo_border": 0.02,  # 0.05を超えたらCRCDOでcrcdo_guarantee
+                "crcdo_guarantee": -0.02,
                 "order_timeout": 20,
+                "crcdo_trail_ratio": 0.6,  # トレール時、勝ちのN%ラインにトレールする
                 "crcdo_self_trail_exe": False,  # トレールは実施しない
             }
             # オーダーの集約
             order_pair = [{"class": main_c, "order": order},
-                          {"class": second_c, "order": order_mini},
+                          # {"class": second_c, "order": order_mini},
                           {"class": third_c, "order": order2}
                           ]
 
     elif rename_latest3 == 1:  # ターン未遂が確認された場合（早い場合）
-        print("  ★オーダー発行 ターン未遂を確認　")
+        print("  ★オーダー発行 ターン未遂を確認　", )
         order_info_temp = ans_dic['latest3_figure_result']['order_dic']
         # メインオーダーの作成
+        print(order_info_temp['margin'])
         order = {
             "name": "順思想（ターン未遂）",
             "target_class": main_c,  # 対象となるクラス
-            "line_base": order_info_temp['base_price'],
+            "base_price": order_info_temp['base_price'],
             "expect_dir": order_info_temp['direction'],
-            "lc": 0.025,  # 非常に狭いLC(ターンミスの場合は、ストレートに下がることを期待しているため）
-            "tp": 0.07,
-            "margin": 0,
+            "lc": 0.035,  # 非常に狭いLC(ターンミスの場合は、ストレートに下がることを期待しているため）
+            "tp": 0.05,
+            "margin": order_info_temp['margin'],
             "units": 20000,
             "type": "STOP",  # 順張り
             "memo": ans_dic['latest3_figure_result']['memo'],
@@ -681,7 +686,8 @@ def mode1():
             "kinds": 2,
             "macd": ans_dic['macd_result']['cross'],
             "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.035,
+            "crcdo_guarantee": 0.02,
+            "crcdo_trail_ratio": 0.7,  # トレール時、勝ちのN%ラインにトレールする
             "order_timeout": 6,  # 分で指定
             "crcdo_self_trail_exe": False,  # トレールは実施しない
         }
@@ -689,8 +695,8 @@ def mode1():
         order_mini = order.copy()
         order_mini['name'] = order['name'] + "mini"
         order_mini['units'] = 25000
-        order_mini['lc'] = order['lc'] * 0.7
-        order_mini['crcdo_border'] = 0.025
+        order_mini['lc'] = order['lc'] * 0.9
+        order_mini['crcdo_border'] = 0.02
         order_mini['crcdo_guarantee'] = 0.01
         order_mini['crcdo_self_trail_exe'] = True
         order_pair = [{"class": main_c, "order": order}]
@@ -701,24 +707,19 @@ def mode1():
 
     # ■実際の発行が可能かを判断し、オーダーを作成する
     new_jd = main_c.judge_new()
+    #  ★★
+    gap_jd = ans_dic['figure_turn_result']['latest_turn_dic']['oldest_ans']['gap']
     if new_jd:
         if result_turn == 1:  # ターンが確認された場合（最優先）
-            print("  ターンOrder")
             reset_all_position()  # ポジションのリセット&情報アップデート
-            if result_range_turn == 1:  # そのさらに直前のターンが発生がある場合
-                print("   ★オーダー発行(Incudeパターン)")
-                order_setting(order_pair)  # オーダー発行
-            else:
-                print("   ★オーダー発行")
-                order_setting(order_pair)  # オーダー発行
+            order_setting(order_pair, info_lose)  # オーダー発行
         elif rename_latest3 == 1:  # ターン未遂が確認された場合（早い場合）
-            print("  ターン未遂を確認　★オーダー発行")
-            order_setting(order_pair)  # オーダー発行
+            order_setting(order_pair, info_lose)  # オーダー発行
     else:
         if result_turn == 1:  # ターンが確認された場合（最優先）
-            print("  ターンを確認(時間で不可）")
+            print("  ターンを確認（時間で不可）　こんなことある？")
         elif rename_latest3 == 1:  # ターン未遂が確認された場合（早い場合）
-            print("  ターン未遂を確認　（時間で不可）")
+            print("  ターン未遂を確認（時間で不可）こんなことある？")
 
 
 def mode2():
@@ -738,13 +739,12 @@ def exe_manage():
     time_sec = gl_now.second  # 現在時刻の「秒」のみを取得
 
     # グローバル変数の宣言（編集有分のみ）
-    global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df, gl_first
+    global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df, gl_first, gl_first_time
 
     # ■深夜帯は実行しない　（ポジションやオーダーも全て解除）
     if 3 <= time_hour < 6:
         if gl_midnight_close_flag == 0:  # 繰り返し実行しないよう、フラグで管理する
-            oa.OrderCancel_All_exe()
-            oa.TradeAllClose_exe()
+            reset_all_position()
             tk.line_send("■深夜のポジション・オーダー解消を実施")
             gl_midnight_close_flag = 1  # 実施済みフラグを立てる
     # ■実行を行う
@@ -781,11 +781,12 @@ def exe_manage():
         # ■　初回だけ実行と同時に行う
         if gl_first == 0:
             gl_first = 1
+            gl_first_time = gl_now
             print("■■■初回", gl_now, gl_exe_mode, gl_live)  # 表示用（実行時）
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 6, 21, 11, 25, 00)
+            # jp_time = datetime.datetime(2023, 7, 4, 11, 24, 00)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
@@ -839,6 +840,51 @@ def reset_all_position():
     all_update_information()  # 関数呼び出し（アップデート）
 
 
+def recent_trends():
+    """
+    直近の勝ち負けの傾向を把握する（各、直近取引の３回の勝敗）
+    :return:
+    """
+    total_pips = 0
+    total_m = 0
+    # 計算していく
+    ans = recent_trends_support(main_c.pips_res_arr)
+    total_m = total_m + ans['count']
+    total_pips = total_pips + ans['total']
+
+    ans = recent_trends_support(second_c.pips_res_arr)
+    total_m = total_m + ans['count']
+    total_pips = total_pips + ans['total']
+
+    ans = recent_trends_support(third_c.pips_res_arr)
+    total_m = total_m + ans['count']
+    total_pips = total_pips + ans['total']
+
+    if total_m >= 4:
+        # 負け越し
+        result = -1
+        comment = "負け越し中"
+    else:
+        result = 1
+        comment = "負け注意"
+
+    return {"result": result, "count": total_m, "total_pips": total_pips, "comment": comment}
+
+
+def recent_trends_support(arr):
+    m_count = 0
+    pip_total = 0
+    for i in range(len(arr)):
+        if i >=2:
+            # 直近の二つまで
+            break
+        else:
+            if arr[i] < 0:
+                m_count += 1
+                pip_total = pip_total + arr[i]
+    return {"count": m_count, "total": pip_total}
+
+
 # ■グローバル変数の宣言等
 # 変更なし群
 gl_peak_range = 2  # ピーク値算出用　＠ここ以外で変更なし
@@ -855,8 +901,8 @@ gl_total_yen = 0  # Unit含めたトータル損益（円の完全）
 gl_data5r_df = 0  # 毎回複数回ローソクを取得は時間無駄なので１回を使いまわす　＠exe_manageで取得
 gl_trade_num = 0  # 取引回数をカウントする
 gl_trade_win = 0  # プラスの回数を記録する
-gl_error_order_id = []  # エラーを起こしたIDをためておく（後で確認するため）
 gl_live = "Pra"
+gl_first_time = ""  # 初回の時間を抑えておく（LINEで見やすくするためだけ）
 
 # ■オアンダクラスの設定
 fx_mode = 1  # 1=practice, 0=Live

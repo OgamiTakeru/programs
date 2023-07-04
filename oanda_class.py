@@ -191,8 +191,8 @@ class Oanda:
             ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid)
             price: 130.150のような小数点三桁で指定。（メモ：APIで渡す際は小数点３桁のStr型である必要がある。本関数内で自動変換）
                     成り行き注文であっても、LCやTPを設定する上では必要
-            tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。
-            lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。
+            tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。負の値は正の値に変換
+            lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。　負の値は正の値に変換
             type: 下記参照
             tr_range: トレール幅を指定。0.01単位で指定。OANDAの仕様上0.05以上必須。指定しない場合は０を渡す
             remark: 今は使っていないが、引数としては残してある。何かしら文字列をテキトーに渡す。
@@ -218,23 +218,32 @@ class Oanda:
         if info['type'] != "MARKET":
             # 成り行き注文以外
             data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+        else:
+            # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
+            info['price'] = self.NowPrice_exe("USD_JPY")['mid']
+            print("現在価格", info['price'])
+
         if info['tp_range'] != 0:
             # 利確設定ありの場合
+            tp_range = abs(info['tp_range'])
             data['order']['takeProfitOnFill'] = {}
             data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
-                                                                   (info['tp_range'] * info['ask_bid']), 3))  # 利確
+                                                                   (tp_range * info['ask_bid']), 3))  # 利確
             data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
         if info['lc_range'] != 0:
             # ロスカ設定ありの場合
+            lc_range = abs(info['lc_range'])
             data['order']['stopLossOnFill'] = {}
             data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
-                                                                 (info['lc_range'] * info['ask_bid']), 3))  # ロスカット
+                                                                 (lc_range * info['ask_bid']), 3))  # ロスカット
             data['order']['stopLossOnFill']['timeInForce'] = "GTC"
         if info['tr_range'] != 0:
             # トレールストップロス設定ありの場合
             data['order']['trailingStopLossOnFill'] = {}
             data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
             data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
+
+        print(data['order'])
 
         # 実行
         ep = OrderCreate(accountID=self.accountID, data=data)  #
@@ -254,10 +263,12 @@ class Oanda:
         # オーダー情報履歴をまとめておく
         order_info = {"price": str(round(info['price'], 3)),
                       "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
-                      "tp": str(round(info['price'] + (info['tp_range'] * info['ask_bid']), 3)),
-                      "lc": str(round(info['price'] - (info['lc_range'] * info['ask_bid']), 3)),
-                      "tp_range": round(info['tp_range'], 3),
-                      "lc_range": round(info['lc_range'], 3),
+                      "tp_price": data['order']['takeProfitOnFill']['price'],
+                      "lc_price": data['order']['stopLossOnFill']['price'],
+                      "tp_range_base": round(info['tp_range'], 3),
+                      "lc_range_base": round(info['lc_range'], 3),
+                      "tp_range": tp_range,
+                      "lc_range": lc_range,
                       "type": info['type'],
                       "cancel": canceled,
                       "order_id": order_id,
@@ -308,7 +319,7 @@ class Oanda:
         open_df = self.OrdersPending_exe()
         close_df = None
         if len(open_df) == 0:
-            print("     @NoPendingClosefunc)")
+            print("     @オーダーキャンセル(対象無し)")
             return None
         else:
             print("     cancel order", len(open_df))
@@ -354,26 +365,8 @@ class Oanda:
 
         if "error" in res_json:
             # わかりやすいJsonを作っておく
-            print("   ★★★★★入ってほしくないエラー")
-            res = {
-                "order_id": order_id,
-                "order_time": 0,
-                "order_time_past": 0,
-                "order_units": 0,
-                "order_price": 0.0,  # Marketでは存在しない
-                "order_state": "error",  # ★エラーの場合はここにエラーが入る
-                "position_id": 0,
-                "position_time": 0,
-                "position_time_past": 0,
-                "position_price": 0.0,
-                "position_state": 0,
-                "position_realize_pl": 0.0,
-                "position_pips": 0.0,
-                "position_close_time": 0,
-                "position_close_price": 0,
-            }
-            return res
-
+            print("   ★OrderDatailState- orderDetail ミス", order_id)
+            return {"error": -1, "part": "OrderDetail"}  # エラーの返却
         else:
             order_state = res_json['order']['state']  # オーダーのステータスを確認
 
@@ -394,11 +387,17 @@ class Oanda:
             if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
                 pass  # 初期値のまま（全て０）でOK
             else:  # order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
-                position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得
+                # ポジションの詳細を取得
+                if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
+                    print("  Closeあり　今までのAPIエラーケース")
+                    position_id = res_json['order']['tradeClosedIDs'][0]  # PositionIDを取得
+                else:
+                    position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得
                 position_js = self.TradeDetails_exe(position_id)  # PositionIDから詳細を取得
-                if type(position_js) is int:
-                    print(" オーダー約定済みだが、情報取得失敗した模様")
-                    pass  # position_jsが空だった場合は、無視する
+                if "error" in position_js:
+                    # わかりやすいJsonを作っておく
+                    print("   ★OrderDatailState- positionDetail ミス", position_id,"(", order_id, ")")
+                    return {"error": -1, "part": "OrderDetail"}  # エラーの返却
                 else:
                     if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
                         pips = round(float(position_js['trade']['realizedPL']) / abs(
@@ -421,6 +420,7 @@ class Oanda:
                         position_close_price = 0
             # わかりやすいJsonを作っておく
             res = {
+                "func_complete": 0,  # APIエラーなく完了しているかどうか
                 "order_id": order_id,
                 "order_time_original": res_json['order']['createTime'],
                 "order_time": iso_to_jstdt_single(res_json['order']['createTime']),
@@ -529,7 +529,7 @@ class Oanda:
             return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
         except Exception as e:
             print("★★APIエラー★★(指定トレードの詳細)")
-            return 0
+            return {"error": -1, "part": "TraildDetail"}  # エラーの返却
 
     # (14)指定のトレードの変更
     def TradeCRCDO_exe(self, trade_id, data):
@@ -585,7 +585,7 @@ class Oanda:
         """
         open_df = self.OpenTrades_exe()
         if len(open_df) == 0:
-            print("  @NoPosition (@all close func)")
+            print("     @ポジションキャンセル(対象無し/trade)")
             return None
         else:
             count = 0
