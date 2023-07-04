@@ -804,7 +804,7 @@ def figure_latest3_judge(ins_condition):
     else:
         d = 0
 
-    if oldest > older_line and middle > older_line and latest < later_line:  # どっちも5pips以上で同方向
+    if abs(oldest) > older_line and abs(middle) > older_line and abs(latest) < abs(middle):  # どっちも5pips以上で同方向
         p = 1
     else:
         p = 0

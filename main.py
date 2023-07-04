@@ -337,7 +337,7 @@ class order_information:
             # 時間による解消を行う
             if self.order['time_past'] > self.order_timeout * 60 and self.order['state'] == "PENDING":
                 print("   時間解消@")
-                tk.line_send("   @", self.name, self.order['time_past'])
+                tk.line_send("   時間解消@", self.name, self.order['time_past'])
                 self.close_order()
         else:
             # LifeがFalseの場合
@@ -627,17 +627,18 @@ def mode1():
                 "crcdo_guarantee": -0.01,
                 "order_timeout": 20,
                 "crcdo_trail_ratio": 0.3,  # トレール時、勝ちのN%ラインにトレールする
-                "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
+                "crcdo_self_trail_exe": True,  # トレールは実施有無（Trueは実施）
             }
             # MINIオーダーの作成
-            # order_mini = order.copy()
-            # order_mini['name'] = order['name'] + "mini"
-            # order_mini['units'] = 25000
-            # order_mini['lc'] = order['lc'] * 0.7
-            # order_mini['crcdo_border'] = 0.025
-            # order_mini['crcdo_guarantee'] = 0.01
-            # order_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
-            # order_mini['crcdo_self_trail_exe'] = True
+            order_mini = order.copy()
+            order_mini['name'] = order['name'] + "mini"
+            order_mini['units'] = round(order['units'] / 2, 0)
+            order_mini['lc'] = 0.03
+            order_mini['crcdo_border'] = 0.025
+            order_mini['crcdo_guarantee'] = 0.01
+            order_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
+            order_mini['crcdo_self_trail_exe'] = False
+
             # 可変オーダーの作成
             junc_order = order_info_temp['junc']
             order2 = {  # ターン起点(Reverse)
@@ -658,12 +659,22 @@ def mode1():
                 "crcdo_guarantee": -0.02,
                 "order_timeout": 20,
                 "crcdo_trail_ratio": 0.6,  # トレール時、勝ちのN%ラインにトレールする
-                "crcdo_self_trail_exe": False,  # トレールは実施しない
+                "crcdo_self_trail_exe": True,  # トレールは実施しない
             }
+            # miniオーダーの作成
+            order2_mini = order2.copy()
+            order2_mini['name'] = order2['name'] + "mini"
+            order2_mini['units'] = round(order2['units'] / 2, 0)
+            order2_mini['lc'] = 0.03
+            order2_mini['crcdo_border'] = 0.025
+            order2_mini['crcdo_guarantee'] = 0.01
+            order2_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
+            order2_mini['crcdo_self_trail_exe'] = True
             # オーダーの集約
             order_pair = [{"class": main_c, "order": order},
-                          # {"class": second_c, "order": order_mini},
-                          {"class": third_c, "order": order2}
+                          {"class": second_c, "order": order_mini},
+                          {"class": third_c, "order": order2},
+                          {"class": fourth_c, "order": order2_mini}
                           ]
 
     elif rename_latest3 == 1:  # ターン未遂が確認された場合（早い場合）
@@ -689,17 +700,17 @@ def mode1():
             "crcdo_guarantee": 0.02,
             "crcdo_trail_ratio": 0.7,  # トレール時、勝ちのN%ラインにトレールする
             "order_timeout": 6,  # 分で指定
-            "crcdo_self_trail_exe": False,  # トレールは実施しない
+            "crcdo_self_trail_exe": True,  # トレールは実施しない
         }
         # MINIオーダーの作成
         order_mini = order.copy()
         order_mini['name'] = order['name'] + "mini"
-        order_mini['units'] = 25000
-        order_mini['lc'] = order['lc'] * 0.9
+        order_mini['units'] = round(order['units']/2, 0)
+        order_mini['lc'] = 0.03
+        order_mini['tp'] = 0.03
         order_mini['crcdo_border'] = 0.02
         order_mini['crcdo_guarantee'] = 0.01
-        order_mini['crcdo_self_trail_exe'] = True
-        order_pair = [{"class": main_c, "order": order}]
+        order_mini['crcdo_self_trail_exe'] = False
         # オーダーの集約
         order_pair = [{"class": main_c, "order": order},
                       {"class": second_c, "order": order_mini},
@@ -786,7 +797,7 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 7, 4, 11, 24, 00)
+            # jp_time = datetime.datetime(2023, 7, 4, 15, 26, 00)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
@@ -917,6 +928,7 @@ else:  # Live
 main_c = order_information("1", oa)  # 順思想のオーダーを入れるクラス
 second_c = order_information("2", oa)  # 順思想のオーダーを入れるクラス
 third_c = order_information("3", oa)  # 順思想のオーダーを入れるクラス
+fourth_c = order_information("4", oa)  # 順思想のオーダーを入れるクラス
 
 # ■処理の開始
 reset_all_position()  # 開始時は全てのオーダーを解消し、初期アップデートを行う

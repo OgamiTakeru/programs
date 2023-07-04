@@ -204,6 +204,11 @@ class Oanda:
         """
         # try:
             # 念のため、初期値を入れておく。
+
+        # 初期値を入れておく
+        tp_range = 0
+        lc_range = 0
+
         data = {  # ロスカ、利確ありのオーダー
             "order": {
                 "instrument": "USD_JPY",
@@ -263,8 +268,8 @@ class Oanda:
         # オーダー情報履歴をまとめておく
         order_info = {"price": str(round(info['price'], 3)),
                       "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
-                      "tp_price": data['order']['takeProfitOnFill']['price'],
-                      "lc_price": data['order']['stopLossOnFill']['price'],
+                      "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),
+                      "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),
                       "tp_range_base": round(info['tp_range'], 3),
                       "lc_range_base": round(info['lc_range'], 3),
                       "tp_range": tp_range,
