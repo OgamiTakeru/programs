@@ -506,7 +506,8 @@ def figure_turn_inspection(figure_condition):
         base_price2 = now_price  # 基準となる価格（マージン込み）
         margin2 = 0.016 * latest_ans['direction']   # ０の場合は成り行きを意味する
         lc_range2 = cal_min(0.02, round(latest_ans['gap'] *0.5, 3)) * latest_ans['direction'] * -1  # 最低でも0.02pipsを確保
-        tp_range2 = (lc_range2 + 0.02) * latest_ans['direction']
+        tp_range2 = (abs(lc_range2) + 0.02) * latest_ans['direction']  # lc_range2には方向があるので注意！
+        # print("■■", tp_range2, latest_ans['direction'])
         temp_target2 = base_price2 + margin2
         # 順方向
         base_price = latest_ans['latest_price']
@@ -558,6 +559,7 @@ def figure_turn_inspection(figure_condition):
     else:
         main = {}
         junc = {}
+
 
     # 返却用の辞書を作成
     if return_ratio == 0:

@@ -394,7 +394,7 @@ class Oanda:
             else:  # order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
                 # ポジションの詳細を取得
                 if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
-                    print("  Closeあり　今までのAPIエラーケース")
+                    # print("  Closeあり　今までのAPIエラーケース")
                     position_id = res_json['order']['tradeClosedIDs'][0]  # PositionIDを取得
                 else:
                     position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得

@@ -797,11 +797,11 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 7, 4, 15, 26, 00)
-            # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-            # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-            # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
-            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            jp_time = datetime.datetime(2023, 7, 4, 15, 51, 00)
+            euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+            euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+            param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
+            d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
