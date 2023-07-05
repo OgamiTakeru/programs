@@ -502,6 +502,7 @@ def figure_turn_inspection(figure_condition):
         # ★注文（基準情報の収集）
         # ①理論上の理想値
         return_unit_yen = oldest_ans['gap']/100
+        rap_margin = 0.007  # ラップ時の余裕度
         # レンジ方向(戻り　＝　逆思想）
         d2 = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
         base_price2 = latest_ans['latest_price']  # now_price  # 基準となる価格（マージン込み）
@@ -530,20 +531,20 @@ def figure_turn_inspection(figure_condition):
         else:
             if lc_range2 > temp_gap and lc_range > temp_gap:
                 print(" 両方非成立（LCを短縮する", lc_range2, lc_range, temp_gap)
-                lc_range2 = temp_gap - 0.007
-                lc_range = temp_gap - 0.007
+                lc_range2 = temp_gap - rap_margin
+                lc_range = temp_gap - rap_margin
                 print(" ⇒", lc_range2, lc_range)
             elif lc_range2 > temp_gap:
                 print("レンジLC幅収まらず⇒順のtargetをずらす", lc_range2, temp_gap, margin)
                 temp = abs(temp_target - lc_price2_cal)  # オーバーしている分を取得
-                adj = temp + 0.007  # 余裕を持たせる
+                adj = temp + rap_margin  # 余裕を持たせる
                 margin = margin + adj
                 print("  ⇒", round(margin, 3), adj)
             elif lc_range > temp_gap:  # 順思想のLCが大きく、条件を満たさない場合
                 print("順方向LC幅収まらず⇒レンジのTargetをずらす", lc_range, temp_gap, margin2)
                 temp = abs(temp_target2 - lc_price_cal)  # オーバーしている分を取得
                 print("over", temp)
-                adj = temp + 0.007
+                adj = temp + rap_margin
                 margin2 = margin2 + adj
                 print("  ⇒", round(margin2, 3), adj)
             else:
@@ -551,7 +552,7 @@ def figure_turn_inspection(figure_condition):
 
         # ②オーダーを生成
         junc = {
-            "name": "レンジ方向",
+            "name": "レンジ",
             "base_price": base_price2,
             "target_price": temp_target2,  # 基本渡した先では使わない
             "margin": margin2 * d2,  # BasePriceに足せばいい数字（方向もあっている）

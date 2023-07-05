@@ -610,12 +610,12 @@ def mode1():
             # メインオーダーの作成
             main_order = order_info_temp['main']
             order = {  # ターン起点(順か逆か、状況で変る。)
-                "name": main_order['name'],
+                "name": main_order['name'] + "N",
                 "target_class": second_c,  # 対象となるクラス
                 "base_price": main_order['base_price'],
                 "expect_dir": main_order['direction'],
                 "lc": main_order['lc_range'],   # 0.055,  # 少し狭い目のLC
-                "tp": main_order['tp_range'] + 0.04,
+                "tp": round(main_order['tp_range'] + 0.04, 3),
                 "units": main_order['units'],
                 "type": main_order['type'],  # 順張り
                 "margin": main_order['margin'],
@@ -631,7 +631,7 @@ def mode1():
             }
             # MINIオーダーの作成
             order_mini = order.copy()
-            order_mini['name'] = order['name'] + "mini"
+            order_mini['name'] = main_order['name'] + "m"
             order_mini['units'] = round(order['units'] / 2, 0)
             order_mini['tp'] = 0.03
             order_mini['crcdo_border'] = 0.025
@@ -642,7 +642,7 @@ def mode1():
             # 可変オーダーの作成
             junc_order = order_info_temp['junc']
             order2 = {  # ターン起点(Reverse)
-                "name": junc_order['name'],
+                "name": junc_order['name'] + "N",
                 "target_class": main_c,  # 対象となるクラス
                 "base_price": junc_order['base_price'],
                 "expect_dir": junc_order['direction'],
@@ -663,7 +663,7 @@ def mode1():
             }
             # miniオーダーの作成
             order2_mini = order2.copy()
-            order2_mini['name'] = order2['name'] + "mini"
+            order2_mini['name'] = junc_order['name'] + "m"
             order2_mini['units'] = round(order2['units'] / 2, 0)
             order2_mini['lc'] = 0.03
             order2_mini['tp'] = 0.03
@@ -798,11 +798,11 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            jp_time = datetime.datetime(2023, 7, 5, 17, 16, 00)
-            euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-            euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-            param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
-            d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            # jp_time = datetime.datetime(2023, 7, 5, 17, 16, 00)
+            # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+            # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+            # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
+            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
