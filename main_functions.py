@@ -467,7 +467,7 @@ def figure_turn_inspection(figure_condition):
     oldest_ans = figure_turn_each_inspection_skip(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
 
     # 表示用がメインの情報まとめ
-    print(oldest_ans['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans['oldest_price'])
+    print("  ",oldest_ans['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans['oldest_price'],"@fig_ins")
     memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
     memo_price = "(" + str(oldest_ans['oldest_price']) + "_" + str(latest_ans['latest_price']) + "," + str(oldest_ans['direction'])
     memo_all = memo_time + memo_price
@@ -503,56 +503,73 @@ def figure_turn_inspection(figure_condition):
         # ①理論上の理想値
         return_unit_yen = oldest_ans['gap']/100
         # レンジ方向(戻り　＝　逆思想）
-        base_price2 = now_price  # 基準となる価格（マージン込み）
-        margin2 = 0.016 * latest_ans['direction']   # ０の場合は成り行きを意味する
-        lc_range2 = cal_min(0.02, round(latest_ans['gap'] *0.5, 3)) * latest_ans['direction'] * -1  # 最低でも0.02pipsを確保
-        tp_range2 = (abs(lc_range2) + 0.02) * latest_ans['direction']  # lc_range2には方向があるので注意！
-        # print("■■", tp_range2, latest_ans['direction'])
+        d2 = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
+        base_price2 = latest_ans['latest_price']  # now_price  # 基準となる価格（マージン込み）
+        margin2 = round(0.016, 3)   # ０の場合は成り行きを意味する
+        lc_range2 = cal_min(0.02, round(latest_ans['gap'] * 0.5, 3))  # 最低でも0.02pipsを確保
+        tp_range2 = lc_range2 + 0.02  # lc_range2には方向があるので注意！
         temp_target2 = base_price2 + margin2
+        lc_price2_cal = temp_target2 + (lc_range2 * d2 * -1)  # ここで計算される値
+        tp_price2_cal = temp_target2 + (tp_range2 * d2)  # ここで計算される値
+        print("レンジ候補", temp_target2, lc_price2_cal, tp_price2_cal, base_price2, margin2)
         # 順方向
+        d = latest_ans['direction'] * -1
         base_price = latest_ans['latest_price']
-        margin = cal_min(0.013, latest_ans['body_ave'] * 0.5) * latest_ans['direction'] * -1
-        lc_range = 0.035 * latest_ans['direction']
-        tp_range = 0.050 * latest_ans['direction'] * -1
-        temp_target = base_price + margin
+        margin = cal_min(0.013, latest_ans['body_ave'] * 0.5)
+        lc_range = 0.035
+        tp_range = 0.050
+        temp_target = base_price + margin * d
+        lc_price_cal = temp_target + (lc_range * d * -1)  # ここで計算される値
+        tp_price_cal = temp_target + (tp_range * d)  # ここで計算される値
+        print("順方向候補", temp_target, lc_price_cal, tp_price_cal, base_price, margin)
         # レンジor順思想の互いのLCが、互いのBasePriceと干渉しないようにする
-        temp_gap = abs(temp_target2 - temp_target) + 0.01  # お互いのターゲットプライス + 余裕度0.01を足しておく
+        temp_gap = abs(temp_target2 - temp_target)  # お互いのターゲットプライス + 余裕度0.01を足しておく
         if lc_range2 < temp_gap and lc_range < temp_gap:  # 両方とも満たしている場合⇒何もせず
             print("  マージン調整不要", temp_gap, lc_range2, lc_range)
             pass
         else:
-            if lc_range2 > temp_gap:  # レンジ側のLCが大きく、条件を満たさない場合
-                adj = abs(temp_target - (temp_target2 + lc_range2))  # 対局のTargetPriceと自身のLC価格の差を求め、マージンに足す。
-                print("  レンジ方向のマージンの調整", margin2)
-                margin2 = margin2 + (adj * latest_ans['direction'])
-                print("  ⇒", margin2)
-            if lc_range > temp_gap:  # 順思想のLCが大きく、条件を満たさない場合
-                adj = abs(temp_target2 - (temp_target + lc_range))
-                print("  順方向のマージンの調整", margin)
+            if lc_range2 > temp_gap and lc_range > temp_gap:
+                print(" 両方非成立（LCを短縮する", lc_range2, lc_range, temp_gap)
+                lc_range2 = temp_gap - 0.007
+                lc_range = temp_gap - 0.007
+                print(" ⇒", lc_range2, lc_range)
+            elif lc_range2 > temp_gap:
+                print("レンジLC幅収まらず⇒順のtargetをずらす", lc_range2, temp_gap, margin)
+                temp = abs(temp_target - lc_price2_cal)  # オーバーしている分を取得
+                adj = temp + 0.007  # 余裕を持たせる
                 margin = margin + adj
-                print("  ⇒", margin)
+                print("  ⇒", round(margin, 3), adj)
+            elif lc_range > temp_gap:  # 順思想のLCが大きく、条件を満たさない場合
+                print("順方向LC幅収まらず⇒レンジのTargetをずらす", lc_range, temp_gap, margin2)
+                temp = abs(temp_target2 - lc_price_cal)  # オーバーしている分を取得
+                print("over", temp)
+                adj = temp + 0.007
+                margin2 = margin2 + adj
+                print("  ⇒", round(margin2, 3), adj)
+            else:
+                print("　謎状態")
 
         # ②オーダーを生成
         junc = {
             "name": "レンジ方向",
             "base_price": base_price2,
             "target_price": temp_target2,  # 基本渡した先では使わない
-            "margin": margin2,  # BasePriceに足せばいい数字（方向もあっている）
-            "direction": latest_ans['direction'],
+            "margin": margin2 * d2,  # BasePriceに足せばいい数字（方向もあっている）
+            "direction": d2,
             "type": "STOP",
-            "lc_range": lc_range2,
-            "tp_range": tp_range2,
+            "lc_range": round(lc_range2 * d2 * -1, 3),
+            "tp_range": round(tp_range2 * d2, 3),
             "units": 30000,
         }
         main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
             "name": "順思想",
             "base_price": base_price,
             "target_price": temp_target,  # 基本順方向にMerginを取る
-            "margin": margin,  # BasePriceに足せばいい数字（方向もあっている）
-            "direction": oldest_ans['direction'],
+            "margin": margin * d,  # BasePriceに足せばいい数字（方向もあっている）
+            "direction": d,
             "type": "STOP",
-            "lc_range": lc_range,
-            "tp_range": tp_range,
+            "lc_range": round(lc_range * d * -1, 3),
+            "tp_range": round(tp_range * d, 3),
             "units": 20000,
         }
 
@@ -811,7 +828,7 @@ def figure_latest3_judge(ins_condition):
     else:
         p = 0
 
-    if 0.4 < oldest / middle < 2.5:
+    if 0.4 <= oldest / middle <= 2.5:
         r = 1
     else:
         r = 0
@@ -829,7 +846,7 @@ def figure_latest3_judge(ins_condition):
         order = {
             "base_price": data_r.iloc[0]['open'],
             "direction": oldest_d,
-            "margin": 0.008,
+            "margin": 0.008 * oldest_d,  # 方向をもつ
         }
     else:
         res_memo = "Trun未遂未達"
@@ -837,7 +854,7 @@ def figure_latest3_judge(ins_condition):
         order = {
             "base_price": 0,
             "direction": 0,
-            "margin": 0.008,
+            "margin": 0.008 * oldest_d,
         }
         # print("   未達成 dpr⇒", d, p, r)
     memo0 = "Oldest" + str(data_r.iloc[2]['time_jp']) + "," + str(data_r.iloc[0]['time_jp'])

@@ -502,7 +502,7 @@ def order_setting(class_order_arr, info_l):
         # ■通常オーダー発行
         # price = order_line_adjustment_simple(base_price, margin, expect_direction)  # Margin込みの値段を計算して格納
         price = base_price + margin  # marginの方向は調整済み？
-        print(base_price, "+", margin)
+        print(base_price, "+", margin, "=", base_price + margin)
         order_info = {
             "price": price,  # Margin込みの値段を計算して格納
             "lc_range": lc,
@@ -577,7 +577,7 @@ def mode1():
                 "base_price": order_info_temp['base_price'],
                 "expect_dir": order_info_temp['direction'],
                 "lc": order_info_temp['lc_range'],  # 計算通りのLC
-                "tp": order_info_temp['tp_range'],  # 計算通りのTP
+                "tp": order_info_temp['tp_range'] + 0.04,  # 計算通りのTP
                 "units": 20000,
                 "type": "MARKET",  # 順張り
                 "margin": order_info_temp['margin'],
@@ -615,7 +615,7 @@ def mode1():
                 "base_price": main_order['base_price'],
                 "expect_dir": main_order['direction'],
                 "lc": main_order['lc_range'],   # 0.055,  # 少し狭い目のLC
-                "tp": main_order['tp_range'],
+                "tp": main_order['tp_range'] + 0.04,
                 "units": main_order['units'],
                 "type": main_order['type'],  # 順張り
                 "margin": main_order['margin'],
@@ -633,10 +633,10 @@ def mode1():
             order_mini = order.copy()
             order_mini['name'] = order['name'] + "mini"
             order_mini['units'] = round(order['units'] / 2, 0)
-            order_mini['lc'] = 0.03
+            order_mini['tp'] = 0.03
             order_mini['crcdo_border'] = 0.025
             order_mini['crcdo_guarantee'] = 0.01
-            order_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
+            order_mini["crcdo_trail_ratio"] = 0.7,  # トレール時、勝ちのN%ラインにトレールする
             order_mini['crcdo_self_trail_exe'] = False
 
             # 可変オーダーの作成
@@ -666,6 +666,7 @@ def mode1():
             order2_mini['name'] = order2['name'] + "mini"
             order2_mini['units'] = round(order2['units'] / 2, 0)
             order2_mini['lc'] = 0.03
+            order2_mini['tp'] = 0.03
             order2_mini['crcdo_border'] = 0.025
             order2_mini['crcdo_guarantee'] = 0.01
             order2_mini["crcdo_trail_ratio"] =  0.7,  # トレール時、勝ちのN%ラインにトレールする
@@ -688,7 +689,7 @@ def mode1():
             "base_price": order_info_temp['base_price'],
             "expect_dir": order_info_temp['direction'],
             "lc": 0.035,  # 非常に狭いLC(ターンミスの場合は、ストレートに下がることを期待しているため）
-            "tp": 0.05,
+            "tp": 0.05+ 0.04,
             "margin": order_info_temp['margin'],
             "units": 20000,
             "type": "STOP",  # 順張り
@@ -775,8 +776,8 @@ def exe_manage():
         # ■いずれは低頻度モードのみでの取得になるかも
         # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
         if time_min % 5 == 0 and time_sec == 6:  # キャンドルの確認（５分に一回）
-            all_update_information()  # 情報アップデート
             print("■■■Candle調査", gl_live, gl_now)  # 表示用（実行時）
+            all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
@@ -785,8 +786,8 @@ def exe_manage():
 
         elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
             all_update_information()  # 情報アップデート
-            if main_c.life or second_c.life:  # どちらかのオーダーがアクティブな場合【【高頻度モードの条件】】
-                # print("■■■", gl_live, gl_now)  # 表示用（実行時）
+            if life_check():  # いずれかのオーダーのLifeが生きている場合【【高頻度モードの条件】】
+                # print("■■", gl_live, gl_now)  # 表示用（実行時）
                 mode2()
 
         # ■　初回だけ実行と同時に行う
@@ -797,7 +798,7 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            jp_time = datetime.datetime(2023, 7, 4, 15, 51, 00)
+            jp_time = datetime.datetime(2023, 7, 5, 17, 16, 00)
             euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
@@ -839,6 +840,7 @@ def all_update_information():
     main_c.update_information()  # 露払い時の変更を取得しておく（エラーが出たら、、どうしよう）
     second_c.update_information()
     third_c.update_information()
+    fourth_c.update_information()
 
 
 def reset_all_position():
@@ -849,6 +851,20 @@ def reset_all_position():
     oa.OrderCancel_All_exe()  # 露払い
     oa.TradeAllClose_exe()  # 露払い
     all_update_information()  # 関数呼び出し（アップデート）
+
+
+def life_check():
+    """
+    オーダーが生きているかを確認する
+    :return:
+    """
+    if main_c.life or second_c.life or third_c.life or fourth_c.life:
+        ans = True
+    else:
+        ans = False
+    # print(main_c.life, second_c.life, third_c.life, fourth_c.life)
+    # print(ans)
+    return ans
 
 
 def recent_trends():
