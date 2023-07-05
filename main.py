@@ -501,7 +501,7 @@ def order_setting(class_order_arr, info_l):
 
         # ■通常オーダー発行
         # price = order_line_adjustment_simple(base_price, margin, expect_direction)  # Margin込みの値段を計算して格納
-        price = base_price + margin  # marginの方向は調整済み？
+        price = round(base_price + margin, 3)  # marginの方向は調整済み？
         print(base_price, "+", margin, "=", base_price + margin)
         order_info = {
             "price": price,  # Margin込みの値段を計算して格納
@@ -615,7 +615,7 @@ def mode1():
                 "base_price": main_order['base_price'],
                 "expect_dir": main_order['direction'],
                 "lc": main_order['lc_range'],   # 0.055,  # 少し狭い目のLC
-                "tp": round(main_order['tp_range'] + 0.04, 3),
+                "tp": 0.07,  # round(main_order['tp_range'] + 0.04, 3),
                 "units": main_order['units'],
                 "type": main_order['type'],  # 順張り
                 "margin": main_order['margin'],
@@ -665,7 +665,7 @@ def mode1():
             order2_mini = order2.copy()
             order2_mini['name'] = junc_order['name'] + "m"
             order2_mini['units'] = round(order2['units'] / 2, 0)
-            order2_mini['lc'] = 0.03
+            # order2_mini['lc'] = 0.03
             order2_mini['tp'] = 0.03
             order2_mini['crcdo_border'] = 0.025
             order2_mini['crcdo_guarantee'] = 0.01
@@ -798,7 +798,7 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 7, 5, 17, 16, 00)
+            # jp_time = datetime.datetime(2023, 7, 6, 0, 1, 0)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
