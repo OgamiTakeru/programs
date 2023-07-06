@@ -505,14 +505,14 @@ def figure_turn_inspection(figure_condition):
         rap_margin = 0.004  # ラップ時の余裕度
         # レンジ方向(戻り　＝　逆思想）
         d2 = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
-        base_price2 = latest_ans['latest_price']  # now_price  # 基準となる価格（マージン込み）
+        base_price2 = now_price  # now_price or latest_ans['latest_price'] # 基準となる価格（マージン込み）
         margin2 = round(0.016, 3)   # ０の場合は成り行きを意味する
         lc_range2 = cal_min(0.02, round(latest_ans['gap'] * 0.5, 3))  # 最低でも0.02pipsを確保
         tp_range2 = lc_range2 + 0.02  # lc_range2には方向があるので注意！
-        target_cal2 = base_price2 + margin2
-        lc_price2_cal = target_cal2 + (lc_range2 * d2 * -1)  # ここで計算される値
-        tp_price2_cal = target_cal2 + (tp_range2 * d2)  # ここで計算される値
-        print("レンジ候補", target_cal2, lc_price2_cal, tp_price2_cal, base_price2, margin2)
+        cal_target2 = base_price2 + margin2 * d2
+        cal_lc_price2 = cal_target2 + (lc_range2 * d2 * -1)  # ここで計算される値
+        cal_tp_price2 = cal_target2 + (tp_range2 * d2)  # ここで計算される値
+        print("レンジ候補", cal_target2, cal_lc_price2, cal_tp_price2, base_price2, margin2)
 
         # 順方向
         d = latest_ans['direction'] * -1
@@ -520,13 +520,13 @@ def figure_turn_inspection(figure_condition):
         margin = cal_min(0.013, latest_ans['body_ave'] * 0.5)
         lc_range = 0.035
         tp_range = 0.050
-        target_cal = base_price + margin * d
-        lc_price_cal = target_cal + (lc_range * d * -1)  # ここで計算される値
-        tp_price_cal = target_cal + (tp_range * d)  # ここで計算される値
-        print("順方向候補", target_cal, lc_price_cal, tp_price_cal, base_price, margin)
+        cal_target = base_price + margin * d
+        cal_lc_price = cal_target + (lc_range * d * -1)  # ここで計算される値
+        cal_tp_price = cal_target + (tp_range * d)  # ここで計算される値
+        print("順方向候補", cal_target, cal_lc_price, cal_tp_price, base_price, margin)
 
         # レンジor順思想の互いのLCが、互いのBasePriceと干渉しないようにする
-        temp_gap = abs(target_cal2 - target_cal)  # お互いのターゲットプライス + 余裕度0.01を足しておく
+        temp_gap = abs(cal_target2 - cal_target)  # お互いのターゲットプライス + 余裕度0.01を足しておく
         if lc_range2 < temp_gap and lc_range < temp_gap:  # 両方とも満たしている場合⇒何もせず
             print("  マージン調整不要", temp_gap, lc_range2, lc_range)
             pass
@@ -534,20 +534,20 @@ def figure_turn_inspection(figure_condition):
             if lc_range2 > temp_gap and lc_range > temp_gap:
                 print(" 両方非成立（LCを短縮する", lc_range2, lc_range, temp_gap)
                 min_lc = 0.046  # お互い最低、このLCを取る大きめでもいいか。。
-                margin = margin + round(min_lc /2, 3) + 0.001
-                margin2 = margin2 + round(min_lc / 2, 3) + 0.001
+                margin = round(min_lc /2, 3) + 0.001 + margin
+                margin2 = round(min_lc / 2, 3) + 0.001 + margin2
                 lc_range2 = min_lc
                 lc_range = min_lc
                 print(" ⇒", lc_range2, lc_range)
             elif lc_range2 > temp_gap:
                 print("レンジLC幅収まらず⇒順のtargetをずらす", lc_range2, temp_gap, margin)
-                temp = abs(target_cal - lc_price2_cal)  # オーバーしている分を取得
+                temp = abs(cal_target - cal_lc_price2)  # オーバーしている分を取得
                 adj = temp + rap_margin  # 余裕を持たせる
                 margin = margin + adj
                 print("  ⇒", round(margin, 3), adj)
             elif lc_range > temp_gap:  # 順思想のLCが大きく、条件を満たさない場合
                 print("順方向LC幅収まらず⇒レンジのTargetをずらす", lc_range, temp_gap, margin2)
-                temp = abs(target_cal2 - lc_price_cal)  # オーバーしている分を取得
+                temp = abs(cal_target2 - cal_lc_price)  # オーバーしている分を取得
                 print("over", temp)
                 adj = temp + rap_margin
                 margin2 = margin2 + adj
@@ -559,7 +559,7 @@ def figure_turn_inspection(figure_condition):
         junc = {
             "name": "レンジ",
             "base_price": base_price2,
-            "target_price": target_cal2,  # 基本渡した先では使わない
+            "target_price": cal_target2,  # 基本渡した先では使わない
             "margin": margin2 * d2,  # BasePriceに足せばいい数字（方向もあっている）
             "direction": d2,
             "type": "STOP",
@@ -570,7 +570,7 @@ def figure_turn_inspection(figure_condition):
         main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
             "name": "順思想",
             "base_price": base_price,
-            "target_price": target_cal,  # 基本渡した先では使わない
+            "target_price": cal_target,  # 基本渡した先では使わない
             "margin": margin * d,  # BasePriceに足せばいい数字（方向もあっている）
             "direction": d,
             "type": "STOP",

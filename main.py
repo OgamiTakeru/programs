@@ -375,8 +375,8 @@ class order_information:
                     else:
                         self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
                         self.crcdo_history = True
-                        tk.line_send("　(LC底上げ)", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price,
-                                     "Border:", self.crcdo_border, "保証", self.crcdo_guarantee)
+                        # tk.line_send("　(LC底上げ)", self.name, self.order['lc_price'],  "⇒", self.crcdo_lc_price,
+                        #              "Border:", self.crcdo_border, "保証", self.crcdo_guarantee)
 
     def trail(self):  # ポジションのトレールを設定（LCの底上げとは別に考える）
         if self.crcdo_self_trail_exe and self.crcdo_history:  # 一回すでにCDCRO実施済みが前提。
@@ -410,9 +410,9 @@ class order_information:
                         else:
                             self.crcdo_set = True  # main本体で、ポジションを取る関数で解除する
                             self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
-                            tk.line_send("　(TR)", self.name, before_lc_price, "⇒", self.crcdo_lc_price, ",確保:",
-                                         round(temp_lc_range, 3), ",全:", p['pips'],
-                                         datetime.datetime.now().replace(microsecond=0))
+                            # tk.line_send("　(TR)", self.name, before_lc_price, "⇒", self.crcdo_lc_price, ",確保:",
+                            #              round(temp_lc_range, 3), ",全:", p['pips'],
+                            #              datetime.datetime.now().replace(microsecond=0))
                     else:
                         # exe_code=0
                         pass
@@ -798,7 +798,7 @@ def exe_manage():
             all_update_information()  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 時間昇順
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 7, 6, 0, 1, 0)
+            # jp_time = datetime.datetime(2023, 7, 6, 11, 1, 0)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
