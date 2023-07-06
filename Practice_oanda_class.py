@@ -33,7 +33,7 @@ param = {"granularity": "M5", "count": 10, "to": euro_iso}
 print(oa.InstrumentsCandles_exe("USD_JPY", param))
 
 # エラーテスト用（API）
-temp = oa.OrderDetailsState_exe(119911)  #　ALL取得
+temp = oa.OrderDetailsState_exe(122850)  #　ALL取得
 order_res = oa.OrderDetails_exe(119911)
 position_js = oa.TradeDetails_exe(119902)  # PositionIDから詳細を取得
 print("all")
