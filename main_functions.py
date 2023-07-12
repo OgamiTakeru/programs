@@ -172,7 +172,7 @@ def cal_min(min_value, now_value):
         ans = now_value
     else:
         ans = min_value
-    print(" CAL　MIN", ans)
+    # print(" CAL　MIN", ans)
     return ans
 
 
@@ -183,7 +183,7 @@ def cal_max(max_value, now_value):
         ans = max_value
     else:
         ans = now_value
-    print(" CAL　MAX", ans)
+    # print(" CAL　MAX", ans)
     return ans
 
 
@@ -339,7 +339,13 @@ def figure_turn_each_inspection(data_df_origin):
 
     # ■GAPを計算する（０の時は割る時とかに困るので、最低0.001にしておく）
     # gap = round(abs(latest_image_price - oldest_image_price), 3)  # MAXのサイズ感
-    gap = round(abs(latest_image_price - ans_df.iloc[-1]["close"]), 3)  # 直近の価格（クローズの価格&向き不問）
+    gap_close = round(abs(latest_image_price - ans_df.iloc[-1]["close"]), 3)  # 直近の価格（クローズの価格&向き不問）
+    if gap_close == 0:
+        gap_close = 0.001
+    else:
+        gap_close = gap_close
+
+    gap = round(abs(latest_image_price - oldest_image_price), 3)  # 直近の価格（クローズの価格&向き不問）
     if gap == 0:
         gap = 0.001
     else:
@@ -365,6 +371,7 @@ def figure_turn_each_inspection(data_df_origin):
         "latest_peak_price": latest_peak_price,
         "oldest_peak_price": oldest_peak_price,
         "gap": gap,
+        "gap_close": gap_close,
         "body_ave": body_ave,
         "move_abs": move_ave,
         "memo_time": memo_time
@@ -463,41 +470,57 @@ def figure_turn_inspection(figure_condition):
     latest_df = data_r[ignore: dr_latest_n + ignore]  # 直近のn個を取得
     oldest_df = data_r[dr_latest_n + ignore - 1: dr_latest_n + dr_oldest_n + ignore - 1]  # 前半と１行をラップさせる。
     latest_ans = figure_turn_each_inspection(latest_df)  # 何連続で同じ方向に進んでいるか（直近-1まで）# Latestの期間を検証する(主に個のみ）
-    # oldest_ans = figure_turn_each_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
+    oldest_ans_normal = figure_turn_each_inspection(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
     oldest_ans = figure_turn_each_inspection_skip(oldest_df)  # 何連続で同じ方向に進んでいるか（前半部分）# Oldestの期間を検証する（MAIN）
 
     # 表示用がメインの情報まとめ
-    print("  ",oldest_ans['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans['oldest_price'],"@fig_ins")
-    memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
-    memo_price = "(" + str(oldest_ans['oldest_price']) + "_" + str(latest_ans['latest_price']) + "," + str(oldest_ans['direction'])
+    # print("  ", oldest_ans['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans['oldest_price'],"@fig_ins")
+    # print("  ", oldest_ans_normal['oldest_time_jp'], latest_ans['latest_time_jp'], oldest_ans_normal['oldest_price'], "@fig_ins")
+    memo_time = oanda_class.str_to_time_hms(oldest_ans['oldest_time_jp']) + "_" + \
+                oanda_class.str_to_time_hms(oldest_ans['latest_time_jp']) + "_" + \
+                oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
+    memo_price = "(" + str(oldest_ans['oldest_price']) + "_" + str(oldest_ans['latest_image_price']) + \
+                 "_" + str(latest_ans['latest_price']) + "," + str(oldest_ans['direction'])
+    # memo_time = memo_time + oanda_class.str_to_time_hms(oldest_ans_normal['oldest_time_jp']) + "_" + \
+    #             oanda_class.str_to_time_hms(latest_ans['latest_time_jp'])
     memo_all = memo_time + memo_price
+    tc = (datetime.datetime.now().replace(microsecond=0) - oanda_class.str_to_time(latest_ans['latest_time_jp'])).seconds
+    if tc > 420:  # 何故か直近の時間がおかしい時がる
+        print("★★直近データがおかしい")
+
     # 初期値があった方がいいもの（エラー対策）
     return_ratio = 0
     # 判定処理
     if latest_ans['direction'] != oldest_ans['direction']:  # 違う方向だった場合 (想定ケース）
         if latest_ans['count'] == latest_ans['data_size'] and oldest_ans['count'] >= 4:  # 行数確認(old区間はt直接指定！）
             # 戻しのパーセンテージを確認
-            return_ratio = round((latest_ans['gap'] / oldest_ans['gap']) * 100, 3)
+            return_ratio = round((latest_ans['gap_close'] / oldest_ans['gap']) * 100, 3)
+            print("  return_ratio", return_ratio, latest_ans['gap_close'], oldest_ans['gap'])
             if return_ratio < max_return_ratio:
-                turn_ans = 1  # 達成
-                memo = "達成"
+                if oldest_ans['gap'] > 0.07:
+                    turn_ans = 1  # 達成
+                    memo = "達成"
+                else:
+                    turn_ans = 0
+                    memo = "Old小未達"
             else:
                 turn_ans = 0  # 未達
                 memo = "戻大" + str(return_ratio)
         else:
             turn_ans = 0  # 未達
-            memo = "カウント未達"
+            memo = "カウント未達 latest" + str(latest_ans['count']) + "," + str(oldest_ans['count'])
     else:
         turn_ans = 0  # 未達
         memo = "同方向"
 
-    memo_info = "@戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
+    memo_info = "'\n'   @戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
     memo_info = memo_info + ",Body平均O-L:" + str(oldest_ans['body_ave']) + "," +str(latest_ans['body_ave'])
     memo_all = memo_all + memo_info + "," + memo
+    print("   ", memo_all)
 
     # ■注文する場合の情報を記載しておく
     oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # ★現在価格の取得
-    now_price = oa.NowPrice_exe("USD_JPY")['mid']  # ★現在価格の取得
+    now_price = oa.NowPrice_exe("USD_JPY")['data']['mid']  # ★現在価格の取得
     if turn_ans != 0:
         # ★注文（基準情報の収集）
         # ①理論上の理想値
@@ -506,8 +529,9 @@ def figure_turn_inspection(figure_condition):
         # レンジ方向(戻り　＝　逆思想）
         d2 = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
         base_price2 = now_price  # now_price or latest_ans['latest_price'] # 基準となる価格（マージン込み）
-        margin2 = round(0.016, 3)   # ０の場合は成り行きを意味する
+        margin2 = round(0.030, 3)   # ０の場合は成り行きを意味する
         lc_range2 = cal_min(0.02, round(latest_ans['gap'] * 0.5, 3))  # 最低でも0.02pipsを確保
+        lc_range2 = cal_max(0.042, lc_range2)
         tp_range2 = lc_range2 + 0.02  # lc_range2には方向があるので注意！
         cal_target2 = base_price2 + margin2 * d2
         cal_lc_price2 = cal_target2 + (lc_range2 * d2 * -1)  # ここで計算される値
@@ -516,26 +540,37 @@ def figure_turn_inspection(figure_condition):
 
         # 順方向
         d = latest_ans['direction'] * -1
-        base_price = latest_ans['latest_price']
+        base_price = latest_ans['oldest_image_price']  # 出来るだけ上にするには、NowPriceである必要
         margin = cal_min(0.013, latest_ans['body_ave'] * 0.5)
         lc_range = 0.035
         tp_range = 0.050
-        cal_target = base_price + margin * d
-        cal_lc_price = cal_target + (lc_range * d * -1)  # ここで計算される値
-        cal_tp_price = cal_target + (tp_range * d)  # ここで計算される値
+        cal_target = round(base_price + margin * d, 3)
+        cal_lc_price = round(cal_target + (lc_range * d * -1), 3)  # ここで計算される値
+        cal_tp_price = round(cal_target + (tp_range * d), 3)  # ここで計算される値
+        # BasePriceを最新価格（現在価格）か、imagepriceかを洗濯する
+        if latest_ans['gap'] >= 0.06:  # latestが意外と大きい場合は
+            base_price = latest_ans['latest_price']  # 直近価格を利用する
+            print("↓　順思想でlatestPriceを利用する")
+
         print("順方向候補", cal_target, cal_lc_price, cal_tp_price, base_price, margin)
+        print("temp_gap", abs(cal_target2 - cal_target))
 
         # レンジor順思想の互いのLCが、互いのBasePriceと干渉しないようにする
         temp_gap = abs(cal_target2 - cal_target)  # お互いのターゲットプライス + 余裕度0.01を足しておく
         if lc_range2 < temp_gap and lc_range < temp_gap:  # 両方とも満たしている場合⇒何もせず
-            print("  マージン調整不要", temp_gap, lc_range2, lc_range)
+            print("  マージン調整不要(LC引き延ばす？）", temp_gap, lc_range2, lc_range)
+            # 少し大きめにLCをとってみようかなぁ ★けっこうLC幅大きくなっちゃう。。。
+            lc_range2 = cal_min(lc_range2, temp_gap * 0.7)
+            lc_range = cal_min(lc_range, temp_gap * 0.7)
+            lc_range2 = cal_max(0.042, lc_range2)
+            lc_range = cal_max(0.042, lc_range)
             pass
         else:
             if lc_range2 > temp_gap and lc_range > temp_gap:
                 print(" 両方非成立（LCを短縮する", lc_range2, lc_range, temp_gap)
                 min_lc = 0.046  # お互い最低、このLCを取る大きめでもいいか。。
                 margin = round(min_lc /2, 3) + 0.001 + margin
-                margin2 = round(min_lc / 2, 3) + 0.001 + margin2
+                margin2 = round(min_lc / 2, 3) + 0.001 + margin2 + 0.01
                 lc_range2 = min_lc
                 lc_range = min_lc
                 print(" ⇒", lc_range2, lc_range)
@@ -549,7 +584,7 @@ def figure_turn_inspection(figure_condition):
                 print("順方向LC幅収まらず⇒レンジのTargetをずらす", lc_range, temp_gap, margin2)
                 temp = abs(cal_target2 - cal_lc_price)  # オーバーしている分を取得
                 print("over", temp)
-                adj = temp + rap_margin
+                adj = temp + rap_margin + 0.01  # なんかレンジはぎりぎりで入っていることがおおいので、プラス0.01しておく
                 margin2 = margin2 + adj
                 print("  ⇒", round(margin2, 3), adj)
             else:
@@ -565,7 +600,7 @@ def figure_turn_inspection(figure_condition):
             "type": "STOP",
             "lc_range": round(lc_range2 * d2 * -1, 3),
             "tp_range": round(tp_range2 * d2, 3),
-            "units": 30000,
+            "units": 300,
         }
         main = {  # 順思想（oldest方向同方向へのオーダー）今３００００の方
             "name": "順思想",
@@ -576,9 +611,9 @@ def figure_turn_inspection(figure_condition):
             "type": "STOP",
             "lc_range": round(lc_range * d * -1, 3),
             "tp_range": round(tp_range * d, 3),
-            "units": 20000,
+            "units": 200,
         }
-
+        print(" ★★テスト", round(lc_range2 * d2 * -1, 3), round(lc_range * d * -1, 3))
     else:
         main = {}
         junc = {}
@@ -612,7 +647,6 @@ def figure_turn_judge(figure_condition):
     data_r = figure_condition['data_r']
     # 直近のデータの確認　LatestとOldestの関係性を検証する
     turn_ans = figure_turn_inspection(figure_condition)  # ★★引数順注意。ポジ用の価格情報取得（０は取得無し）
-    print("  ", turn_ans['memo_all'])
     # 初期値の設定
     result_range = 0  # 最初は０
     range_memo = "0"
@@ -624,62 +658,60 @@ def figure_turn_judge(figure_condition):
     c_o_ans = 0  # 初期化が必要な変数
     turn_ans2 = turn_ans.copy()  # めんどくさいからとりあえず入れておく。。
     turn_ans2['memo'] = "（同値）"
-    if turn_ans['turn_ans'] == 1:
-        if turn_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
-            next_inspection_range = figure_condition['ignore'] + figure_condition['latest_n'] + \
-                                    turn_ans['oldest_ans']['count'] - 2
-            next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
-            figure_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
-            turn_ans2 = figure_turn_inspection(figure_condition)  # ★★ネクスト(一つ前）# の調査
-            if turn_ans2['turn_ans'] == 1:
-                range_include_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1)  # 共通
-                # if turn_ans2['oldest_ans']['gap'] > turn_ans['oldest_ans']['gap']:  # 前>今回　の関係性　⇒　前の1.2倍以内ならインクルード
-                if turn_ans2['oldest_ans']['gap']*1.2 > turn_ans['oldest_ans']['gap']:  # 前回が、今回の1.2倍以下なら（今回が多少大きくてもレンジ）
-                    result_range = 1
-                    expected_direction = expected_direction * -1  # レンジに入ると予想するため、逆方向
-                    oldest_gap = turn_ans['oldest_ans']['gap']
-                    latest_gap = turn_ans['latest_ans']['gap']
-                    expected_lc_range = latest_gap  # LCはlatest_gap
-                    expected_tp_range = round(oldest_gap - latest_gap - (oldest_gap * 0.1), 3)  # 指定方法は、OldestのGapから、latest戻り分(=latestGap)と縮小分(oldestの１割)を引いた数。
-                    range_memo = "Turn発生&包括関係の形状発生"
-                    print(" 発生&包括！", expected_direction, expected_tp_range, expected_lc_range)
-                else:
-                    result_range = 0
-                    range_memo = "Turn発生&前回turnより大きくなっている"
-        else:
-            result_range = 0
-            range_memo = "Turn発生&前回turnは結構前"
-    else:
-        result_range = 0
-        range_memo = "現在でTurnの発生無し"
-
+    # if turn_ans['turn_ans'] == 1:
+    #     if turn_ans['oldest_ans']['count'] <= 8:  # ８以上の場合は完全にレンジを解消していると判断
+    #         next_inspection_range = figure_condition['ignore'] + figure_condition['latest_n'] + \
+    #                                 turn_ans['oldest_ans']['count'] - 2
+    #         next_inspection_r_df = data_r[next_inspection_range-2:]  # 調整した挙句、ー２で丁度よさそう。Nextの調査対象
+    #         figure_condition['data_r'] = next_inspection_r_df  # 調査情報に代入する
+    #         turn_ans2 = figure_turn_inspection(figure_condition)  # ★★ネクスト(一つ前）# の調査
+    #         if turn_ans2['turn_ans'] == 1:
+    #             range_include_ratio = round(float(turn_ans['oldest_ans']['gap']) / float(turn_ans2['oldest_ans']['gap']), 1)  # 共通
+    #             # if turn_ans2['oldest_ans']['gap'] > turn_ans['oldest_ans']['gap']:  # 前>今回　の関係性　⇒　前の1.2倍以内ならインクルード
+    #             if turn_ans2['oldest_ans']['gap']*1.2 > turn_ans['oldest_ans']['gap']:  # 前回が、今回の1.2倍以下なら（今回が多少大きくてもレンジ）
+    #                 result_range = 1
+    #                 expected_direction = expected_direction * -1  # レンジに入ると予想するため、逆方向
+    #                 oldest_gap = turn_ans['oldest_ans']['gap']
+    #                 latest_gap = turn_ans['latest_ans']['gap']
+    #                 expected_lc_range = latest_gap  # LCはlatest_gap
+    #                 expected_tp_range = round(oldest_gap - latest_gap - (oldest_gap * 0.1), 3)  # 指定方法は、OldestのGapから、latest戻り分(=latestGap)と縮小分(oldestの１割)を引いた数。
+    #                 range_memo = "Turn発生&包括関係の形状発生"
+    #                 print(" 発生&包括！", expected_direction, expected_tp_range, expected_lc_range)
+    #             else:
+    #                 result_range = 0
+    #                 range_memo = "Turn発生&前回turnより大きくなっている"
+    #     else:
+    #         result_range = 0
+    #         range_memo = "Turn発生&前回turnは結構前"
+    # else:
+    #     result_range = 0
+    #     range_memo = "現在でTurnの発生無し"
     print("  ", range_memo)
 
-    # 現在と過去の形状で包括関係の情報
-    range_result = {
-        "result_range": result_range,  # そのターンがインクルードか（後でも同じの入れるけど、念のため）
-        "range_memo": range_memo,
-        "range_include_ratio": range_include_ratio,
-        "order_dic": {  # インクルード時専用のオーダー情報
-            "base_price": turn_ans['latest_ans']['latest_price'],
-            "direction": expected_direction,
-            "tp_range": expected_tp_range,
-            "lc_range": expected_lc_range,
-            "margin": 0.0015,
-        }
-    }
+
 
     # 結果を辞書形式にまとめる
     result_dic = {
-        "result_turn": turn_ans['turn_ans'],  # 直近ターンありか
+        "result_turn": turn_ans['turn_ans'],  # ★直近ターンありか
         "result_range": result_range,  # そのターンがインクルードか
     }
 
     ans = {
-        "result_dic": result_dic,
-        "latest_turn_dic": turn_ans,  # こっちが直近のターン
-        "oldest_turn_dic": turn_ans2,
-        "range_dic": range_result,
+        "result_dic": result_dic,  # ターンの有無の情報
+        "latest_turn_dic": turn_ans,  # 直近のターンの情報（価格情報等）
+        # "oldest_turn_dic": turn_ans2,
+        # "range_dic": {  # 包括関係の情報
+        #     "result_range": result_range,  # そのターンがインクルードか（後でも同じの入れるけど、念のため）
+        #     "range_memo": range_memo,
+        #     "range_include_ratio": range_include_ratio,
+        #     "order_dic": {  # インクルード時専用のオーダー情報
+        #         "base_price": turn_ans['latest_ans']['latest_price'],
+        #         "direction": expected_direction,
+        #         "tp_range": expected_tp_range,
+        #         "lc_range": expected_lc_range,
+        #         "margin": 0.0015,
+        #     }
+        # },
     }
 
     return ans
@@ -853,6 +885,7 @@ def figure_latest3_judge(ins_condition):
             "base_price": data_r.iloc[0]['open'],
             "direction": oldest_d,
             "margin": 0.008 * oldest_d,  # 方向をもつ
+            "units": 200
         }
     else:
         res_memo = "Trun未遂未達"
@@ -861,6 +894,7 @@ def figure_latest3_judge(ins_condition):
             "base_price": 0,
             "direction": 0,
             "margin": 0.008 * oldest_d,
+            "units": 200
         }
         # print("   未達成 dpr⇒", d, p, r)
     memo0 = "Oldest" + str(data_r.iloc[2]['time_jp']) + "," + str(data_r.iloc[0]['time_jp'])
@@ -874,6 +908,18 @@ def figure_latest3_judge(ins_condition):
 
     return {"result": latest3_figure, "order_dic": order, "memo": memo_all}
 
+def range_jd(df_r):
+    df_r = df_r[0:6].copy()
+    max_price = df_r["inner_high"].max()
+    min_price = df_r["inner_low"].min()
+    # print(max_price, min_price, max_price - min_price)
+    range_gap = max_price - min_price
+    if range_gap<= 0.08:
+        range_res = 1
+    else:
+        range_res = 0
+    return range_res
+
 
 def inspection_candle(ins_condition):
     """
@@ -886,6 +932,9 @@ def inspection_candle(ins_condition):
     # ■直近ターンの形状（２戻し）の解析
     figure_turn_ans = figure_turn_judge(ins_condition['figure'])
 
+    # ■直近ターンの形状（２戻し）スキップ無し　のかいせき
+    # figure_turn_ans = figure_turn_judge(ins_condition['figure'])
+
     # ■直近ターン形状（３戻し）の解析
     # figure_turn3_ans = figure_turn3_judge(ins_condition['figure3'])
 
@@ -896,6 +945,9 @@ def inspection_candle(ins_condition):
     latest_macd_r_df = data_r[0: 30]  # 中間に重複のないデータフレーム
     latest_macd_df = oanda_class.add_macd(latest_macd_r_df)  # macdを追加（データは時間昇順！！！）
     macd_result = macd_judge(latest_macd_df)
+
+    # ■直近N個の幅調査する（レンジかの判断）
+    range_ans = range_jd(data_r)
 
     # ■■■■上記内容から、Positionの取得可否を判断する■■■■
     print("　　Fig:", figure_turn_ans['result_dic']['result_turn'], "(", figure_turn_ans['result_dic']['result_range'], ") Macd:"
@@ -920,7 +972,8 @@ def inspection_candle(ins_condition):
     return {"judgment": ans,
             "figure_turn_result": figure_turn_ans,
             "macd_result": macd_result,
-            "latest3_figure_result": figure_latest3_ans
+            "latest3_figure_result": figure_latest3_ans,
+            "range": range_ans
             }
 
 

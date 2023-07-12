@@ -86,9 +86,11 @@ class Oanda:
         呼び出し:oa.NowPrice_exe("USD_JPY")
         返却値:Bid価格、Ask価格、Mid価格、スプレッド、左記４つを辞書形式で返却。
         """
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        params = {"instruments": instrument}
+        ep = PricingInfo(accountID=self.accountID, params=params)
+
         try:
-            params = {"instruments": instrument}
-            ep = PricingInfo(accountID=self.accountID, params=params)
             res_json = json.dumps(self.api.request(ep), indent=2)
             res_json = json.loads(res_json)  # 何故かこれだけevalが使えないのでloadsで文字列⇒jsonを実施
             res_dic = {
@@ -99,11 +101,11 @@ class Oanda:
                 'spread': round(float(res_json['prices'][0]['asks'][0]['price']) -
                                 float(res_json['prices'][0]['bids'][0]['price']), 3),
             }
-            return res_dic
+            return {"data": res_dic, "error": 0}
 
         except Exception as e:
-            print("API_Error（価格情報取得)", datetime.datetime.now().replace(microsecond=0))
-            return {"error": e}
+            e_info = error_method("価格情報取得", start_time, e)  # 表示もそっちのメソッドで
+            return e_info
 
     # (2)キャンドルデータを取得(5000行以内/指定複雑)
     def InstrumentsCandles_exe(self, instrument, params):
@@ -128,13 +130,19 @@ class Oanda:
         param = {"granularity": "M5", "count": 10, "to": euro_time_datetime_iso}
         oa.InstrumentsCandles_exe("USD_JPY", param)
         """
-        ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
-        res_json = self.api.request(ep)  # 結果をjsonで取得
-        data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
-        data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
-        data_df = add_basic_data(data_df)  # 【関数/必須】基本項目を追加する
-        # 返却
-        return data_df
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
+            res_json = self.api.request(ep)  # 結果をjsonで取得
+            data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
+            data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
+            data_df = add_basic_data(data_df)  # 【関数/必須】基本項目を追加する
+            # 返却
+            return {"data": data_df, "error": 0}
+        except Exception as e:
+            e_info = error_method("価格情報取得[単]", start_time, e)
+            return e_info
+
 
     # (3)キャンドルデータを取得(5000行以上/現在から/指定簡単（現在USD固定）)
     def InstrumentsCandles_multi_exe(self, pair, params, roop):
@@ -153,9 +161,13 @@ class Oanda:
         """
         candles = None  # dataframeの準備
         for i in range(roop):
-            df = self.InstrumentsCandles_multi_support_exe(pair, params)  # 【関数】データ取得＋基本５項目のDFに変換（dataframeが返り値）
-            params["to"] = df["time"].iloc[0]  # ループ用（次回情報取得の期限を決める）
-            candles = pd.concat([df, candles])  # 結果用DataFrameに蓄積（時間はテレコ状態）
+            df_dic = self.InstrumentsCandles_multi_support_exe(pair, params)  # 【関数】データ取得＋基本５項目のDFに変換（dataframeが返り値）
+            if df_dic['error'] == 0:
+                df = df_dic['data']
+                params["to"] = df["time"].iloc[0]  # ループ用（次回情報取得の期限を決める）
+                candles = pd.concat([df, candles])  # 結果用DataFrameに蓄積（時間はテレコ状態）
+            else:
+                return df_dic  # エラーの場合
         # 情報を成型する（取得した情報をtime_jpで並び替える等）
         candles.sort_values('time_jp', inplace=True)  # 時間順に並び替え
         temp_df = candles.reset_index()  # インデックスをリセットし、ML用のデータフレームへ
@@ -165,9 +177,8 @@ class Oanda:
         data_df = add_ema_data(data_df)
         data_df = add_bb_data(data_df)
         # data_df = self.add_peak(data_df)
-
         # 返却
-        return data_df
+        return {"data": data_df, "error": 0}
 
     # (4)キャンドルデータを取得(サポート専用。通常利用無し）
     def InstrumentsCandles_multi_support_exe(self, instrument, params):
@@ -175,12 +186,19 @@ class Oanda:
         過去情報（ローソク）の取得 （これが基本的にAPIを叩く関数）
         InstrumentsCandles_multi_exeから呼び出される専用
         """
-        ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
-        res_json = self.api.request(ep)  # 結果をjsonで取得
-        data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
-        data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
-        # 返却
-        return data_df
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            ep = instruments.InstrumentsCandles(instrument=instrument, params=params)
+            res_json = self.api.request(ep)  # 結果をjsonで取得
+            data_df = pd.DataFrame(res_json['candles'])  # Jsonの一部(candles)をDataframeに変換
+            data_df['time_jp'] = data_df.apply(lambda x: iso_to_jstdt(x, 'time'), axis=1)  # 日本時刻の表示
+            # 返却
+            return {"error": 0, "data": data_df}
+
+        except Exception as e:
+            e_info = error_method("ローソク取得", start_time, e)
+            return e_info
+
 
     # (5)オーダーの発行を実施
     def OrderCreate_dic_exe(self, info):
@@ -202,88 +220,88 @@ class Oanda:
           LIMIT:指値。逆張り（現価格より低い値段で買い、現価格より高い値段で売りの指値）、また、利確
           MARKET:成り行き。この場合、priceは設定しても無視される（ただし引数としてはテキトーな数字を入れる必要あり）。
         """
-        # try:
-            # 念のため、初期値を入れておく。
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            # 初期値を入れておく
+            tp_range = 0
+            lc_range = 0
 
-        # 初期値を入れておく
-        tp_range = 0
-        lc_range = 0
-
-        data = {  # ロスカ、利確ありのオーダー
-            "order": {
-                "instrument": "USD_JPY",
-                "units": 10,
-                "type": "",  # "STOP(逆指)" or "LIMIT"
-                "positionFill": "DEFAULT",
-                "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
+            data = {  # ロスカ、利確ありのオーダー
+                "order": {
+                    "instrument": "USD_JPY",
+                    "units": 10,
+                    "type": "",  # "STOP(逆指)" or "LIMIT"
+                    "positionFill": "DEFAULT",
+                    "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
+                }
             }
-        }
-        data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
-        data['order']['type'] = info['type']  # 必須
-        if info['type'] != "MARKET":
-            # 成り行き注文以外
-            data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
-        else:
-            # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
-            info['price'] = self.NowPrice_exe("USD_JPY")['mid']
-            print("現在価格", info['price'])
+            data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
+            data['order']['type'] = info['type']  # 必須
+            if info['type'] != "MARKET":
+                # 成り行き注文以外
+                data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+            else:
+                # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
+                info['price'] = self.NowPrice_exe("USD_JPY")['mid']
+                print("現在価格", info['price'])
 
-        if info['tp_range'] != 0:
-            # 利確設定ありの場合
-            tp_range = abs(info['tp_range'])
-            data['order']['takeProfitOnFill'] = {}
-            data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
-                                                                   (tp_range * info['ask_bid']), 3))  # 利確
-            data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
-        if info['lc_range'] != 0:
-            # ロスカ設定ありの場合
-            lc_range = abs(info['lc_range'])
-            data['order']['stopLossOnFill'] = {}
-            data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
-                                                                 (lc_range * info['ask_bid']), 3))  # ロスカット
-            data['order']['stopLossOnFill']['timeInForce'] = "GTC"
-        if info['tr_range'] != 0:
-            # トレールストップロス設定ありの場合
-            data['order']['trailingStopLossOnFill'] = {}
-            data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
-            data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
+            if info['tp_range'] != 0:
+                # 利確設定ありの場合
+                tp_range = abs(info['tp_range'])
+                data['order']['takeProfitOnFill'] = {}
+                data['order']['takeProfitOnFill']['price'] = str(round(info['price'] +
+                                                                       (tp_range * info['ask_bid']), 3))  # 利確
+                data['order']['takeProfitOnFill']['timeInForce'] = "GTC"
+            if info['lc_range'] != 0:
+                # ロスカ設定ありの場合
+                lc_range = abs(info['lc_range'])
+                data['order']['stopLossOnFill'] = {}
+                data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
+                                                                     (lc_range * info['ask_bid']), 3))  # ロスカット
+                data['order']['stopLossOnFill']['timeInForce'] = "GTC"
+            if info['tr_range'] != 0:
+                # トレールストップロス設定ありの場合
+                data['order']['trailingStopLossOnFill'] = {}
+                data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
+                data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
 
-        print(data['order'])
+            # print(data['order'])
 
-        # 実行
-        ep = OrderCreate(accountID=self.accountID, data=data)  #
-        res_json = eval(json.dumps(self.api.request(ep), indent=2))
-        if 'orderCancelTransaction' in res_json:
-            print("   ■■■CANCELあり")
+            # 実行
+            ep = OrderCreate(accountID=self.accountID, data=data)  #
+            res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            if 'orderCancelTransaction' in res_json:
+                print("   ■■■CANCELあり")
+                # print(res_json)
+                canceled = True
+                order_id = 0
+                order_time = 0
+            else:
+                # 正確にオーダーが入ったためオーダーIDを取得
+                canceled = False
+                order_id = res_json['orderCreateTransaction']['id']
+                order_time = res_json['orderCreateTransaction']['time']
             print(res_json)
-            canceled = True
-            order_id = 0
-            order_time = 0
-        else:
-            # 正確にオーダーが入ったためオーダーIDを取得
-            canceled = False
-            order_id = res_json['orderCreateTransaction']['id']
-            order_time = res_json['orderCreateTransaction']['time']
 
-        # オーダー情報履歴をまとめておく
-        order_info = {"price": str(round(info['price'], 3)),
-                      "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
-                      "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),
-                      "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),
-                      "tp_range_base": round(info['tp_range'], 3),
-                      "lc_range_base": round(info['lc_range'], 3),
-                      "tp_range": tp_range,
-                      "lc_range": lc_range,
-                      "type": info['type'],
-                      "cancel": canceled,
-                      "order_id": order_id,
-                      "order_time": order_time
-                      }
-        return order_info
+            # オーダー情報履歴をまとめておく
+            order_info = {"price": str(round(info['price'], 3)),
+                          "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
+                          "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),
+                          "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),
+                          "tp_range_base": round(info['tp_range'], 3),
+                          "lc_range_base": round(info['lc_range'], 3),
+                          "tp_range": tp_range,
+                          "lc_range": lc_range,
+                          "type": info['type'],
+                          "cancel": canceled,
+                          "order_id": order_id,
+                          "order_time": order_time
+                          }
+            return {"error": 0, "data": order_info}
 
-        # except Exception as e:
-        #     print(e)
-        #     print("★★APIエラー★★orderCreate")
+        except Exception as e:
+            e_info = error_method("オーダー", start_time, e)
+            return e_info
 
     # (6)オーダーのキャンセル
     def OrderCancel_exe(self, order_id):
@@ -293,24 +311,17 @@ class Oanda:
         :param order_id: キャンセルしたいオーダーのID（ポジションではなくオーダー）
         :return:基本的にはJsonで返却
         """
-        detail_json = self.OrderDetails_exe(order_id)  # 存在を確認（無駄なAPI発行を防ぐため）
-        if "error" in detail_json:
-            print("　★★オーダー存在確認不可(not cancel)★★", order_id)
-            return {"error": "No"}
-        else:
-            if detail_json['order']['state'] == "PENDING":
-                try:
-                    ep = OrderCancel(accountID=self.accountID, orderID=order_id)
-                    res_json = eval(json.dumps(self.api.request(ep), indent=2))
-                    # res_df = self.func_make_dic(res_json)  # DataFrameで返却すると、扱いにくいのでコメントアウトした
-                    return res_json
-                except Exception as e:
-                    print("　★★APIエラー★★ orderCancel", order_id)
-                    print(e)
-                    return {"error": e}
-            else:
-                print("　★★Cancel不可オーダー（既にCancelや約定済み）", order_id)
-                return {"error": "No"}
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            ep = OrderCancel(accountID=self.accountID, orderID=order_id)
+            res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            return {"data": res_json, "error": 0}
+        except Exception as e:  # エラー文短め
+            print("OrderCansel_APIerror", order_id)
+            print(e)
+            e_info = error_method("OrderCancel_APIerror", start_time, e)
+            return e_info
+
 
     # (7)オーダーを全てキャンセル
     def OrderCancel_All_exe(self):
@@ -321,20 +332,19 @@ class Oanda:
         APIで「新規ポジションを取るための注文」はtypeがLimitかStopとなっており、それで上記を判定している）
         :return:
         """
-        open_df = self.OrdersPending_exe()
+        open_df_dic = self.OrdersPending_exe()
         close_df = None
-        if len(open_df) == 0:
-            print("     @オーダーキャンセル(対象無し)")
-            return None
+        if open_df_dic['error'] == -1:
+            print("Error")
+            return open_df_dic
         else:
-            print("     cancel order", len(open_df))
-            print(open_df)
+            open_df = open_df_dic['data']
             for index, row in open_df.iterrows():
                 # たまに変わるため注意。23年１月現在、利確ロスカ注文はtype = STOP_LOSS TAKE_PROFIT
                 # 新規ポジション取得は、順張り逆張り問わず、MARKET_IF_TOUCHED
                 if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
                     # tpyeがMARKET_IF_TOUCHEDの場合（いわゆるポジションを取るための注文）
-                    self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする
+                    cancel_res = self.OrderCancel_exe(row["id"])  # 【関数】単品をクローズする
                     # close_df = pd.concat([close_df , res_df])#新決済情報を縦結合
                 else:  # LIMIT注文、STOP注文の場合（ここでいうLIMITは利確、STOPはロスカ トレールもこっち
                     pass
@@ -349,15 +359,16 @@ class Oanda:
         :return: あまり利用しないので、Jsonのままで返却
         """
         start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
-
         try:
             ep = OrderDetails(accountID=self.accountID, orderID=order_id)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             # print("   (Detail実行時間)", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
-            return res_json
+            return {"data": res_json, "error": 0}
         except Exception as e:
-            print("★★APIエラー（Detail）", order_id, (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
-            return {"error": e, "id": order_id}
+            print(order_id)
+            # print(e)
+            e_info = error_method("OrderDetail", start_time, e)
+            return e_info
 
     # (9)指定のオーダーのステータス（オーダーとトレードの詳細）を取得
     def OrderDetailsState_exe(self, order_id):
@@ -366,15 +377,16 @@ class Oanda:
         :param order_id: 注文のID
         :return: あまり利用しないので、Jsonのままで返却
         """
-        res_json = self.OrderDetails_exe(order_id)
-
-        if "error" in res_json:
+        res_json_dic = self.OrderDetails_exe(order_id)
+        if res_json_dic['error'] == -1:
             # わかりやすいJsonを作っておく
-            print("   ★OrderDatailState- orderDetail ミス", order_id)
-            return {"error": -1, "part": "OrderDetail"}  # エラーの返却
+            print(" ★OrderDetailState- orderDetail ミス", order_id)
+            res_json_dic['method'] = " ★OrderDetailState- orderDetail ミス"
+            return res_json_dic  # エラーの返却
         else:
-            order_state = res_json['order']['state']  # オーダーのステータスを確認
+            res_json = res_json_dic['data']
 
+            order_state = res_json['order']['state']  # オーダーのステータスを確認
             if "price" in res_json['order']:  # MARKET注文の場合、orderPriceが表示されない
                 order_price = res_json['order']['price']
             else:
@@ -396,18 +408,25 @@ class Oanda:
                 if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
                     # print("  Closeあり　今までのAPIエラーケース")
                     position_id = res_json['order']['tradeClosedIDs'][0]  # PositionIDを取得
+                elif "tradeReducedID" in res_json['order']:  # 約定価格が同じ場合、グルーピングされる場合がある？？！
+                    # print("  Closeあり　今までのAPIエラーケース")
+                    position_id = res_json['order']['tradeReducedID']
                 else:
                     position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得
-                position_js = self.TradeDetails_exe(position_id)  # PositionIDから詳細を取得
-                if "error" in position_js:
+                position_js_dic = self.TradeDetails_exe(position_id)  # PositionIDから詳細を取得
+                if position_js_dic['error'] == -1:
                     # わかりやすいJsonを作っておく
+                    position_js_dic['method'] = "★OrderDatailState- positionDetail ミス"
                     print("   ★OrderDatailState- positionDetail ミス", position_id,"(", order_id, ")")
-                    return {"error": -1, "part": "OrderDetail"}  # エラーの返却
+                    return position_js_dic
                 else:
+                    position_js = position_js_dic['data']
                     if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
-                        pips = round(float(position_js['trade']['realizedPL']) / abs(
+                        # splitnumは本来１：１の分割ではないが、手間なのでとりあえず半々に分ける
+                        split_num = float(len(position_js['trade']['closingTransactionIDs']))  # 複数が同時に出力される場合有
+                        pips = round((float(position_js['trade']['realizedPL'])/split_num) / abs(
                             float(position_js['trade']['initialUnits'])), 3)
-                        position_realize_pl = position_js['trade']['realizedPL']
+                        position_realize_pl = float(position_js['trade']['realizedPL'])/split_num
                         position_time = iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
                         position_close_time = iso_to_jstdt_single(
                             position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
@@ -443,7 +462,7 @@ class Oanda:
                 "position_close_time": position_close_time,
                 "position_close_price": position_close_price
             }
-            return res
+            return {"data": res, "error": 0}
 
     # オーダーの一覧（全て）を取得
     def OrdersPending_exe(self):
@@ -452,18 +471,23 @@ class Oanda:
         APIからの返却情報に加え、オーダーの発行から現在までの経過時間（秒）も追加する。
         :return: データフレーム形式
         """
-        ep = OrdersPending(accountID=self.accountID)
-        res_json = eval(json.dumps(self.api.request(ep), indent=2))
-        res_df = pd.DataFrame(res_json['orders'])  # DFに変換
-        # print(res_df)
-        if len(res_df) == 0:
-            # 注文中がない場合、何もしない
-            return res_df
-        else:
-            # いくつか情報を付与する
-            res_df['order_time_jp'] = res_df.apply(lambda x: iso_to_jstdt(x, 'createTime'), axis=1)  # 日本時刻の表示
-            res_df['past_time_sec'] = res_df.apply(lambda x: cal_past_time(x), axis=1)  # 経過時刻の算出
-            return res_df
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            ep = OrdersPending(accountID=self.accountID)
+            res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            res_df = pd.DataFrame(res_json['orders'])  # DFに変換
+            # print(res_df)
+            if len(res_df) == 0:
+                # 注文中がない場合、何もしない
+                return {"data": res_df, "error": 0}
+            else:
+                # いくつか情報を付与する
+                res_df['order_time_jp'] = res_df.apply(lambda x: iso_to_jstdt(x, 'createTime'), axis=1)  # 日本時刻の表示
+                res_df['past_time_sec'] = res_df.apply(lambda x: cal_past_time(x), axis=1)  # 経過時刻の算出
+                return {"data": res_df, "error": 0}
+        except Exception as e:
+            e_info = error_method("OrdersPending", start_time, e)
+            return e_info
 
     # (11)オーダーの一覧（新規トレード待ちのみ）を取得
     def OrdersWaitPending_exe(self):
@@ -474,28 +498,33 @@ class Oanda:
         ＜参考＞「新規のポジションを取得するための注文」は、APIではtypeがLimitかStopとなっている
         :return:
         """
-        ep = OrdersPending(accountID=self.accountID)
-        res_json = eval(json.dumps(self.api.request(ep), indent=2))
-        res_df = pd.DataFrame(res_json['orders'])  # DFに変換
-        if len(res_df) == 0:
-            # 注文中がない場合、何もしない
-            return res_df
-        else:
-            res_df['order_time_jp'] = res_df.apply(lambda x: iso_to_jstdt(x, 'createTime'), axis=1)  # 日本時刻の表示
-            # 注文からの経過時間を秒で算出する
-            res_df['past_time_sec'] = res_df.apply(lambda x: cal_past_time(x), axis=1)  # 経過時刻の算出
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+        try:
+            ep = OrdersPending(accountID=self.accountID)
+            res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            res_df = pd.DataFrame(res_json['orders'])  # DFに変換
+            if len(res_df) == 0:
+                # 注文中がない場合、何もしない
+                return {"data": res_df, "error": 0}
+            else:
+                res_df['order_time_jp'] = res_df.apply(lambda x: iso_to_jstdt(x, 'createTime'), axis=1)  # 日本時刻の表示
+                # 注文からの経過時間を秒で算出する
+                res_df['past_time_sec'] = res_df.apply(lambda x: cal_past_time(x), axis=1)  # 経過時刻の算出
 
-            del_target = []
-            for index, row in res_df.iterrows():
-                if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
-                    # LIMITとSTOPが対象。
-                    pass
-                else:
-                    # typeが利確やロスカ、トレール注文の場合は一覧には乗せない
-                    del_target.append(index)  # 消す対象をリスト化
-            res_df.drop(index=del_target, inplace=True)  # 不要な行を削除（IMITとSTOPのみが対象）
+                del_target = []
+                for index, row in res_df.iterrows():
+                    if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
+                        # LIMITとSTOPが対象。
+                        pass
+                    else:
+                        # typeが利確やロスカ、トレール注文の場合は一覧には乗せない
+                        del_target.append(index)  # 消す対象をリスト化
+                res_df.drop(index=del_target, inplace=True)  # 不要な行を削除（IMITとSTOPのみが対象）
+                return {"data": res_df, "error": 0}
 
-            return res_df
+        except Exception as e:
+            e_info = error_method("OrdersPending", start_time, e)
+            return e_info
 
     # (12)トレードの一覧を取得　OpenTrades_exe
     def OpenTrades_exe(self):
@@ -508,33 +537,37 @@ class Oanda:
         を列に加える。
         :return: データフレーム形式
         """
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
         try:
             ep = OpenTrades(accountID=self.accountID)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             # print(res_json)
             res_df = pd.DataFrame(res_json["trades"])
             if len(res_df) == 0:
-                return res_df
+                return {"data": res_df, "error": 0}
             else:
                 res_df['order_time_jp'] = res_df.apply(lambda x: iso_to_jstdt(x, 'openTime'), axis=1)  # 日本時刻の表示
                 # 注文からの経過時間を秒で算出する
                 res_df['past_time_sec'] = res_df.apply(lambda x: cal_past_time(x), axis=1)  # 経過時刻の算出
                 res_df['unrealizedPL_pips'] = round(res_df['unrealizedPL'].astype('float') /
                                                     res_df['currentUnits'].astype('float'), 3)
-                return res_df
+                return {"data": res_df, "error": 0}
         except Exception as e:
-            print(e)
-            print("★★APIエラー★★Open_Trade")
+            e_info = error_method("OpenTrades", start_time, e)
+            return e_info
 
     # (13)指定のトレードの詳細
     def TradeDetails_exe(self, trade_id):
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
         try:
             ep = TradeDetails(accountID=self.accountID, tradeID=trade_id)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
-            return res_json  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
+            return {"data": res_json, "error": 0}  # 単品が対象なので、Jsonで返した方がよい（DataFrameで返すと、単品なのに行の指定が必要）
         except Exception as e:
-            print("★★APIエラー★★(指定トレードの詳細)")
-            return {"error": -1, "part": "TraildDetail"}  # エラーの返却
+            print(trade_id)
+            e_info = error_method("TradeDetails", start_time, e)
+            return e_info
+
 
     # (14)指定のトレードの変更
     def TradeCRCDO_exe(self, trade_id, data):
@@ -549,6 +582,8 @@ class Oanda:
         :return:
         """
         # データの価格情報をStrに変更しておく（priceがstrでもfloatで来ても、いいように。。）
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
+
         if 'stopLoss' in data:
             data['stopLoss']['price'] = str(round(float(data['stopLoss']['price']), 3))
         if 'takeProfit' in data:
@@ -559,11 +594,10 @@ class Oanda:
         try:
             ep = TradeCRCDO(accountID=self.accountID, tradeID=trade_id, data=data)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
-            return res_json
+            return {"data": res_json, "error": 0}
         except Exception as e:
-            print("★★APIエラー★★　CRCDO")
-            print(e)
-            return 0
+            e_info = error_method("TradeCRCDO", start_time, e)
+            return e_info
 
     # (15)指定のトレードの決済
     def TradeClose_exe(self, trade_id, data):
@@ -572,15 +606,16 @@ class Oanda:
         :param data: data=None　の場合は対象トレードを決済。部分決済したい場合は、色々書く（忘れた）
         :return:
         """
+        start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
         try:
             # 呼び出し:oa.TradeClose_exe(trade_id , data(基本はNoneで全数決済)))
             ep = TradeClose(accountID=self.accountID, tradeID=trade_id, data=data)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             res_df = func_make_dic(res_json)  # 必要項目の抜出
-            return res_df
+            return {"data": res_df, "error": 0}
         except Exception as e:
-            print("★★APIエラー★★ 指定トレードの決済")
-            return 0
+            e_info = error_method("TradeClose", start_time, e)
+            return e_info
 
     # (16)トレードを全て決済
     def TradeAllClose_exe(self):
@@ -588,19 +623,24 @@ class Oanda:
         引数無し。現在あるトレードを一括で消去する
         :return:
         """
-        open_df = self.OpenTrades_exe()
-        if len(open_df) == 0:
-            print("     @ポジションキャンセル(対象無し/trade)")
-            return None
+        open_df_dic = self.OpenTrades_exe()
+        if open_df_dic['error'] == -1:
+            return open_df_dic
         else:
-            count = 0
-            close_df = None
-            for index, row in open_df.iterrows():
-                res_df = self.TradeClose_exe(row["id"], None)  # 【関数】単品をクローズする
-                close_df = pd.concat([close_df, res_df])  # 新決済情報を縦結合
-                count = count + 1
-            print("   @PositionClear:", count, "個(@all close func)")
-            return close_df
+            open_df = open_df_dic['data']
+            if len(open_df) == 0:
+                print("  @ポジションキャンセル(対象無し/trade)")
+                return {"data":None, "error": 0}
+            else:
+                count = 0
+                close_df = None
+                for index, row in open_df.iterrows():
+                    res_df = self.TradeClose_exe(row["id"], None)  # 【関数】単品をクローズする
+                    res_df = res_df['data']
+                    close_df = pd.concat([close_df, res_df])  # 新決済情報を縦結合
+                    count = count + 1
+                print("   @PositionClear:", count, "個(@all close func)")
+                return {"data": close_df, "error": 0}
 
     # (17)ポジションの一覧を取得
     def OpenPositions_exe(self):
@@ -830,6 +870,15 @@ class Oanda:
 ############################################################
 # # 関連する関数
 ############################################################
+
+def error_method(name, start_time, e):
+    now_time = datetime.datetime.now().replace(microsecond=0)
+    past_sec = (now_time - start_time).seconds
+    print("　★API_Error【", name, "】", now_time, past_sec)
+    return {"error": -1, "method": name,
+            "past_sec": past_sec, "now_time": now_time, "error_code": e}
+
+
 # 細々した関数たち
 def o_func(x):
     temp = x.mid

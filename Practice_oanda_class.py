@@ -20,12 +20,13 @@ from dateutil import tz
 # ★必須。Tokenの設定、クラスの実体化⇒これ以降、oa.関数名で呼び出し可能
 print("Start")
 oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
+oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)
 # oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")
 
 # # ★現在価格の取得
-price_dic = oa.NowPrice_exe("USD_JPY")
+price_dic = oa.NowPrice_exe("USD_JPY")['data']
 print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
-print(oa.NowPrice_exe("USD_JPY")['mid'])
+print(oa.NowPrice_exe("USD_JPY")['data']['mid'])
 
 euro_time = datetime.datetime(2021, 4, 1, 20, 22, 33) - datetime.timedelta(hours=9)
 euro_iso = str(euro_time.isoformat()) + ".000000000Z"
@@ -33,16 +34,25 @@ param = {"granularity": "M5", "count": 10, "to": euro_iso}
 print(oa.InstrumentsCandles_exe("USD_JPY", param))
 
 # エラーテスト用（API）
-temp = oa.OrderDetailsState_exe(122850)  #　ALL取得
-order_res = oa.OrderDetails_exe(119911)
-position_js = oa.TradeDetails_exe(119902)  # PositionIDから詳細を取得
-print("all")
+temp = oa.OrderDetailsState_exe(7324)  #　ALL取得　分割のケース⇒7324
 print(temp)
-print("o")
+print("↓")
+
+order_res = oa.OrderDetails_exe(7324)
 print(order_res)
-print("p")
+print("")
+order_res = oa.OrderDetails_exe(7325)
+print(order_res)
+
+print("↑")
+
+position_js = oa.TradeDetails_exe(7332)  # PositionIDから詳細を取得
+print("")
+
 print(position_js)
 
+# test = oa.OrderCancel_exe(111)
+# print(test)
 
 # ★データの取得（複数一括）
 # mid_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": 'M5', "count": 100}, 1)

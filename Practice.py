@@ -7,14 +7,15 @@ import programs.tokens as tk  # Token等、各自環境の設定ファイル（g
 import programs.oanda_class as oanda_class
 import programs.main_functions as f  # とりあえずの関数集
 
-oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")  # クラスの定義
+oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
 
-jp_time = datetime.datetime(2023, 6, 23, 12, 00, 00)
-euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
-df = oa.InstrumentsCandles_exe("USD_JPY", param)
-# df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 直近の場合
+# jp_time = datetime.datetime(2023, 6, 23, 12, 00, 00)
+# euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+# euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+# param = {"granularity": "M5", "count": 30, "to": euro_time_datetime_iso}
+# df = oa.InstrumentsCandles_exe("USD_JPY", param)
+df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 30}, 1)  # 直近の場合
+df = df["data"]
 df_r = df.sort_index(ascending=False)
 print(df_r.head(5))
 print(df_r.tail(5))
@@ -22,12 +23,6 @@ print("↓↓")
 ### ↑これより上は消さない
 
 
-
-# def jd_yokoyoko(df_r):
-#     """
-#     :param df_r: リバース（上が
-#     :return:
-#     """
 
 
 def peaks_collect_skip(df_r):
@@ -264,4 +259,14 @@ def reg1dim(x, y):
 # print(tops)
 # print(bottoms)
 
-test = figure_turn_each_inspection_skip(df_r)
+def range_jd(df_r):
+    df_r = df_r[0:5].copy()
+    print("Test")
+    print(df_r)
+    max_price = df_r["inner_high"].max()
+    min_price = df_r["inner_low"].min()
+    print(max_price,min_price, max_price-min_price)
+
+
+
+range_jd(df_r)
