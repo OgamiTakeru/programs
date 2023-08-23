@@ -33,23 +33,67 @@ euro_iso = str(euro_time.isoformat()) + ".000000000Z"
 param = {"granularity": "M5", "count": 10, "to": euro_iso}
 print(oa.InstrumentsCandles_exe("USD_JPY", param))
 
+print(oanda_class.str_to_time_hms(str(datetime.datetime.now().replace(microsecond=0))))
+oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+print("↑ここまで定例")
+
+# 注文テスト
+info = {
+    "units": 1,
+    "direction": 1,
+    "tp_range": 0,
+    "lc_range": 0,
+    "type": "STOP",
+    "price": 145.620
+}
+
+order = oa.OrderCreate_dic_exe(info)
+print("  ★★ ")
+print(order)
+states = oa.OrderDetailsState_exe(order['data']['order_id'])
+print(states)
+states = oa.OrderDetailsState_exe(0)
+print(states)
+# if states['error'] != 0:
+#     print("エラー")
+# else:
+#     data = states['data']
+#     print(data)
+#     if data['order_state'] == "FILLED" and data['position_state'] == "CLOSED":
+#         # 即時決済されている＝いわゆる両建て状態で一瞬でキャンセルされた可能性
+#         print("両建て系の為、再度オーダーが必要")
+#     else:
+#         print("正常にオーダーが入っています")
+#
+#
+#
+# print("↑ここまでオーダー")
+
 # エラーテスト用（API）
-temp = oa.OrderDetailsState_exe(7324)  #　ALL取得　分割のケース⇒7324
-print(temp)
-print("↓")
-
-order_res = oa.OrderDetails_exe(7324)
-print(order_res)
-print("")
-order_res = oa.OrderDetails_exe(7325)
-print(order_res)
-
-print("↑")
-
-position_js = oa.TradeDetails_exe(7332)  # PositionIDから詳細を取得
-print("")
-
-print(position_js)
+# data = {
+#     "stopLoss": {"price": str(139.99), "timeInForce": "GTC"},
+# }
+# test = oa.TradeCRCDO_exe(7332, data)  # ポジションを変更する
+# print(test)
+# print("CDCRo")
+#
+# temp = oa.OrderDetailsState_exe(10597)  #　ALL取得　分割のケース⇒7324
+# print(temp)
+# print("↓")
+#
+# order_res = oa.OrderDetails_exe(9396)
+# print(order_res)
+# print("")
+# order_res = oa.OrderDetails_exe(732)
+# print(order_res)
+#
+# print("↑")
+#
+# position_js = oa.TradeDetails_exe(7332)  # PositionIDから詳細を取得
+# print("")
+#
+# print(position_js)
 
 # test = oa.OrderCancel_exe(111)
 # print(test)

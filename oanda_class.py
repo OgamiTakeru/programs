@@ -15,6 +15,8 @@ from oandapyV20.endpoints.pricing import PricingInfo
 from oandapyV20.endpoints.trades import TradeCRCDO, TradeDetails, TradeClose, OpenTrades
 import oandapyV20.endpoints.transactions as trans
 
+import programs.tokens as tk  # エラーをLINEするため。。
+
 
 class Oanda:
     # ■クラス内の主な関数
@@ -25,6 +27,7 @@ class Oanda:
     # (5)オーダーの発行を実施　OrderCreate_dic_exe
     # (6)指定のオーダーのキャンセル　OrderCancel_exe
     # (7)オーダーを全てキャンセル　OrderCancel_All_exe
+    # (7-2)オーダーの全ての個数を取得 OrderCount_All_exe()
     # (8)指定のオーダーの内容詳細の取得　OrderDetails_exe
     # (9)指定のオーダーのステータス（オーダーとトレードの詳細）を取得　OrderDetailsState_exe
     # (10)オーダーの一覧（全て）を取得　OrdersPending_exe
@@ -34,6 +37,7 @@ class Oanda:
     # (14)指定のトレードの変更　TradeCRCDO_exe
     # (15)指定のトレードの決済　TradeClose_exe
     # (16)トレードを全て決済　TradeAllClose_exe
+    # (16-2)トレードの個数を取得する TradeAllcount_exe
     # (17)ポジションの一覧を取得　OpenPositions_exe [注]ポジションはトレードを通貨でひとまとめにしたもの。あんま使わん。
     # (18)指定のポジションの詳細　PositionDetails_exe
     # (19)指定のポジションの決済　PositionClose_exe
@@ -143,7 +147,6 @@ class Oanda:
             e_info = error_method("価格情報取得[単]", start_time, e)
             return e_info
 
-
     # (3)キャンドルデータを取得(5000行以上/現在から/指定簡単（現在USD固定）)
     def InstrumentsCandles_multi_exe(self, pair, params, roop):
         """
@@ -199,18 +202,19 @@ class Oanda:
             e_info = error_method("ローソク取得", start_time, e)
             return e_info
 
-
     # (5)オーダーの発行を実施
     def OrderCreate_dic_exe(self, info):
         """
         オーダーを発行する。以下の形式でInfo（辞書形式）を受け付ける。
         :param info{
             units: 購入するユニット数。大体1万とか。
-            ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid)
+            ask_bid: 1の場合買い(Ask)、-1の場合売り(Bid) 引数時は['direction']になってしまっている。
             price: 130.150のような小数点三桁で指定。（メモ：APIで渡す際は小数点３桁のStr型である必要がある。本関数内で自動変換）
                     成り行き注文であっても、LCやTPを設定する上では必要
             tp_range: 利確の幅を、0.01（1pips)単位で指定。0.06　のように指定する。指定しない場合０を渡す。負の値は正の値に変換
-            lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。　負の値は正の値に変換
+                      方向を持って渡される場合もあるが、一旦絶対値を取ってから計算する（＝渡される際の方向は不問）
+            lc_range: ロスカの幅を、0.01(1pips)単位で指定。 0.06　のように指定する（負号を付ける必要はない）。指定しない場合０。　
+            　　　　　　方向を持って渡される場合もあるが、一旦絶対値を取ってから計算する（＝渡される際の方向は不問）
             type: 下記参照
             tr_range: トレール幅を指定。0.01単位で指定。OANDAの仕様上0.05以上必須。指定しない場合は０を渡す
             remark: 今は使っていないが、引数としては残してある。何かしら文字列をテキトーに渡す。
@@ -225,8 +229,9 @@ class Oanda:
             # 初期値を入れておく
             tp_range = 0
             lc_range = 0
+            info['ask_bid'] = info['direction']  # その場しのぎ。。
 
-            data = {  # ロスカ、利確ありのオーダー
+            data = {  # ロスカ、利確ありのオーダーのDataからデータを作っておく
                 "order": {
                     "instrument": "USD_JPY",
                     "units": 10,
@@ -242,8 +247,12 @@ class Oanda:
                 data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
             else:
                 # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
-                info['price'] = self.NowPrice_exe("USD_JPY")['mid']
-                print("現在価格", info['price'])
+                price_dic = self.NowPrice_exe("USD_JPY")
+                if price_dic['error'] == -1:  # APIエラーの場合はスキップ
+                    print("　　API異常発生の可能性　CreateOrderClass")
+                    return -1  # 終了
+                else:
+                    info['price'] = price_dic['data']['mid']  # infoPriceを上書き
 
             if info['tp_range'] != 0:
                 # 利確設定ありの場合
@@ -259,17 +268,19 @@ class Oanda:
                 data['order']['stopLossOnFill']['price'] = str(round(info['price'] -
                                                                      (lc_range * info['ask_bid']), 3))  # ロスカット
                 data['order']['stopLossOnFill']['timeInForce'] = "GTC"
-            if info['tr_range'] != 0:
-                # トレールストップロス設定ありの場合
-                data['order']['trailingStopLossOnFill'] = {}
-                data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
-                data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
+            if 'tr_range' in info:
+                if info['tr_range'] != 0:
+                    # トレールストップロス設定ありの場合
+                    data['order']['trailingStopLossOnFill'] = {}
+                    data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
+                    data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
 
             # print(data['order'])
 
             # 実行
             ep = OrderCreate(accountID=self.accountID, data=data)  #
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            print(res_json)
             if 'orderCancelTransaction' in res_json:
                 print("   ■■■CANCELあり")
                 # print(res_json)
@@ -281,17 +292,20 @@ class Oanda:
                 canceled = False
                 order_id = res_json['orderCreateTransaction']['id']
                 order_time = res_json['orderCreateTransaction']['time']
-            print(res_json)
+                if info['type'] == "MARKET":
+                    # Marketの場合、約定価格を取得する
+                    info['price'] = float(res_json['orderFillTransaction']['price'])
+
 
             # オーダー情報履歴をまとめておく
             order_info = {"price": str(round(info['price'], 3)),
                           "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
-                          "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),
-                          "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),
+                          "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),  # 計算のみ
+                          "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),  # 計算の実
                           "tp_range_base": round(info['tp_range'], 3),
                           "lc_range_base": round(info['lc_range'], 3),
-                          "tp_range": tp_range,
-                          "lc_range": lc_range,
+                          "tp_range": round(tp_range, 3),
+                          "lc_range": round(lc_range, 3),
                           "type": info['type'],
                           "cancel": canceled,
                           "order_id": order_id,
@@ -322,7 +336,6 @@ class Oanda:
             e_info = error_method("OrderCancel_APIerror", start_time, e)
             return e_info
 
-
     # (7)オーダーを全てキャンセル
     def OrderCancel_All_exe(self):
         """
@@ -351,6 +364,30 @@ class Oanda:
 
             return close_df
 
+    # (7-2)オーダーの全ての個数を取得
+    def OrderCount_All_exe(self):
+        """
+        現在発行している、「新規にポジションを取るための注文」の個数を取得する
+        :return:
+        """
+        open_df_dic = self.OrdersPending_exe()
+        close_df = None
+        count = 0
+        if open_df_dic['error'] == -1:
+            print("Error")
+            return open_df_dic
+        else:
+            open_df = open_df_dic['data']
+            for index, row in open_df.iterrows():
+                # たまに変わるため注意。23年１月現在、利確ロスカ注文はtype = STOP_LOSS TAKE_PROFIT
+                # 新規ポジション取得は、順張り逆張り問わず、MARKET_IF_TOUCHED
+                if row['type'] == 'MARKET_IF_TOUCHED' or row['type'] == 'STOP' or row['type'] == 'LIMIT':
+                    count = count + 1
+                else:  # LIMIT注文、STOP注文の場合（ここでいうLIMITは利確、STOPはロスカ トレールもこっち
+                    pass
+
+            return count
+
     # (8)オーダーの内容詳細の確認
     def OrderDetails_exe(self, order_id):
         """
@@ -374,95 +411,130 @@ class Oanda:
     def OrderDetailsState_exe(self, order_id):
         """
         単品の注文番号を渡すと、ポジションまで（ある場合）の情報を返却する
+        order無し時でも、position有時でも、同一の辞書形式を返却する。
         :param order_id: 注文のID
-        :return: あまり利用しないので、Jsonのままで返却
+        :return: Error有無、Data（どの場合も同一形式）
         """
-        res_json_dic = self.OrderDetails_exe(order_id)
-        if res_json_dic['error'] == -1:
-            # わかりやすいJsonを作っておく
-            print(" ★OrderDetailState- orderDetail ミス", order_id)
-            res_json_dic['method'] = " ★OrderDetailState- orderDetail ミス"
-            return res_json_dic  # エラーの返却
+        # (1)初期値の設定 返却形式統一の為
+        order_createtime = 0
+        order_time_past = 0
+        order_units = 0
+        order_price = 0  # 後ほど上書きする
+        order_state = 0  # stateが０はおかしいかな・・？
+        position_id = 0
+        pips = 0
+        position_time = 0
+        position_initial_units = 0
+        position_current_units = 0
+        position_close_time = 0
+        position_price = 0
+        position_state = 0
+        position_realize_pl = 0
+        position_close_price = 0
+        position_type = "single"
+        error_flag = 0
+
+        # (2) オーダーの情報を取得
+        if order_id == 0:
+            order_id = 0  # エラー同等
+            error_flag = -1
+            print(" ★OrderDetailState- orderID 0での問い合わせ発生", order_id)
         else:
-            res_json = res_json_dic['data']
-
-            order_state = res_json['order']['state']  # オーダーのステータスを確認
-            if "price" in res_json['order']:  # MARKET注文の場合、orderPriceが表示されない
-                order_price = res_json['order']['price']
+            res_json_dic = self.OrderDetails_exe(order_id)
+            if res_json_dic['error'] == -1:
+                # オーダー無し（エラー含む）の場合
+                print(" ★OrderDetailState- orderDetail ミス", order_id)
+                res_json_dic['method'] = " ★OrderDetailState- orderDetail ミス"
+                # return res_json_dic  # エラーの返却
+                order_id = 0  # エラー同等
+                error_flag = -1
             else:
-                order_price = 0
+                # オーダーありの場合、オーダー情報を取得する
+                res_json = res_json_dic['data']
+                # orderの情報を取得する
+                order_createtime = iso_to_jstdt_single(res_json['order']['createTime'])
+                order_time_past = cal_past_time_single(iso_to_jstdt_single(res_json['order']['createTime']))
+                order_units = res_json['order']['units']
+                order_state = res_json['order']['state']  # オーダーのステータスを確認
+                if "price" in res_json['order']:  # MARKET注文の場合、orderPriceが表示されない
+                    order_price = res_json['order']['price']
+                else:
+                    order_price = 0
 
-            # 返却用の項目追加を実施
-            position_id = 0
-            pips = 0
-            position_time = 0
-            position_close_time = 0
-            position_price = 0
-            position_state = 0
-            position_realize_pl = 0
-            position_close_price = 0
-            if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
-                pass  # 初期値のまま（全て０）でOK
-            else:  # order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
-                # ポジションの詳細を取得
-                if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
-                    # print("  Closeあり　今までのAPIエラーケース")
-                    position_id = res_json['order']['tradeClosedIDs'][0]  # PositionIDを取得
-                elif "tradeReducedID" in res_json['order']:  # 約定価格が同じ場合、グルーピングされる場合がある？？！
-                    # print("  Closeあり　今までのAPIエラーケース")
-                    position_id = res_json['order']['tradeReducedID']
-                else:
-                    position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得
-                position_js_dic = self.TradeDetails_exe(position_id)  # PositionIDから詳細を取得
-                if position_js_dic['error'] == -1:
-                    # わかりやすいJsonを作っておく
-                    position_js_dic['method'] = "★OrderDatailState- positionDetail ミス"
-                    print("   ★OrderDatailState- positionDetail ミス", position_id,"(", order_id, ")")
-                    return position_js_dic
-                else:
-                    position_js = position_js_dic['data']
-                    if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
-                        # splitnumは本来１：１の分割ではないが、手間なのでとりあえず半々に分ける
-                        split_num = float(len(position_js['trade']['closingTransactionIDs']))  # 複数が同時に出力される場合有
-                        pips = round((float(position_js['trade']['realizedPL'])/split_num) / abs(
-                            float(position_js['trade']['initialUnits'])), 3)
-                        position_realize_pl = float(position_js['trade']['realizedPL'])/split_num
-                        position_time = iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
-                        position_close_time = iso_to_jstdt_single(
-                            position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
-                        position_price = position_js['trade']['price']
-                        position_state = position_js['trade']['state']
-                        position_close_price = position_js['trade']['averageClosePrice']
-                    elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
-                        pips = round(float(position_js['trade']['unrealizedPL']) / abs(
-                            float(position_js['trade']['initialUnits'])), 3)
-                        position_realize_pl = position_js['trade']['unrealizedPL']
-                        position_time = iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
-                        position_close_time = 0
-                        position_price = position_js['trade']['price']
-                        position_state = position_js['trade']['state']
-                        position_close_price = 0
-            # わかりやすいJsonを作っておく
-            res = {
-                "func_complete": 0,  # APIエラーなく完了しているかどうか
-                "order_id": order_id,
-                "order_time_original": res_json['order']['createTime'],
-                "order_time": iso_to_jstdt_single(res_json['order']['createTime']),
-                "order_time_past": cal_past_time_single(iso_to_jstdt_single(res_json['order']['createTime'])),
-                "order_units": res_json['order']['units'],
-                "order_price": order_price,  # Marketでは存在しない
-                "order_state": res_json['order']['state'],
-                "position_id": position_id,
-                "position_time": position_time,
-                "position_time_past": cal_past_time_single(position_time) if position_time != 0 else 0,
-                "position_price": position_price,
-                "position_state": position_state,
-                "position_realize_pl": position_realize_pl,
-                "position_pips": pips,
-                "position_close_time": position_close_time,
-                "position_close_price": position_close_price
-            }
-            return {"data": res, "error": 0}
+                # Positionを探しに行く
+                if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
+                    pass  # 初期値のまま（全て０）でOK
+                else:  # order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
+                    # positionIDを取得
+                    if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
+                        # print("  Closeあり　今までのAPIエラーケース")
+                        position_id = res_json['order']['tradeClosedIDs'][0]  # PositionIDを取得
+                        position_type = "single"
+                    elif "tradeReducedID" in res_json['order']:  # 約定価格が同じ場合、グルーピングされる場合がある？？！
+                        # print("  Closeあり　今までのAPIエラーケース")
+                        position_id = res_json['order']['tradeReducedID']
+                        position_type = "group"
+                    else:
+                        position_id = res_json['order']['fillingTransactionID']  # PositionIDを取得
+                        position_type = "single"
+
+                    # (2)ポジションの詳細を取得
+                    position_js_dic = self.TradeDetails_exe(position_id)  # ★★★★★PositionIDから詳細を取得
+                    if position_js_dic['error'] == -1:
+                        # わかりやすいJsonを作っておく
+                        position_js_dic['method'] = "★OrderDatailState- positionDetail ミス"
+                        print("   ★OrderDatailState- positionDetail ミス", position_id,"(", order_id, ")")
+                        error_flag = -1
+                    else:
+                        position_js = position_js_dic['data']
+                        if position_js['trade']['state'] == 'CLOSED':  # すでに閉じたポジションの場合
+                            # splitnumは本来１：１の分割ではないが、手間なのでとりあえず半々に分ける
+                            split_num = float(len(position_js['trade']['closingTransactionIDs']))  # 複数が同時に出力される場合有
+                            pips = round((float(position_js['trade']['realizedPL'])/split_num) / abs(
+                                float(position_js['trade']['initialUnits'])), 3)
+                            position_initial_units = position_js['trade']['initialUnits']
+                            position_current_units = position_js['trade']['currentUnits']
+                            position_realize_pl = float(position_js['trade']['realizedPL'])/split_num
+                            position_time = iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                            position_close_time = iso_to_jstdt_single(
+                                position_js['trade']['closeTime'])  # ポジションがクローズした時間がうまる
+                            position_price = position_js['trade']['price']  # 現在価格
+                            position_state = position_js['trade']['state']
+                            position_close_price = position_js['trade']['averageClosePrice']
+                        elif position_js['trade']['state'] == 'OPEN':  # 所持中しているポジションの場合
+                            pips = round(float(position_js['trade']['unrealizedPL']) / abs(
+                                float(position_js['trade']['initialUnits'])), 3)
+                            position_initial_units = position_js['trade']['initialUnits']
+                            position_current_units = position_js['trade']['currentUnits']
+                            position_realize_pl = position_js['trade']['unrealizedPL']
+                            position_time = iso_to_jstdt_single(position_js['trade']['openTime'])  # ポジションした時間がうまる
+                            position_close_time = 0
+                            position_price = position_js['trade']['price']
+                            position_state = position_js['trade']['state']
+                            position_close_price = 0
+        # 返却の形式は以下に統一。
+        res = {
+            "func_complete": 0,  # APIエラーなく完了しているかどうか
+            "order_id": order_id,
+            "order_time": order_createtime,
+            "order_time_past": order_time_past,
+            "order_units": order_units,
+            "order_price": order_price,  # Marketでは存在しない
+            "order_state": order_state,
+            "position_id": position_id,
+            "position_type": position_type,  # 両建てや部分解消の場合「group」が入る。
+            "position_initial_units": position_initial_units,
+            "position_current_units": position_current_units,
+            "position_time": position_time,
+            "position_time_past": cal_past_time_single(position_time) if position_time != 0 else 0,
+            "position_price": position_price,
+            "position_state": position_state,
+            "position_realize_pl": position_realize_pl,
+            "position_pips": pips,
+            "position_close_time": position_close_time,
+            "position_close_price": position_close_price
+        }
+        return {"data": res, "error": error_flag}
 
     # オーダーの一覧（全て）を取得
     def OrdersPending_exe(self):
@@ -568,7 +640,6 @@ class Oanda:
             e_info = error_method("TradeDetails", start_time, e)
             return e_info
 
-
     # (14)指定のトレードの変更
     def TradeCRCDO_exe(self, trade_id, data):
         """
@@ -636,11 +707,31 @@ class Oanda:
                 close_df = None
                 for index, row in open_df.iterrows():
                     res_df = self.TradeClose_exe(row["id"], None)  # 【関数】単品をクローズする
-                    res_df = res_df['data']
-                    close_df = pd.concat([close_df, res_df])  # 新決済情報を縦結合
-                    count = count + 1
+                    if res_df['error'] == -1:
+                        pass  # Error
+                    else:
+                        res_df = res_df['data']
+                        close_df = pd.concat([close_df, res_df])  # 新決済情報を縦結合
+                        count = count + 1
                 print("   @PositionClear:", count, "個(@all close func)")
                 return {"data": close_df, "error": 0}
+
+    # (16-2)トレードの個数を取得する
+    def TradeAllCount_exe(self):
+        """
+        引数無し。現在あるトレードノ個数を返却する
+        :return:
+        """
+        open_df_dic = self.OpenTrades_exe()
+        if open_df_dic['error'] == -1:
+            return open_df_dic
+        else:
+            open_df = open_df_dic['data']
+            if len(open_df) == 0:
+                print("  @ポジションキャンセル(対象無し/trade)")
+                return {"data": 0, "error": 0}
+            else:
+                return {"data": len(open_df), "error": 0}
 
     # (17)ポジションの一覧を取得
     def OpenPositions_exe(self):
@@ -875,6 +966,14 @@ def error_method(name, start_time, e):
     now_time = datetime.datetime.now().replace(microsecond=0)
     past_sec = (now_time - start_time).seconds
     print("　★API_Error【", name, "】", now_time, past_sec)
+    if past_sec > 10:
+        print("   時間切れエラー？")
+    else:
+        pass
+        print(e)
+    if name == "オーダー" or name == "TradeClose":
+        tk.line_send("オーダーエラー")
+
     return {"error": -1, "method": name,
             "past_sec": past_sec, "now_time": now_time, "error_code": e}
 
