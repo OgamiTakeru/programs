@@ -98,8 +98,8 @@ class Oanda:
             res_json = json.dumps(self.api.request(ep), indent=2)
             res_json = json.loads(res_json)  # 何故かこれだけevalが使えないのでloadsで文字列⇒jsonを実施
             res_dic = {
-                'bid': res_json['prices'][0]['bids'][0]['price'],
-                'ask': res_json['prices'][0]['asks'][0]['price'],
+                'bid': round(res_json['prices'][0]['bids'][0]['price'], 3),
+                'ask': round(res_json['prices'][0]['asks'][0]['price'], 3),
                 'mid': round((float(res_json['prices'][0]['asks'][0]['price']) +
                               float(res_json['prices'][0]['bids'][0]['price'])) / 2, 3),
                 'spread': round(float(res_json['prices'][0]['asks'][0]['price']) -
@@ -240,19 +240,32 @@ class Oanda:
                     "price": "999",  # 指値の時のみ、後で上書きされる。成り行きの時は影響しない為、初期値でテキトーな値を入れておく。
                 }
             }
+            # UNITとTYPEの設定
             data['order']['units'] = str(info['units'] * info['ask_bid'])  # 必須　units数 askはマイナス、bidはプラス値
             data['order']['type'] = info['type']  # 必須
-            if info['type'] != "MARKET":
-                # 成り行き注文以外
-                data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+            # PRICEの設定① 現在価格の取得
+            price_dic = self.NowPrice_exe("USD_JPY")  # 現在価格の取得用APIを叩く
+            if price_dic['error'] == -1:  # APIエラーの場合はスキップ
+                print("　　API異常発生の可能性　現在価格取得　CreateOrderClass")
+                return -1  # 終了
             else:
-                # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
-                price_dic = self.NowPrice_exe("USD_JPY")
-                if price_dic['error'] == -1:  # APIエラーの場合はスキップ
-                    print("　　API異常発生の可能性　CreateOrderClass")
-                    return -1  # 終了
+                if info['ask_bid'] == 1:
+                    price_now = price_dic['data']['ask']  # 現在価格を取得(買い）
+                elif info['ask_bid'] == -1:
+                    price_now = price_dic['data']['bid']  # 現在価格を取得(売り）
                 else:
-                    info['price'] = price_dic['data']['mid']  # infoPriceを上書き
+                    price_now = price_dic['data']['mid']  # 現在価格を取得(MID)あんまりない想定
+            # PRICEの設定②　 info['price']の設定
+            if info['type'] == "MARKET":  # 成り行き注文時は、現在価格を取得する⇒注文には不要だが、LCやTPを計算するうえで必要。(ミドル値）
+                info['price'] = price_now  # info内は計算に使うためSTRせず。
+                # data['order']['price'] = price_now  # MARKET時は設定不要
+            else:  # 成り行き注文以外(指値注文)
+                if abs(info['price'] - price_now) > 0.01:  # 指値価格と現在価格の乖離が大きい（急激な変動や、時間差での注文等）
+                    print(" ★★指値注文価格調整あり", info['price'], "⇒", price_now, "GAP", round(abs(info['price'] - price_now), 3))
+                    tk.line_send(" ★★指値注文価格調整あり", info['price'], "⇒", price_now, "GAP", round(abs(info['price'] - price_now), 3))
+                    data['order']['price'] = str(price_now)  # 現在価格を採用
+                else:
+                    data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
 
             if info['tp_range'] != 0:
                 # 利確設定ありの場合
@@ -282,23 +295,26 @@ class Oanda:
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             print(res_json)
             if 'orderCancelTransaction' in res_json:
-                print("   ■■■CANCELあり")
-                # print(res_json)
+                print("   ■■■OrderCANCELあり")
+                print(res_json)
                 canceled = True
                 order_id = 0
                 order_time = 0
+                price_fill = 0  # 今後不要になるかも？
             else:
                 # 正確にオーダーが入ったためオーダーIDを取得
                 canceled = False
                 order_id = res_json['orderCreateTransaction']['id']
                 order_time = res_json['orderCreateTransaction']['time']
-                if info['type'] == "MARKET":
-                    # Marketの場合、約定価格を取得する
-                    info['price'] = float(res_json['orderFillTransaction']['price'])
-
+                # オーダーと同時に約定した場合、orderFillTransactionから約定価格を取得する。（成り行き　or 指値の即時条件満たし時）
+                if "orderFillTransaction" in res_json:
+                    price_fill = float(res_json['orderFillTransaction']['price'])
+                else:  # 約定がない場合、planの値通りか、成り行きの場合は（通常の指値注文等の場合）
+                    price_fill = round(info['price'], 3)  # priceと同値を入れる（今後price=price_fillかどうかで分岐あり）
 
             # オーダー情報履歴をまとめておく
             order_info = {"price": str(round(info['price'], 3)),
+                          "price_fill": str(price_fill),  # 約定価格
                           "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
                           "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),  # 計算のみ
                           "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),  # 計算の実
@@ -314,6 +330,7 @@ class Oanda:
             return {"error": 0, "data": order_info}
 
         except Exception as e:
+            print("★★★OrderCreateAPIエラー")
             e_info = error_method("オーダー", start_time, e)
             return e_info
 
@@ -402,7 +419,6 @@ class Oanda:
             # print("   (Detail実行時間)", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
             return {"data": res_json, "error": 0}
         except Exception as e:
-            print(order_id)
             # print(e)
             e_info = error_method("OrderDetail", start_time, e)
             return e_info

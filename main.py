@@ -46,7 +46,7 @@ def order_line_send(class_order_arr, add_info):
     # 送信は一回だけにしておく。
     tk.line_send("■折返Position！", gl_live, gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
                  "トリガー:", info['trigger'], "指定価格", price, "情報:", info['memo'], ",オーダー:", '\n', o_memo,
-                 "初回時間", gl_first_time)
+                 "初回時間", gl_first_time, "その他情報⇒", "WL:", add_info['wl_info'])
 
 
 def order_delete_function():
@@ -56,14 +56,14 @@ def order_delete_function():
     :return:
     """
 
-    if main_c.position['state'] == "OPEN":
+    if main_c.position['state'] == "OPEN":  # and main_c.life:
         # main（順思想がオーダー)が入っている場合、逆思想は消す
         if third_c.life or fourth_c.life:  # どちらかがOnの場合（基本は同時にOffになるはずだけど）
             third_c.close_order()
             fourth_c.close_order()
             watch2_c.close_order()
             tk.line_send("■逆思想オーダー削除（ポジションは解消しない）", third_c.life, fourth_c.life)
-    elif third_c.position['state']=="OPEN":
+    elif third_c.position['state']=="OPEN":# and third_c.life:
         # third(逆思想オーダー）が入っている場合、順思想は消す
         if main_c.life or second_c.life:
             main_c.close_order()
@@ -89,7 +89,9 @@ def order_link_inspection():
             mini.order_permission = True
             mini.make_order()
             w.close_position()
-            # tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.position['time_past'], w.pip_win_hold_time, w.position['pips'], datetime.datetime.now().replace(microsecond=0))
+            tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.position['time_past'],
+                         "WinHold:", w.pip_win_hold_time, "pips:", w.position['pips'],
+                         datetime.datetime.now().replace(microsecond=0))
 
     w = watch2_c
     main = third_c
@@ -103,7 +105,9 @@ def order_link_inspection():
             mini.order_permission = True
             mini.make_order()
             w.close_position()
-            # tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.position['time_past'], w.pip_win_hold_time, w.position['pips'], datetime.datetime.now().replace(microsecond=0))
+            tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.position['time_past'],
+                         "WinHold:", w.pip_win_hold_time, "pips", w.position['pips'],
+                         datetime.datetime.now().replace(microsecond=0))
 
 
 def mode1():
@@ -118,8 +122,8 @@ def mode1():
     inspection_condition = {
         "now_price": gl_now_price_mid,  # 現在価格を渡す
         "data_r": gl_data5r_df,  # 対象となるデータ
-        "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 50},
-        "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 50},
+        "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
+        "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
         "macd": {"short": 20, "long": 30},
         "save": True,  # データをCSVで保存するか（検証ではFalse推奨。Trueの場合は下の時刻は必須）
         "time_str": gl_now_str,  # 記録用の現在時刻
@@ -153,6 +157,7 @@ def mode1():
     if 0 < past_sec < wait_time_new * 59:  # 0の場合はTrueなるので、不等号に＝はNG。オーダー発行時比較
         print("時間不可 last", gl_latest_trigger_time, past_sec, wait_time_new * 59)
         new_order = False
+        return 0  # 時間的に負荷の場合は終了
     else:
         new_order = True  # 最初はこっちに行く（初期では基本こっち）
 
@@ -160,19 +165,26 @@ def mode1():
     add_info = {
         "result_rap": result_rap,
     }
-    #  ★★
-    if new_order:
-        pass
-    else:
-        # Newオーダー不可の場合は、抜ける
-        return 0
 
     # ■パターンでオーダーのベースを組み立てておく（発行可否は別途判断。パターンをとりあえず作っておく）
+    # ■現在の勝敗で倍率を決定する
+    if order_class.order_information.total_yen > 0:
+        # 勝っている場合
+        mag_unit_wl = mag_unit_w
+        mag_lc = mag_lc_w
+        mag_tp = mag_tp_w
+        add_info['wl_info'] = "Win中"  # 情報をLINEに送るよう
+    else:
+        mag_unit_wl = mag_unit_l
+        mag_lc = mag_lc_l
+        mag_tp = mag_tp_l
+        add_info['wl_info'] = "Lose中"  # 情報をLINEに送るよう
+    # ■オーダー生成処理
     if result_turn2_result == 1:  # ターンが確認された場合（最優先）
         # 事前処理
+        print(" ★オーダー発行（ターン起点）★")
         order_class.reset_all_position(classes)  # ポジションのリセット&情報アップデート
         gl_latest_trigger_time = datetime.datetime.now()  # 現在時刻を、最終トリガー時刻に入れておく
-        print(" ★オーダー発行（ターン起点）★")
         # (1)順思想のオーダー群作成
         # 元オーダーの取得
         main_order = result_turn2_orders['main']  # オーダーを受け取る
@@ -193,13 +205,13 @@ def mode1():
         order['tp_range'] = 0.1  # 追加項目
         order['target_class'] = main_c  # 追加項目　格納するクラス
         order['price'] = round(order['base_price'] + order['margin'], 3)
-        order['units'] = round(order['units'] * temp_magnification / 2, 3)  # 編集
-        order['tp_range'] = 0.1  # 追加項目
-        order['lc_range'] = order['max_lc_range']
+        order['units'] = round(order['units'] * unit_mag * mag_unit_wl / 2, 3)  # 編集
+        order['tp_range'] = order['max_lc_range'] * mag_tp  # 追加項目
+        order['lc_range'] = order['max_lc_range'] * mag_lc
         order['type'] = "STOP"  # 追加項目
         order['order_permission'] = False  # 即時の取得は行わない
         order['crcdo'] = {
-            "crcdo_border": 0.07,  # 0.05を超えたらCRCDOでcrcdo_guarantee
+            "crcdo_border": 0.10,  # 0.05を超えたらCRCDOでcrcdo_guarantee
             "crcdo_guarantee": 0.05,
             "crcdo_trail_ratio": 0.5,  # トレール時、勝ちのN%ラインにトレールする
             "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
@@ -211,9 +223,9 @@ def mode1():
         # order_mini['direction'] = order['direction'] * -1  # 追加項目
         order_mini['target_class'] = second_c  # 追加項目　格納するクラス
         order_mini['price'] = round(order_mini['base_price'] + order_mini['margin'], 3)
-        order_mini['units'] = round(order_mini['units'] * temp_magnification, 0)
-        order_mini['tp_range'] = 0.04
-        order_mini['lc_range'] = order_mini['lc_range']
+        order_mini['units'] = round(order_mini['units'] * unit_mag * mag_unit_wl, 0)
+        order_mini['tp_range'] = order_mini['lc_range'] * mag_tp * 0.6
+        order_mini['lc_range'] = order_mini['lc_range'] * mag_lc * 0.6
         order_mini['type'] = "STOP"  # 追加項目
         order_mini['order_permission'] = False  # 即時の取得は行わない
         order_mini['crcdo'] = {
@@ -243,14 +255,14 @@ def mode1():
         # order2['direction'] = order2['direction'] * -1
         order2['target_class'] = third_c  # 追加項目　格納するクラス
         order2['price'] = round(order2['base_price'] + order2['margin'], 3)
-        order2['units'] = round(order2['units'] * temp_magnification / 2, 3)  # 編集
-        order2['tp_range'] = 0.04  # 追加項目
-        order2['lc_range'] = order2['max_lc_range']
+        order2['units'] = round(order2['units'] * unit_mag * mag_unit_wl / 2, 3)  # 編集
+        order2['tp_range'] = order2['max_lc_range'] * mag_tp  # 追加項目
+        order2['lc_range'] = order2['max_lc_range'] * mag_lc
         order2['type'] = "STOP"  # 追加項目
         order2['order_permission'] = False  # 即時の取得は行わない
         order2['crcdo'] = {
-            "crcdo_border": 0.03,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": -0.01,
+            "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
+            "crcdo_guarantee": 0.03,
             "crcdo_trail_ratio": 0.6,  # トレール時、勝ちのN%ラインにトレールする
             "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
         }
@@ -261,9 +273,9 @@ def mode1():
         # order2_mini['direction'] = order2_mini['direction'] * -1
         order2_mini['target_class'] = fourth_c  # 追加項目　格納するクラス
         order2_mini['price'] = round(order2_mini['base_price'] + order2_mini['margin'], 3)
-        order2_mini['units'] = round(order2_mini['units'] * temp_magnification, 3)  # 編集
-        order2_mini['tp_range'] = 0.028  # 追加項目
-        order2_mini['lc_range'] = order2_mini['lc_range']
+        order2_mini['units'] = round(order2_mini['units'] * unit_mag * mag_unit_wl, 3)  # 編集
+        order2_mini['tp_range'] = order2_mini['lc_range'] * mag_tp * 0.4  # 追加項目
+        order2_mini['lc_range'] = order2_mini['lc_range'] * mag_lc * 0.4
         order2_mini['type'] = "STOP"  # 追加項目
         order2_mini['order_permission'] = False  # 即時の取得は行わない
         order2_mini['crcdo'] = {
@@ -279,9 +291,9 @@ def mode1():
 
     elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）
         # 事前処理
+        print("  ★オーダー発行 ターン未遂を確認　")  # result_attempt_turn_orders
         order_class.reset_all_position(classes)  # ポジションのリセット&情報アップデート
         gl_latest_trigger_time = datetime.datetime.now()  # 現在時刻を、最終トリガー時刻に入れておく
-        print("  ★オーダー発行 ターン未遂を確認　")  # result_attempt_turn_orders
         # watch用のメニューを作成
         watch_main = result_attempt_turn_orders.copy()
         watch_main['name'] = watch_main['name'] + "W"  # 編集
@@ -298,7 +310,7 @@ def mode1():
         order['name'] = order['name'] + "N"  # 編集
         order['target_class'] = main_c  # 追加項目　格納するクラス
         order['price'] = round(order['base_price'] + order['margin'], 3)
-        order['units'] = round(order['units'] * temp_magnification / 2, 3)  # 編集
+        order['units'] = round(order['units'] * unit_mag / 2, 3)  # 編集
         order['tp_range'] = 0.1  # 追加項目
         order['lc_range'] = 0.1
         order['order_permission'] = False  # 即時の取得しない
@@ -316,7 +328,7 @@ def mode1():
         order_mini['name'] = order_mini['name'] + "m"
         order_mini['target_class'] = second_c  # 追加項目　格納するクラス
         order_mini['price'] = round(order_mini['base_price'] + order_mini['margin'], 3)
-        order_mini['units'] = round(order_mini['units'] * temp_magnification, 0)
+        order_mini['units'] = round(order_mini['units'] * unit_mag, 0)
         order_mini['lc'] = 0.030  # order_mini['lc_range']
         order_mini['tp'] = 0.022
         order_mini['order_permission'] = False  # 即時の取得しない
@@ -333,15 +345,18 @@ def mode1():
         order_pair = [watch_main, order, order_mini]
         order_line_send(order_pair, add_info)
     #
-    print("   Mode1 End")
+    print("MODE1 END")
 
 
 def mode2():
     global gl_exe_mode
+    # 表示用（１分に１回表示させたい）
+    temp_date = datetime.datetime.now().replace(microsecond=0)
+    if 0 <= int(temp_date.second) < 2:
+        print("■■■Mode2", datetime.datetime.now().replace(microsecond=0))
 
     order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
     order_delete_function()  # 反対方向のオーダーは持たないことにする
-    # print(" Mode2 End")
 
 
 def exe_manage():
@@ -429,11 +444,13 @@ def exe_manage():
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 8, 1, 18, 21, 0)
+            # jp_time = datetime.datetime(2023, 8, 24, 23, 30, 0)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
-            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)['data']
+            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            # print(d5_df)
+            # d5_df = d5_df['data']
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
@@ -481,8 +498,16 @@ gl_result_dic = {}
 gl_live = "Pra"
 gl_first_time = ""  # 初回の時間を抑えておく（LINEで見やすくするためだけ）
 gl_latest_exe_time = 0  # 実行タイミングに幅を持たせる（各５の倍数分の６秒~３０秒で１回実行）に利用する
-temp_magnification = 0.1  # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
-gl_latest_trigger_time = datetime.datetime.now() + datetime.timedelta(minutes=6)  # 新規オーダーを入れてよいかの確認用
+gl_latest_trigger_time = datetime.datetime.now() + datetime.timedelta(minutes=-6)  # 新規オーダーを入れてよいかの確認用
+# 倍率関係
+unit_mag = 10  # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
+mag_unit_w = 1  # 勝っているときのUnit倍率
+mag_lc_w = 1  # 勝っているときのLC幅の調整
+mag_tp_w = 1  # 勝っているときのLC幅の調整
+mag_unit_l = 2  # 負けている時のUnit倍率
+mag_lc_l = 0.8  # 負けているときのLC幅の調整
+mag_tp_l = 1  # 負けているときのLC幅の調整
+
 
 
 # ■オアンダクラスの設定

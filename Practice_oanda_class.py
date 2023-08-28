@@ -38,6 +38,7 @@ oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダク�
 oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
 print("↑ここまで定例")
 
+
 # 注文テスト
 info = {
     "units": 1,
@@ -45,7 +46,7 @@ info = {
     "tp_range": 0,
     "lc_range": 0,
     "type": "STOP",
-    "price": 145.620
+    "price": 146.493
 }
 
 order = oa.OrderCreate_dic_exe(info)

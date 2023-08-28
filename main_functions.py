@@ -584,7 +584,6 @@ def turn2_cal(inspection_condition):
                 margin_abs = margin_pattern1
             else:
                 margin_abs = margin_pattern2
-        # tk.line_send(margin_abs)
 
         # ③ base price(システム利用値) & target price(参考値=システム不使用)の調整
         if latest_ans['gap'] >= 0.06:  # Gapが意外と大
@@ -595,7 +594,7 @@ def turn2_cal(inspection_condition):
 
         # ④　LC_rangeの検討
         max_range_abs = oldest_ans['gap']  # 一番の理想はoldestのGap。ただ大きすぎる場合も。。
-        middle_range_abs = 0.15  # 現実的にはこのくらい？
+        middle_range_abs = oldest_ans['gap'] * 0.6  #  0.15  # 現実的にはこのくらい？
         min_range_abs = 0.06  # 最低でもこのくらい。
         lc_range_abs = middle_range_abs
 
@@ -612,10 +611,11 @@ def turn2_cal(inspection_condition):
             "type": "STOP",
             "lc_range": round(lc_range_abs * trend_d * -1, 3),
             "tp_range": round(tp_range_abs * trend_d, 3),
-            "units": 400,
+            "units": 40,
             "max_lc_range": max_range_abs * trend_d * -1,  # 最大LCの許容値（LCとイコールの場合もあり）
             "trigger": "ターン",
-            "memo": memo_all
+            "memo": memo_all,
+            'data': turn_ans_dic
         }
 
         # （2）逆思想(range)の値の計算
@@ -630,16 +630,28 @@ def turn2_cal(inspection_condition):
             margin2 = cal_at_least_most(at_least_margin2, oldest_ans['body_ave'] / 0.7, 0.05)
 
         # ③ base price(システム利用値) & target price(参考値=システム不使用)の調整
-        if latest_ans['gap'] >= 0.06:  # Gapが意外と大きい場合、
-            base_price2 = latest_ans['latest_price']  # 直近価格を利用する
+        # パターン１
+        # if latest_ans['gap'] >= 0.06:  # Gapが意外と大きい場合、
+        #     base_price2 = latest_ans['latest_price']  # 直近価格を利用する
+        # else:
+        #     base_price2 = latest_ans['latest_price']
+        # target_price2 = round(base_price + (margin2 * trend_d), 3)  # target_priceを念のために取得しておく
+        # パターン２
+        if oldest_ans['gap'] >= 0.10:  # レンジを取るにはこのくらいほしい。。
+            # 6割戻しタイミングに設置する
+            remain_pips = oldest_ans['gap'] * 0.5  # 4割分の幅を計算
+            base_price2 = oldest_ans['oldest_image_price'] + (remain_pips * oldest_ans['direction'])  # 頂点から４割戻り
+            print(" 4割戻りレンジ")
         else:
-            base_price2 = latest_ans['latest_price']
+            # 小さい場合は、Oldのピーク部分に設定する
+            base_price2 = oldest_ans['oldest_image_price']
+            print(" 頂上レンジ")
         target_price2 = round(base_price + (margin2 * trend_d), 3)  # target_priceを念のために取得しておく
 
         # ④　LC_rangeの検討
         cal_lc = abs(target_price2 - oldest_ans['latest_image_price'])  # ピークまで戻ったらLC
         max_range2_abs = oldest_ans['gap']  # 一番の理想はoldestのGap。ただ大きすぎる場合も。。
-        middle_range2_abs = 0.06  # 現実的にはこのくらい？
+        middle_range2_abs = oldest_ans['gap'] * 0.6   #0.06  # 現実的にはこのくらい？
         min_range2_abs = 0.06  # 最低でもこのくらい。
         lc_range2_abs = cal_lc  # middle_range_abs
 
@@ -656,10 +668,11 @@ def turn2_cal(inspection_condition):
             "type": "STOP",
             "lc_range": round(lc_range2_abs * range_d * -1, 3),
             "tp_range": round(tp_range2_abs * range_d, 3),
-            "units": 400,
+            "units": 40,
             "max_lc_range": max_range2_abs * range_d * -1,  # round(lc_range2 * range_d * -1, 3)  # 最大LCの許容値（LCとイコールになる場合もあり）
             "trigger": "ターン",
-            "memo": memo_all
+            "memo": memo_all,
+            "data": turn_ans_dic
         }
 
     # (３)返却用データの作成
@@ -970,7 +983,7 @@ def figure_latest3_judge(ins_condition):
     else:
         p = 0
 
-    if 0.4 <= oldest / middle <= 2.5:
+    if 0.2 <= oldest / middle <= 3.5:
         r = 1
     else:
         r = 0
@@ -990,7 +1003,7 @@ def figure_latest3_judge(ins_condition):
                 "base_price": 0,
                 "direction": 0,
                 "margin": 0.008 * oldest_d,
-                "units": 200,
+                "units": 20,
                 "lc": 0.035,
                 "tp": 0.075,
                 "max_lc_range": 0.05,
@@ -1008,7 +1021,7 @@ def figure_latest3_judge(ins_condition):
                 "margin": round(0.008 * oldest_d, 3),  # 方向をもつ
                 "direction": oldest_d,
                 "type": "STOP",
-                "units": 200,
+                "units": 20,
                 "lc_range": round(0.035 * oldest_d * -1, 3),
                 "tp_range": round(0.075 * oldest_d, 3),
                 "max_lc_range": 0.05,
@@ -1358,9 +1371,7 @@ def inspection_candle(ins_condition):
     if e == 0 and turn2_ans['turn_ans'] == 1:  # スマホからエラーの時に簡単に飛ばせるように
         print(" ■PeakChek")
         peaks = peaks_collect(data_r)
-        print(" 直近の数", len(peaks['from_last_peak']))
-        print(" 直近の数とサイズ 直近:",peaks['from_last_peak']['count'], peaks['from_last_peak']['time'],  peaks['from_last_peak']['time_oldest'],
-              "次", )
+        print(" 直近の数とサイズ 直近:",peaks['from_last_peak']['count'], peaks['from_last_peak']['time'],  peaks['from_last_peak']['time_oldest'])
     else:
         print(" ■Peakcheckなし", e, turn2_ans['turn_ans'])
 
