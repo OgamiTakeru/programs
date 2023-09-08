@@ -10,8 +10,8 @@ import math
 import matplotlib.pyplot as plt
 
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
-import programs.oanda_class as oanda_class
-import programs.main_functions as f  # とりあえずの関数集
+import programs.classOanda as oanda_class
+import programs.fTurnInspection as f  # とりあえずの関数集
 
 
 def input_base_data(ans_dic):

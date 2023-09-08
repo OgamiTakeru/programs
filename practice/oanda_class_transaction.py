@@ -10,7 +10,7 @@ import pickle
 import requests
 
 # 自作ファイルインポート
-import programs.oanda_class as oanda_class
+import programs.classOanda as oanda_class
 import programs.tokens as tk
 import oandapyV20.endpoints.instruments as instruments
 from oandapyV20 import API

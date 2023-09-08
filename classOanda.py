@@ -88,7 +88,7 @@ class Oanda:
     def NowPrice_exe(self, instrument):
         """
         呼び出し:oa.NowPrice_exe("USD_JPY")
-        返却値:Bid価格、Ask価格、Mid価格、スプレッド、左記４つを辞書形式で返却。
+        返却値:Bid価格、Ask価格、Mid価格、スプレッド、左記４つを辞書形式で返却。返却値は、必ず小数点以下は３桁とする。
         """
         start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
         params = {"instruments": instrument}
@@ -98,8 +98,8 @@ class Oanda:
             res_json = json.dumps(self.api.request(ep), indent=2)
             res_json = json.loads(res_json)  # 何故かこれだけevalが使えないのでloadsで文字列⇒jsonを実施
             res_dic = {
-                'bid': round(res_json['prices'][0]['bids'][0]['price'], 3),
-                'ask': round(res_json['prices'][0]['asks'][0]['price'], 3),
+                'bid': round(float(res_json['prices'][0]['bids'][0]['price']), 3),
+                'ask': round(float(res_json['prices'][0]['asks'][0]['price']), 3),
                 'mid': round((float(res_json['prices'][0]['asks'][0]['price']) +
                               float(res_json['prices'][0]['bids'][0]['price'])) / 2, 3),
                 'spread': round(float(res_json['prices'][0]['asks'][0]['price']) -
@@ -260,12 +260,7 @@ class Oanda:
                 info['price'] = price_now  # info内は計算に使うためSTRせず。
                 # data['order']['price'] = price_now  # MARKET時は設定不要
             else:  # 成り行き注文以外(指値注文)
-                if abs(info['price'] - price_now) > 0.01:  # 指値価格と現在価格の乖離が大きい（急激な変動や、時間差での注文等）
-                    print(" ★★指値注文価格調整あり", info['price'], "⇒", price_now, "GAP", round(abs(info['price'] - price_now), 3))
-                    tk.line_send(" ★★指値注文価格調整あり", info['price'], "⇒", price_now, "GAP", round(abs(info['price'] - price_now), 3))
-                    data['order']['price'] = str(price_now)  # 現在価格を採用
-                else:
-                    data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
+                data['order']['price'] = str(round(info['price'], 3))  # 指値の場合は必須
 
             if info['tp_range'] != 0:
                 # 利確設定ありの場合
@@ -293,7 +288,7 @@ class Oanda:
             # 実行
             ep = OrderCreate(accountID=self.accountID, data=data)  #
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
-            print(res_json)
+            # print(res_json)
             if 'orderCancelTransaction' in res_json:
                 print("   ■■■OrderCANCELあり")
                 print(res_json)
@@ -416,6 +411,7 @@ class Oanda:
         try:
             ep = OrderDetails(accountID=self.accountID, orderID=order_id)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
+            # print(res_json)
             # print("   (Detail実行時間)", (datetime.datetime.now().replace(microsecond=0)-start_time).seconds)
             return {"data": res_json, "error": 0}
         except Exception as e:
@@ -437,6 +433,7 @@ class Oanda:
         order_units = 0
         order_price = 0  # 後ほど上書きする
         order_state = 0  # stateが０はおかしいかな・・？
+        res_json = {}
         position_id = 0
         pips = 0
         position_time = 0
@@ -448,6 +445,7 @@ class Oanda:
         position_realize_pl = 0
         position_close_price = 0
         position_type = "single"
+        position_js_dic = {}
         error_flag = 0
 
         # (2) オーダーの情報を取得
@@ -480,7 +478,7 @@ class Oanda:
                 # Positionを探しに行く
                 if order_state == 'PENDING' or order_state == 'CANCELLED':  # 注文中
                     pass  # 初期値のまま（全て０）でOK
-                else:  # order_state == 'FILLED':  # オーダー約定済み⇒オーダーIDを取得して情報を取得
+                else:  # order_state == 'FILLED':  # オーダー約定済み⇒ポジションIDを取得して情報を取得
                     # positionIDを取得
                     if "tradeClosedIDs" in res_json['order']:  # 既にクローズまで行っている場合、これがPositionID
                         # print("  Closeあり　今までのAPIエラーケース")
@@ -537,6 +535,7 @@ class Oanda:
             "order_units": order_units,
             "order_price": order_price,  # Marketでは存在しない
             "order_state": order_state,
+            "order_json": res_json,
             "position_id": position_id,
             "position_type": position_type,  # 両建てや部分解消の場合「group」が入る。
             "position_initial_units": position_initial_units,
@@ -548,7 +547,8 @@ class Oanda:
             "position_realize_pl": position_realize_pl,
             "position_pips": pips,
             "position_close_time": position_close_time,
-            "position_close_price": position_close_price
+            "position_close_price": position_close_price,
+            "position_json": position_js_dic,
         }
         return {"data": res, "error": error_flag}
 
@@ -690,7 +690,7 @@ class Oanda:
     def TradeClose_exe(self, trade_id, data):
         """
         :param trade_id: 閉じたい対象のトレードID（数字）
-        :param data: data=None　の場合は対象トレードを決済。部分決済したい場合は、色々書く（忘れた）
+        :param data: data=None　の場合は対象トレードを決済。部分決済したい場合は、data={"units": 30}
         :return:
         """
         start_time = datetime.datetime.now().replace(microsecond=0)  # エラー頻発の為、ログ
@@ -699,7 +699,7 @@ class Oanda:
             ep = TradeClose(accountID=self.accountID, tradeID=trade_id, data=data)
             res_json = eval(json.dumps(self.api.request(ep), indent=2))
             res_df = func_make_dic(res_json)  # 必要項目の抜出
-            return {"data": res_df, "error": 0}
+            return {"data_json": res_json, "data": res_df, "error": 0}
         except Exception as e:
             e_info = error_method("TradeClose", start_time, e)
             return e_info

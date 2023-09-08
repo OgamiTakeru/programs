@@ -6,9 +6,9 @@ import pandas as pd
 
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
-import programs.oanda_class as oanda_class
-import programs.order_class as order_class  # とりあえずの関数集
-import programs.main_functions as f  # とりあえずの関数集
+import programs.classOanda as classOanda
+import programs.classPosition as classPosition  # とりあえずの関数集
+import programs.fTurnInspection as f  # とりあえずの関数集
 
 
 def order_line_send(class_order_arr, add_info):
@@ -77,18 +77,38 @@ def order_link_inspection():
     Watchの状況を把握する
     :return:
     """
+    # 現在価格の取得
+    price_dic = oa.NowPrice_exe("USD_JPY")  # 現在価格の取得用APIを叩く
+    if price_dic['error'] == -1:  # APIエラーの場合はスキップ
+        print("　　API異常発生の可能性　現在価格取得　CreateOrderClass")
+        return -1  # 終了
+
+    # リンケージオーダー設定
     w = watch1_c
     main = main_c
     mini = second_c
     # print("★★★", w.position['state'], w.position['time_past'], gl_now)
     if w.position['state'] == "OPEN":
-        if w.pip_win_hold_time > 60 or w.position['pips'] >= 0.015:
+        if w.pip_win_hold_time > 60:
             # ウォッチ用ポジションが取得に移行して、数秒したら追加オーダーを入れる（ウォッチ用は解除）
+            # 価格を適正に守勢する
+            # オーダー①
             main.order_permission = True
+            if main.plan['direction'] == 1:
+                main.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            else:
+                main.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             main.make_order()
+
+            # オーダー２
             mini.order_permission = True
+            if mini.plan['direction'] == 1:
+                mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            else:
+                mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             mini.make_order()
-            w.close_position()
+
+            w.close_position(None)
             tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.position['time_past'],
                          "WinHold:", w.pip_win_hold_time, "pips:", w.position['pips'],
                          datetime.datetime.now().replace(microsecond=0))
@@ -100,11 +120,22 @@ def order_link_inspection():
     if w.position['state'] == "OPEN":
         if w.pip_win_hold_time > 60 or w.position['pips'] >= 0.015:
             # そこそこのマイナスを経験後、今マイナスの場合
+            # オーダー１
             main.order_permission = True
+            if main.plan['direction'] == 1:
+                main.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            else:
+                main.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             main.make_order()
+            # オーダー２
             mini.order_permission = True
+            if mini.plan['direction'] == 1:
+                mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            else:
+                mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             mini.make_order()
-            w.close_position()
+
+            w.close_position(None)
             tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.position['time_past'],
                          "WinHold:", w.pip_win_hold_time, "pips", w.position['pips'],
                          datetime.datetime.now().replace(microsecond=0))
@@ -116,7 +147,7 @@ def mode1():
     :return: なし
     """
     print("  Mode1")
-    global gl_latest_trigger_time
+    global gl_latest_trigger_time, gl_peak_memo
 
     # チャート分析結果を取得する
     inspection_condition = {
@@ -124,8 +155,6 @@ def mode1():
         "data_r": gl_data5r_df,  # 対象となるデータ
         "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
         "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
-        "macd": {"short": 20, "long": 30},
-        "save": True,  # データをCSVで保存するか（検証ではFalse推奨。Trueの場合は下の時刻は必須）
         "time_str": gl_now_str,  # 記録用の現在時刻
     }
     ans_dic = f.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
@@ -137,18 +166,10 @@ def mode1():
     # (2)ターン未遂部
     result_attempt_turn = ans_dic['latest3_figure_result']['result']
     result_attempt_turn_orders = ans_dic['latest3_figure_result']['order_dic']
-    # (3) turn3関連
-    # result_turn3_result = ans_dic['turn3_ans']['turn_ans']  # 直近のターンがあるかどうか（連続性の考慮無し）
-    # result_turn3_orders = ans_dic['turn3_ans']['order_dic']
-    # (4) Rap関係
-    result_rap = ans_dic['rap_ans']
+
 
     # LCを絞る時間
     lc_change_time = 540  # 通常は５４０くらいを想定
-
-    if result_rap == 1:
-        # tk.line_send("rap異常")
-        pass
 
     # ■オーダーの生成、発行
     # ■実際の発行が可能かを判断し、オーダーを作成する
@@ -163,12 +184,22 @@ def mode1():
 
     # ■　付加情報を記録する
     add_info = {
-        "result_rap": result_rap,
     }
 
-    # ■パターンでオーダーのベースを組み立てておく（発行可否は別途判断。パターンをとりあえず作っておく）
+    # ■　条件有でも除外される消すを探す（return 0とする場合）
+    if classPosition.position_check(classes):  # ポジション有時は、何もしない
+        if result_turn2_result == 1:  # ターン有の場合、LINEする
+            tk.line_send("既にオーダー有の為見送り(ターン）")
+        elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）
+            tk.line_send("既にオーダー有の為見送り(ターン未遂）")
+        else:
+            pass
+        # 処理終了
+        return 0
+
+    # ■パターンでオーダーのベースを組み立て、発行する（発行タイミングはずれる可能性もある）
     # ■現在の勝敗で倍率を決定する
-    if order_class.order_information.total_yen > 0:
+    if classPosition.order_information.total_yen > 0:
         # 勝っている場合
         mag_unit_wl = mag_unit_w
         mag_lc = mag_lc_w
@@ -183,7 +214,7 @@ def mode1():
     if result_turn2_result == 1:  # ターンが確認された場合（最優先）
         # 事前処理
         print(" ★オーダー発行（ターン起点）★")
-        order_class.reset_all_position(classes)  # ポジションのリセット&情報アップデート
+        classPosition.reset_all_position(classes)  # ポジションのリセット&情報アップデート
         gl_latest_trigger_time = datetime.datetime.now()  # 現在時刻を、最終トリガー時刻に入れておく
         # (1)順思想のオーダー群作成
         # 元オーダーの取得
@@ -292,7 +323,7 @@ def mode1():
     elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）
         # 事前処理
         print("  ★オーダー発行 ターン未遂を確認　")  # result_attempt_turn_orders
-        order_class.reset_all_position(classes)  # ポジションのリセット&情報アップデート
+        classPosition.reset_all_position(classes)  # ポジションのリセット&情報アップデート
         gl_latest_trigger_time = datetime.datetime.now()  # 現在時刻を、最終トリガー時刻に入れておく
         # watch用のメニューを作成
         watch_main = result_attempt_turn_orders.copy()
@@ -352,8 +383,9 @@ def mode2():
     global gl_exe_mode
     # 表示用（１分に１回表示させたい）
     temp_date = datetime.datetime.now().replace(microsecond=0)
-    if 0 <= int(temp_date.second) < 2:
-        print("■■■Mode2", datetime.datetime.now().replace(microsecond=0))
+    if 0 <= int(temp_date.second) < 2:  # ＝１分に一回
+        mes = classPosition.positions_time_past_info(classes)
+        print("■■■Mode2", datetime.datetime.now().replace(microsecond=0), mes)
 
     order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
     order_delete_function()  # 反対方向のオーダーは持たないことにする
@@ -373,9 +405,9 @@ def exe_manage():
     global gl_midnight_close_flag, gl_now_price_mid, gl_data5r_df, gl_first, gl_first_time, gl_latest_exe_time
 
     # ■深夜帯は実行しない　（ポジションやオーダーも全て解除）
-    if 3 <= time_hour <= 7:
+    if 3 <= time_hour <= 6:
         if gl_midnight_close_flag == 0:  # 繰り返し実行しないよう、フラグで管理する
-            order_class.reset_all_position(classes)
+            classPosition.reset_all_position(classes)
             tk.line_send("■深夜のポジション・オーダー解消を実施")
             gl_midnight_close_flag = 1  # 実施済みフラグを立てる
     # ■実行を行う
@@ -403,14 +435,14 @@ def exe_manage():
 
         if time_min % 5 == 0 and 6 <= time_sec < 30 and past_time > 60:  # キャンドルの確認　秒指定だと飛ぶので、前回から●秒経過&秒数に余裕を追加
             print("■■■Candle調査", gl_live, gl_now, past_time)  # 表示用（実行時）
-            order_class.all_update_information(classes)  # 情報アップデート
+            classPosition.all_update_information(classes)  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50}, 1)  # 時間昇順(直近が最後尾）
             if d5_df['error'] == -1:
                 print("error Candle")
                 return -1
             else:
                 d5_df = d5_df['data']
-            tc = (datetime.datetime.now().replace(microsecond=0) - oanda_class.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
+            tc = (datetime.datetime.now().replace(microsecond=0) - classOanda.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
             if tc > 420:  # 何故か直近の時間がおかしい時がる
                 print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
@@ -421,10 +453,10 @@ def exe_manage():
             gl_latest_exe_time = datetime.datetime.now().replace(microsecond=0)
             # print(gl_latest_exe_time)
         elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
-            order_class.all_update_information(classes)  # 情報アップデート
+            classPosition.all_update_information(classes)  # 情報アップデート
             # order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
             # order_delete_function()  # 反対方向のオーダーは持たないことにする
-            if order_class.life_check(classes):  # いずれかのオーダーのLifeが生きている場合【【高頻度モードの条件】】
+            if classPosition.life_check(classes):  # いずれかのオーダーのLifeが生きている場合【【高頻度モードの条件】】
                 # print("■■", gl_live, gl_now)  # 表示用（実行時）
                 mode2()
 
@@ -433,18 +465,18 @@ def exe_manage():
             gl_first = 1
             gl_first_time = gl_now
             print("■■■初回", gl_now, gl_exe_mode, gl_live)  # 表示用（実行時）
-            order_class.all_update_information(classes)  # 情報アップデート
+            classPosition.all_update_information(classes)  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50}, 1)  # 時間昇順
             if d5_df['error'] == -1:
                 print("error Candle First")
             else:
                 d5_df = d5_df['data']
-            # tc = (datetime.datetime.now().replace(microsecond=0) - oanda_class.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
+            # tc = (datetime.datetime.now().replace(microsecond=0) - classOanda.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
             # if tc > 420:  # 何故か直近の時間がおかしい時がる
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 8, 24, 23, 30, 0)
+            # jp_time = datetime.datetime(2023, 8, 29, 14, 1, 0)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
@@ -499,8 +531,10 @@ gl_live = "Pra"
 gl_first_time = ""  # 初回の時間を抑えておく（LINEで見やすくするためだけ）
 gl_latest_exe_time = 0  # 実行タイミングに幅を持たせる（各５の倍数分の６秒~３０秒で１回実行）に利用する
 gl_latest_trigger_time = datetime.datetime.now() + datetime.timedelta(minutes=-6)  # 新規オーダーを入れてよいかの確認用
+gl_peak_memo = {"memo_latest_past":"", "memo_mini_gap_past": "", "memo_para": ""}
+
 # 倍率関係
-unit_mag = 10  # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
+unit_mag = 100 # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
 mag_unit_w = 1  # 勝っているときのUnit倍率
 mag_lc_w = 1  # 勝っているときのLC幅の調整
 mag_tp_w = 1  # 勝っているときのLC幅の調整
@@ -508,29 +542,27 @@ mag_unit_l = 2  # 負けている時のUnit倍率
 mag_lc_l = 0.8  # 負けているときのLC幅の調整
 mag_tp_l = 1  # 負けているときのLC幅の調整
 
-
-
 # ■オアンダクラスの設定
 fx_mode = 0  # 1=practice, 0=Live
 if fx_mode == 1:  # practice
-    oa = oanda_class.Oanda(tk.accountID, tk.access_token, tk.environment)  # インスタンス生成
+    oa = classOanda.Oanda(tk.accountID, tk.access_token, tk.environment)  # インスタンス生成
     gl_live = "Pra"
 else:  # Live
-    oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # インスタンス生成
+    oa = classOanda.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # インスタンス生成
     gl_live = "Live"
 
 # ■ポジションクラスの生成
-main_c = order_class.order_information("1", oa)  # 順思想のオーダーを入れるクラス
-second_c = order_class.order_information("2", oa)  # 順思想のオーダーを入れるクラス
-third_c = order_class.order_information("3", oa)  # 順思想のオーダーを入れるクラス
-fourth_c = order_class.order_information("4", oa)  # 順思想のオーダーを入れるクラス
-watch1_c = order_class.order_information("5", oa)
-watch2_c = order_class.order_information("6", oa)
+main_c = classPosition.order_information("1", oa)  # 順思想のオーダーを入れるクラス
+second_c = classPosition.order_information("2", oa)  # 順思想のオーダーを入れるクラス
+third_c = classPosition.order_information("3", oa)  # 順思想のオーダーを入れるクラス
+fourth_c = classPosition.order_information("4", oa)  # 順思想のオーダーを入れるクラス
+watch1_c = classPosition.order_information("5", oa)
+watch2_c = classPosition.order_information("6", oa)
 # ■ポジションクラスを一まとめにしておく
 classes = [main_c, second_c, third_c, fourth_c, watch1_c, watch2_c]
 
 # ■処理の開始
-order_class.reset_all_position(classes)  # 開始時は全てのオーダーを解消し、初期アップデートを行う
+classPosition.reset_all_position(classes)  # 開始時は全てのオーダーを解消し、初期アップデートを行う
 tk.line_send("■■新規スタート", gl_live)
 # main()
 exe_loop(1, exe_manage)  # exe_loop関数を利用し、exe_manage関数を1秒ごとに実行
