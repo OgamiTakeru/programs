@@ -5,6 +5,7 @@ import datetime
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as oanda_class
+import programs.classPosition2 as classPosition
 import programs.fTurnInspection as f  # とりあえずの関数集
 import programs.fPeakLineInspection as p
 
@@ -15,28 +16,57 @@ def peakLineInspection():
 
 def mode1():
     print("■■■■Mode1")
-    global gl_peak_memo
-    # チャート分析結果を取得する
-    inspection_condition = {
-        "now_price": gl_now_price_mid,  # 現在価格を渡す
-        "data_r": gl_data5r_df,  # 対象となるデータ
-        "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
-        "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
-        "time_str": gl_now_str,  # 記録用の現在時刻
+    info_r = {
+        "name": "test",
+        "units": 5,
+        "direction": -1,
+        "tp_range": 0,
+        "lc_range": 0,
+        "type": "MARKET",
+        "price": 145.500,
+        "order_permission": True,
+        "margin": 0
     }
-    # (5) ピーク情報（連続のLINE送信を抑える必要あり）
-    ans_dic = p.mainInspectionPeakLine(inspection_condition)
-    if ans_dic['para_send'] == 1:  # 送信フラグの場合
-        if gl_peak_memo["send1"] != ans_dic['para_memo']:  # 古いのと変化点探す
-            tk.line_send(ans_dic['para_memo'])  # 送信
-            gl_peak_memo["send1"] = ans_dic['para_memo']  # 古いのを入れ替え
-    if ans_dic['ans_send'] == 1:  # 送信フラグの場合
-        if gl_peak_memo["send2"] != ans_dic['ans_memo']:  # 古いのと変化点探す
-            tk.line_send(ans_dic['ans_memo'])  # 送信
-            gl_peak_memo["send2"] = ans_dic['ans_memo']  # 古いのを入れ替え
+    info_r = {
+        "name": "test",
+        "units": 10,
+        "direction": 1,
+        "tp_range": 0,
+        "lc_range": 0,
+        "type": "STOP",
+        "price": 147.600,
+        "order_permission": True,
+        "margin": 0
+    }
+    cTest.order_plan_registration(info_r)
+    cTest.print_info()
+
+    # チャート分析セクション
+    # global gl_peak_memo
+    # # チャート分析結果を取得する
+    # inspection_condition = {
+    #     "now_price": gl_now_price_mid,  # 現在価格を渡す
+    #     "data_r": gl_data5r_df,  # 対象となるデータ
+    #     "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
+    #     "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
+    #     "time_str": gl_now_str,  # 記録用の現在時刻
+    # }
+    # # (5) ピーク情報（連続のLINE送信を抑える必要あり）
+    # ans_dic = p.mainInspectionPeakLine(inspection_condition)
+    # if ans_dic['para_send'] == 1:  # 送信フラグの場合
+    #     if gl_peak_memo["send1"] != ans_dic['para_memo']:  # 古いのと変化点探す
+    #         tk.line_send(ans_dic['para_memo'])  # 送信
+    #         gl_peak_memo["send1"] = ans_dic['para_memo']  # 古いのを入れ替え
+    # if ans_dic['ans_send'] == 1:  # 送信フラグの場合
+    #     if gl_peak_memo["send2"] != ans_dic['ans_memo']:  # 古いのと変化点探す
+    #         tk.line_send(ans_dic['ans_memo'])  # 送信
+    #         gl_peak_memo["send2"] = ans_dic['ans_memo']  # 古いのを入れ替え
+
 
 def mode2():
     global gl_exe_mode
+    print("■■■■Mode2")
+    cTest.update_information()
     # print(" Mode2")
 
 
@@ -166,6 +196,13 @@ else:  # Live
     gl_live = "Live"
 
 
+price_dic = oa.NowPrice_exe("USD_JPY")['data']
+print("【現在価格live】", price_dic['mid'], price_dic['ask'], price_dic['bid'], price_dic['spread'])
+now_price = oa.NowPrice_exe("USD_JPY")['data']['mid']
+
 tk.line_send("■■新規スタート", gl_live)
 # main()
+oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+cTest = classPosition.order_information("6", oa)
 exe_loop(1, exe_manage)  # exe_loop関数を利用し、exe_manage関数を1秒ごとに実行

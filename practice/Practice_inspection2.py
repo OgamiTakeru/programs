@@ -447,7 +447,7 @@ class order_information:
                             # "trailingStopLoss": {"distance": 0.05, "timeInForce": "GTC"},
                         }
                         res = oa.TradeCRCDO_exe(p['id'], data)  # ポジションを変更する
-                        # before_lc_price = self.crcdo_lc_price  # Line送信用に取っておく
+                        # before_lc_price = self.changedLcPrice  # Line送信用に取っておく
                         self.crcdo_lc_price = temp_lc_price  # ロスカ変更後のLCラインを保存
                         # CDCRO結果の判定
                         if res['error'] == -1:
@@ -456,7 +456,7 @@ class order_information:
                             self.crcdo_set = True  # main本体で、ポジションを取る関数で解除する
                             self.crcdo_sec_counter = p['time_past']  # 変更時の経過時点を記録しておく
                             print("[TR]" + self.name + str(self.crcdo_lc_price))
-                            # tk.line_send("　(TR)", self.name, before_lc_price, "⇒", self.crcdo_lc_price, ",確保:",
+                            # tk.line_send("　(TR)", self.name, before_lc_price, "⇒", self.changedLcPrice, ",確保:",
                             #              round(temp_lc_range, 3), ",全:", p['pips'],
                             #              datetime.datetime.now().replace(microsecond=0))
                     else:

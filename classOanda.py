@@ -282,7 +282,6 @@ class Oanda:
                     data['order']['trailingStopLossOnFill'] = {}
                     data['order']['trailingStopLossOnFill']['distance'] = str(round(info['tr_range'], 3))  # ロスカット
                     data['order']['trailingStopLossOnFill']['timeInForce'] = "GTC"
-
             # print(data['order'])
 
             # 実行
@@ -310,6 +309,7 @@ class Oanda:
             # オーダー情報履歴をまとめておく
             order_info = {"price": str(round(info['price'], 3)),
                           "price_fill": str(price_fill),  # 約定価格
+                          "direction": info['ask_bid'],
                           "unit": str(info['units'] * info['ask_bid']),  # units数。基本10000 askはマイナス、bidはプラス値
                           "tp_price": str(round(info['price'] + (tp_range * info['ask_bid']), 3)),  # 計算のみ
                           "lc_price": str(round(info['price'] - (lc_range * info['ask_bid']), 3)),  # 計算の実
@@ -320,7 +320,8 @@ class Oanda:
                           "type": info['type'],
                           "cancel": canceled,
                           "order_id": order_id,
-                          "order_time": order_time
+                          "order_time": order_time,
+                          "json": res_json,
                           }
             return {"error": 0, "data": order_info}
 

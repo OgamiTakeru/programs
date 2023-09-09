@@ -1,5 +1,7 @@
 from oandapyV20 import API
 import oandapyV20.endpoints.instruments as instruments
+import datetime
+import programs.fGeneric as f
 
 
 # accountID = "101-009-20438763-001"  # デモ    # ★★★
@@ -29,6 +31,8 @@ class test:
         print(self.name)
         print(self.i)
 
-
-ins = test("i")
-ins.p()
+print(datetime.datetime.now())
+print(type(datetime.datetime.now()))
+print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}')
+print("TEST")
+print(f.now())

@@ -139,14 +139,7 @@ def latestFlagFigure(peak_informations):
     latest_info = calChangeFromPeaks(peak_informations['latest_peak_group'])
     second_info = calChangeFromPeaks(peak_informations['second_peak_group'])
     latest_peak_gap = latest_info['data'][0]['peak'] - second_info['data'][0]['peak']  # ピーク間の差分（大きさ）
-    latest_direction = latest_info['data'][0]['direction']
-    second_peak_gap = latest_info['data'][1]['peak'] - second_info['data'][1]['peak']  # ピーク間の差分（大きさ）
-    # print("■")
-    # print(latest_info['gap_latest2'], latest_info['memo_latest'])
-    # print(latest_info['data'])
-    # print(second_info['gap_latest2'], second_info['memo_latest'])
-    # print(second_info['data'])
-    # print("■")
+
     # ■二つがどのような形状か（平行、広がり、縮まり）
     lg = latest_info['gap_latest2']
     sg = second_info['gap_latest2']
@@ -154,11 +147,11 @@ def latestFlagFigure(peak_informations):
     send_para = 0
     if abs(lg - sg) < 0.005:  # ほぼ平行とみなす場合
         print("平行(", latest_peak_gap, ")")
-        para_memo = "平行" + str(round(latest_peak_gap, 3)) + ")"
+        para_memo = "平行 " + str(round(latest_peak_gap, 3)) + ")"
         send_para = 1
     else:
         para_memo = "Not平行"
-    para_memo = para_memo + latest_info['memo_latest']
+    para_memo = latest_info['memo_latest'] + para_memo
 
     # フラッグ形状の確認
     level_change = 0.011  # これより小さい場合、傾きが少ないとみなす
@@ -168,12 +161,10 @@ def latestFlagFigure(peak_informations):
     if abs(lg) < level_change:  # 「直近分が」単品の水平基準を満たす
         if slope_change <= abs(sg):  # 「セカンド分が」傾きが大きいとみなされる場合（セカンド群が）
             if sg < 0:  # 「セカンド分」が下向きの場合
-                print("直近水平：逆フラッグ成立")
-                ans_memo = "直近水平：逆フラッグ成立(" + str(round(latest_peak_gap, 3)) + ")"
+                ans_memo = "直近水平(逆フラ)" + str(round(latest_peak_gap, 3)) + ")"
                 send_ans = 1
             else:  # 「セカンド分が」上向きの場合
-                print("直近水平：正フラッグ成立⇒今後上がる")
-                ans_memo = "直近水平：正フラッグ成立" + str(round(latest_peak_gap, 3)) + ")"
+                ans_memo = "直近水平(正フラ)" + str(round(latest_peak_gap, 3)) + ")"
                 send_ans = 1
         elif level_change < abs(sg) < slope_change:  # 「セカンド分の」傾きが中途半端な場合
             print("直近水平")
@@ -182,18 +173,16 @@ def latestFlagFigure(peak_informations):
     elif abs(sg) < level_change:  # 「セカンド分が」水平の場合
         if slope_change <= abs(lg):  # 「直近分が」傾きが大きいとみなされる場合（セカンド群が）
             if lg < 0:  # 「直近分が」が下向きの場合
-                print("セカンド水平：逆フラッグ成立")
-                ans_memo = "セカンド水平：逆フラッグ成立(" + str(round(latest_peak_gap, 3)) + ")"
+                ans_memo = "セカ水平(逆フラ)" + str(round(latest_peak_gap, 3)) + ")"
                 send_ans = 1
             else:  # 「直近分が」上向きの場合
-                print("正フラッグ成立⇒今後上がる")
-                ans_memo = "セカンド水平：正成立⇒今後下がる(" + str(round(latest_peak_gap, 3)) + ")"
+                ans_memo = "セカ水平(正フラ)" + str(round(latest_peak_gap, 3)) + ")"
                 send_ans = 1
         elif level_change < abs(lg) < slope_change:  # 「直近分が」傾きが中途半端な場合
             print("セカンド水平")
         else:  # 「セカンド分」の傾きが水平の場合
             print("セカンド水平&平行")
-    ans_memo = ans_memo + latest_info['memo_latest']
+    ans_memo = latest_info['memo_latest'] + ans_memo
 
     return {
         "para_send": send_para,

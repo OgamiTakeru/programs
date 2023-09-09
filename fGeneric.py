@@ -18,6 +18,14 @@ def str_to_time(str_time):
     return time_dt
 
 
+def now():
+    now_str = f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}'
+    day = now_str[5:10]  # 01/01
+    day = day.replace("0", "")  # 1/1
+    time = now_str[11:19]  # 09:10
+    day_time = day + "_" + time
+    return day_time  # 文字列型の日付（秒まであり）を返す
+
 def delYear(original_time):
     # 2023/01/01 09:10:12
     day = original_time[5:10]  # 01/01
