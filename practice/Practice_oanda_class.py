@@ -10,9 +10,10 @@ import pandas as pd
 # 自作ファイルインポート
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-import programs.fTurnInspection as f  # とりあえずの関数集
+import programs.fTurnInspection as t  # とりあえずの関数集
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as oanda_class
+import programs.fGeneric as f
 from time import sleep
 import pytz
 from dateutil import tz
@@ -41,16 +42,24 @@ print("↑ここまで定例")
 
 # 注文テスト
 info = {
-    "units": 10,
+    "units": 9,
     "direction": 1,
     "tp_range": 0,
     "lc_range": 0,
     "type": "STOP",
-    "price": 145.400
+    "price": 146.000
+}
+info_market = {
+    "units": 6,
+    "direction": 1,
+    "tp_range": 0.04,
+    "lc_range": 0,
+    "type": "MARKET",
+    "price": 146.883
 }
 
 info_r = {
-    "units": 5,
+    "units": 19,
     "direction": -1,
     "tp_range": 0,
     "lc_range": 0,
@@ -68,176 +77,84 @@ info_r_big = {
 }
 
 ###APIレスポンステスト
-# (1)通常オーダー and クローズ
-print("■■■■■（１）")
-print("■■単発通常オーダー作成")
-order = oa.OrderCreate_dic_exe(info)
-order_id = order['data']['order_id']
-print(order)
-print("■■単発オーダー状態確認")
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー")
-print(state['data']['order_json'])
-print("ポジション")
-position_id = state['data']['position_id']
-print(state['data']['position_json'])
-print("■■単発オーダークローズ確認")
-closes = oa.TradeClose_exe(position_id, None)
-print(closes)
 
-# (2)2つの合体されるオーダー and クローズ
+test = oa.TradeDetails_exe(35925)
+f.print_json(test['data'])
+
+#
+# #  (3)一部逆方向が入り、打ち消される場合　後からのオーダーが前のオーダーより少ない場合
 oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
 oa.TradeAllClose_exe()
-print("■■■■■（２）")
-print("■■複数通常オーダー作成")
-print("■オーダー１")
+# print("■■■■■（３）")
+# print("■■通常オーダー作成")
+# print("■オーダー１")
 order = oa.OrderCreate_dic_exe(info)
 order_id = order['data']['order_id']
-print(order)
+f.print_json(oa.OrderDetails_exe(order_id)['data'])
+
+# # order = oa.OrderCreate_dic_exe(info)
 print("■オーダー２")
-order2 = oa.OrderCreate_dic_exe(info)
-order2_id = order2['data']['order_id']
-print(order2)
-print("■■複数同方向オーダー状態確認")
-print("■オーダー１", order_id)
-state = oa.OrderDetailsState_exe(order_id)
-print(state['data']['order_json'])
-print("オーダー１ポジション")
-print(state['data']['position_json'])
-print("■オーダー２", order2_id)
-state = oa.OrderDetailsState_exe(order2_id)
-print(state['data']['order_json'])
-print("オーダー２ポジション")
-print(state['data']['position_json'])
-
-#  (3)一部逆方向が入り、打ち消される場合　後からのオーダーが前のオーダーより少ない場合
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()
-print("■■■■■（３）")
-print("■■通常オーダー作成")
-print("■オーダー１")
-order = oa.OrderCreate_dic_exe(info)
-order_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１結果")
-print(order)  # オーダー結果
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
-print("■オーダー２", order2_id)
 order = oa.OrderCreate_dic_exe(info_r)
 order2_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order2_id)
 print("オーダー2結果")
-print(order)  # オーダー結果
-print("オーダー2詳細★Reduceが付、このポジションは消滅している")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー2　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
+# # f.print_json(order)  # オーダー結果
+print("オーダー２結果Detail")
+f.print_json(oa.OrderDetails_exe(order2_id)['data'])
 print("■オーダー１情報再表示")
-order_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細★Reduceが付く場合")
-print(state['data']['position_json'])  # ポジション詳細
+f.print_json(oa.OrderDetails_exe(order_id)['data'])
 
-#  (4)一部逆方向が入り、打ち消される場合　後からのオーダーが前のオーダーより多い場合
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()
-print("■■■■■（4）")
-print("■■通常オーダー作成")
-print("■オーダー１")
-order = oa.OrderCreate_dic_exe(info)
-order_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１結果")
-print(order)  # オーダー結果
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
-print("■オーダー逆大２", order2_id)
-order = oa.OrderCreate_dic_exe(info_r_big)
-order2_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order2_id)
-print("オーダー2結果")
-print(order)  # オーダー結果
-print("オーダー2詳細★Reduceが付、このポジションは消滅している")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー2　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
-print("■オーダー１情報再表示")
-order_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細★Reduceが付く場合")
-print(state['data']['position_json'])  # ポジション詳細
 
+
+#
 #  (5)部分解消の場合
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()
-print("■■■■■（5）")
-print("■■通常オーダー作成")
-print("■オーダー１")
-order = oa.OrderCreate_dic_exe(info)
-order_id = order['data']['order_id']
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１結果")
-print(order)  # オーダー結果
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細")
-position_id = state['data']['position_id']
-print(state['data']['position_json'])  # ポジション詳細
-print("■部分解消オーダー", order2_id)
-ans = oa.TradeClose_exe(position_id,{"units":"6"})
-print("部分解消オーダー オーダーJson")
-print(ans['data_json'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['tradeID'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['units'])  # 減らした分
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['realizedPL'])  # 減らした分の確定損益
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['price'])  # 減らしたタイミングの価格
-print("■オーダー１再表示")
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
-print("■部分解消オーダー", order2_id)
-ans = oa.TradeClose_exe(position_id,{"units":"3"})
-print("部分解消オーダー オーダーJson")
-print(ans['data_json'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['tradeID'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['units'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['realizedPL'])
-print(ans['data_json']['orderFillTransaction']['tradeReduced']['price'])
-print("■オーダー１再表示")
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１詳細")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細")
-print(state['data']['position_json'])  # ポジション詳細
-print("■オーダークローズ&再表示")
-ans = oa.TradeClose_exe(position_id,None)
-state = oa.OrderDetailsState_exe(order_id)
-print("オーダー１詳細　クローズ後")
-print(state['data']['order_json'])  # オーダー詳細
-print("オーダー１　ポジション詳細クローズ後1")
-print(state['data']['position_json'])  # ポジション詳細
+# oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+# oa.TradeAllClose_exe()
+# print("■■■■■（5）")
+# print("■■通常オーダー作成")
+# print("■オーダー１")
+# order = oa.OrderCreate_dic_exe(info)
+# order_id = order['data']['order_id']
+# position_id = order['data']['json']['orderFillTransaction']['id']
+# # f.print_json(order['data']['json'])
+# f.print_json(order['data']['json']['orderFillTransaction']['id'])
+# print("■部分解消オーダー")
+# ans = oa.TradeClose_exe(position_id,{"units": "6"})
+# # f.print_json(ans["data_json"])
+#
+# print("部分解消後、オーダー１はどうなるか")
+# order_detail = oa.OrderDetails_exe(order_id)
+# f.print_json(order_detail)
+# print("部分解消オーダー オーダーJson")
+# f.print_json(ans['data_json'])
+# print("部分解消オーダー　トレード")
+# details = oa.TradeDetails_exe(position_id)
+# f.print_json(details)
+# print(ans['data_json']['orderFillTransaction']['tradeReduced'])
+# print(ans['data_json']['orderFillTransaction']['tradeReduced']['tradeID'])
+# print(ans['data_json']['orderFillTransaction']['tradeReduced']['units'])  # 減らした分
+# print(ans['data_json']['orderFillTransaction']['tradeReduced']['realizedPL'])  # 減らした分の確定損益
+# print(ans['data_json']['orderFillTransaction']['tradeReduced']['price'])  # 減らしたタイミングの価格
+
 # 必ず
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()
+# oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+# oa.TradeAllClose_exe()
+
+
+
+
+
+
+
+
+
+
+
 
 
 # oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
 # oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
 # print(" オーダー実行↓")
-# order = oa.OrderCreate_dic_exe(info)
+# order = oa.OrderCreate_dic_exe(plan)
 # order_id = 33599  #order['data']['order_id']
 # print("オーダー結果↓")
 # # print(order)

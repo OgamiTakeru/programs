@@ -6,7 +6,7 @@ import datetime
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as oanda_class
 import programs.classPosition2 as classPosition
-import programs.fTurnInspection as f  # とりあえずの関数集
+import programs.fTurnInspection as t  # とりあえずの関数集
 import programs.fPeakLineInspection as p
 
 
@@ -18,7 +18,7 @@ def mode1():
     print("■■■■Mode1")
     info_r = {
         "name": "test",
-        "units": 5,
+        "units": 8,
         "direction": -1,
         "tp_range": 0,
         "lc_range": 0,
@@ -27,17 +27,17 @@ def mode1():
         "order_permission": True,
         "margin": 0
     }
-    info_r = {
-        "name": "test",
-        "units": 10,
-        "direction": 1,
-        "tp_range": 0,
-        "lc_range": 0,
-        "type": "STOP",
-        "price": 147.600,
-        "order_permission": True,
-        "margin": 0
-    }
+    # info_r = {
+    #     "name": "test",
+    #     "units": 10,
+    #     "direction": 1,
+    #     "tp_range": 0,
+    #     "lc_range": 0,
+    #     "type": "STOP",
+    #     "price": 147.600,
+    #     "order_permission": True,
+    #     "margin": 0
+    # }
     cTest.order_plan_registration(info_r)
     cTest.print_info()
 
@@ -116,7 +116,7 @@ def exe_manage():
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
             mode1()
             gl_latest_exe_time = datetime.datetime.now().replace(microsecond=0)  # 最終実行時間の取得
-        elif time_min % 1 == 0 and time_sec % 2 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
+        elif time_min % 1 == 0 and time_sec % 10 == 0:  # 高頻度での確認事項（キャンドル調査時のみ飛ぶ）
             mode2()
 
         # ■　初回だけ実行と同時に行う

@@ -369,7 +369,7 @@ def turn_merge_inspection(figure_condition):
     memo_info = " \n   @戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
     memo_info = memo_info + ",Body平均Old-Late:" + str(oldest_ans['body_ave']) + "," +str(latest_ans['body_ave'])
     memo_all = memo_all + memo_info + "," + memo
-    print("   ", memo_all)
+    # print("   ", memo_all)
 
     return{
         "oldest_ans": oldest_ans,

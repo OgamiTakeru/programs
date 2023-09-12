@@ -8,7 +8,8 @@ import pandas as pd
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as classOanda
 import programs.classPosition as classPosition  # とりあえずの関数集
-import programs.fTurnInspection as f  # とりあえずの関数集
+import programs.fTurnInspection as t  # とりあえずの関数集
+import programs.fGeneric as f
 
 
 def order_line_send(class_order_arr, add_info):
@@ -35,7 +36,7 @@ def order_line_send(class_order_arr, add_info):
         # オーダーを発行する（即時判断含める）
         if target_class.order_permission:
             # 送信用
-            o = target_class.order
+            o = target_class.plan
             memo_each = "【" + target_class.name + "】:\n" + str(price) \
                         + "(" + str(round(info['base_price'], 3)) + "+" + str(info['margin']) + "),\n tp:" \
                         + str(o['tp_price']) + "-lc:" + str(o['lc_price']) \
@@ -46,7 +47,7 @@ def order_line_send(class_order_arr, add_info):
     # 送信は一回だけにしておく。
     tk.line_send("■折返Position！", gl_live, gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
                  "トリガー:", info['trigger'], "指定価格", price, "情報:", info['memo'], ",オーダー:", '\n', o_memo,
-                 "初回時間", gl_first_time, "その他情報⇒", "WL:", add_info['wl_info'])
+                 '\n', "初回時間", gl_first_time, "その他情報⇒", "WL:", add_info['wl_info'])
 
 
 def order_delete_function():
@@ -56,14 +57,14 @@ def order_delete_function():
     :return:
     """
 
-    if main_c.position['state'] == "OPEN":  # and main_c.life:
+    if main_c.t_state == "OPEN":  # and main_c.life:
         # main（順思想がオーダー)が入っている場合、逆思想は消す
         if third_c.life or fourth_c.life:  # どちらかがOnの場合（基本は同時にOffになるはずだけど）
             third_c.close_order()
             fourth_c.close_order()
             watch2_c.close_order()
             tk.line_send("■逆思想オーダー削除（ポジションは解消しない）", third_c.life, fourth_c.life)
-    elif third_c.position['state']=="OPEN":# and third_c.life:
+    elif third_c.t_state == "OPEN":# and third_c.life:
         # third(逆思想オーダー）が入っている場合、順思想は消す
         if main_c.life or second_c.life:
             main_c.close_order()
@@ -88,8 +89,8 @@ def order_link_inspection():
     main = main_c
     mini = second_c
     # print("★★★", w.position['state'], w.position['time_past'], gl_now)
-    if w.position['state'] == "OPEN":
-        if w.pip_win_hold_time > 60:
+    if w.t_state == "OPEN":
+        if w.win_hold_time > 60:
             # ウォッチ用ポジションが取得に移行して、数秒したら追加オーダーを入れる（ウォッチ用は解除）
             # 価格を適正に守勢する
             # オーダー①
@@ -109,16 +110,16 @@ def order_link_inspection():
             mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.position['time_past'],
-                         "WinHold:", w.pip_win_hold_time, "pips:", w.position['pips'],
-                         datetime.datetime.now().replace(microsecond=0))
+            tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.t_time_past,
+                         "WinHold:", w.win_hold_time, "PLu:", w.t_pl_u,
+                         f.now())
 
     w = watch2_c
     main = third_c
     mini = fourth_c
     # print("★★★", w.position['state'], w.position['time_past'])
-    if w.position['state'] == "OPEN":
-        if w.pip_win_hold_time > 60 or w.position['pips'] >= 0.015:
+    if w.t_state == "OPEN":
+        if w.win_hold_time > 60 or w.self.t_pl_u >= 0.015:
             # そこそこのマイナスを経験後、今マイナスの場合
             # オーダー１
             main.order_permission = True
@@ -136,9 +137,9 @@ def order_link_inspection():
             mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.position['time_past'],
-                         "WinHold:", w.pip_win_hold_time, "pips", w.position['pips'],
-                         datetime.datetime.now().replace(microsecond=0))
+            tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.t_time_past,
+                         "WinHold:", w.win_max_plu, "PLu:", w.t_pl_u,
+                         f.now())
 
 
 def mode1():
@@ -157,7 +158,7 @@ def mode1():
         "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
         "time_str": gl_now_str,  # 記録用の現在時刻
     }
-    ans_dic = f.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
+    ans_dic = t.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
 
     # 一旦整理。。
     # (1) turn2関連
@@ -166,7 +167,6 @@ def mode1():
     # (2)ターン未遂部
     result_attempt_turn = ans_dic['latest3_figure_result']['result']
     result_attempt_turn_orders = ans_dic['latest3_figure_result']['order_dic']
-
 
     # LCを絞る時間
     lc_change_time = 540  # 通常は５４０くらいを想定
@@ -241,11 +241,10 @@ def mode1():
         order['lc_range'] = order['max_lc_range'] * mag_lc
         order['type'] = "STOP"  # 追加項目
         order['order_permission'] = False  # 即時の取得は行わない
-        order['crcdo'] = {
-            "crcdo_border": 0.10,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.05,
-            "crcdo_trail_ratio": 0.5,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
+        order['lc_change'] = {
+            "lc_change_exe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         main_c.order_plan_registration(order)
         # 順思想ミニオーダーの作成
@@ -259,11 +258,10 @@ def mode1():
         order_mini['lc_range'] = order_mini['lc_range'] * mag_lc * 0.6
         order_mini['type'] = "STOP"  # 追加項目
         order_mini['order_permission'] = False  # 即時の取得は行わない
-        order_mini['crcdo'] = {
-            "crcdo_border": 0.020,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.005,
-            "crcdo_trail_ratio": 0.8,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": True,  # トレールは実施有無（Trueは実施）
+        order_mini['lc_change'] = {
+            "lc_change_exe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         second_c.order_plan_registration(order_mini)
 
@@ -291,11 +289,10 @@ def mode1():
         order2['lc_range'] = order2['max_lc_range'] * mag_lc
         order2['type'] = "STOP"  # 追加項目
         order2['order_permission'] = False  # 即時の取得は行わない
-        order2['crcdo'] = {
-            "crcdo_border": 0.05,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.03,
-            "crcdo_trail_ratio": 0.6,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": False,  # トレールは実施有無（Trueは実施）
+        order2['lc_change'] = {
+            "lc_change_exe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         third_c.order_plan_registration(order2)
         # レンジミニオーダーの作成
@@ -309,11 +306,10 @@ def mode1():
         order2_mini['lc_range'] = order2_mini['lc_range'] * mag_lc * 0.4
         order2_mini['type'] = "STOP"  # 追加項目
         order2_mini['order_permission'] = False  # 即時の取得は行わない
-        order2_mini['crcdo'] = {
-            "crcdo_border": 0.020,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.004,
-            "crcdo_trail_ratio": 0.8,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": True,  # トレールは実施有無（Trueは実施）
+        order2_mini['lc_change'] = {
+            "lc_change_exe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         fourth_c.order_plan_registration(order2_mini)
         # レンジオーダーの集約
@@ -345,12 +341,10 @@ def mode1():
         order['tp_range'] = 0.1  # 追加項目
         order['lc_range'] = 0.1
         order['order_permission'] = False  # 即時の取得しない
-        order['crcdo'] = {
-            "crcdo_border": 0.038,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": -0.02,
-            "crcdo_trail_ratio": 0.7,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": True,  # トレールは実施有無（Trueは実施）
-            "order_timeout": 5,  # ターン未遂の場合は、時間による終了短め(分指定）
+        order['lc_change'] = {
+            "lc_changeLcExe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         main_c.order_plan_registration(order)
 
@@ -363,12 +357,10 @@ def mode1():
         order_mini['lc'] = 0.030  # order_mini['lc_range']
         order_mini['tp'] = 0.022
         order_mini['order_permission'] = False  # 即時の取得しない
-        order_mini['crcdo'] = {
-            "crcdo_border": 0.020,  # 0.05を超えたらCRCDOでcrcdo_guarantee
-            "crcdo_guarantee": 0.01,
-            "crcdo_trail_ratio": 0.8,  # トレール時、勝ちのN%ラインにトレールする
-            "crcdo_self_trail_exe": True,  # トレールは実施有無（Trueは実施）
-            "order_timeout": 5,  # ターン未遂の場合は、時間による終了短め(分指定）
+        order_mini['lc_change'] = {
+            "lc_change_exe": True,
+            "lc_ensure_range": 0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.04,
         }
         second_c.order_plan_registration(order_mini)
 
@@ -444,7 +436,7 @@ def exe_manage():
                 d5_df = d5_df['data']
             tc = (datetime.datetime.now().replace(microsecond=0) - classOanda.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
             if tc > 420:  # 何故か直近の時間がおかしい時がる
-                print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
+                print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], f.now())
 
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
@@ -476,13 +468,13 @@ def exe_manage():
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 8, 29, 14, 1, 0)
-            # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-            # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-            # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
-            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
-            # print(d5_df)
-            # d5_df = d5_df['data']
+            jp_time = datetime.datetime(2023, 9, 12, 18, 11, 0)
+            euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+            euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+            param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
+            d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            print(d5_df)
+            d5_df = d5_df['data']
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
@@ -534,7 +526,7 @@ gl_latest_trigger_time = datetime.datetime.now() + datetime.timedelta(minutes=-6
 gl_peak_memo = {"memo_latest_past":"", "memo_mini_gap_past": "", "memo_para": ""}
 
 # 倍率関係
-unit_mag = 100 # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
+unit_mag = 10 # 基本本番環境で動かす。unitsを低めに設定している為、ここで倍率をかけれる。
 mag_unit_w = 1  # 勝っているときのUnit倍率
 mag_lc_w = 1  # 勝っているときのLC幅の調整
 mag_tp_w = 1  # 勝っているときのLC幅の調整
