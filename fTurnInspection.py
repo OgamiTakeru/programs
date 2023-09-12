@@ -366,10 +366,10 @@ def turn_merge_inspection(figure_condition):
         turn_ans = 0  # 未達
         memo = "同方向"
 
-    memo_info = " \n   @戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
+    memo_info = "\n" + "  【ターン】戻り率" + str(return_ratio) + ",向き(old):" + str(oldest_ans['direction']) + ",縦幅(old):" + str(oldest_ans['gap'])
     memo_info = memo_info + ",Body平均Old-Late:" + str(oldest_ans['body_ave']) + "," +str(latest_ans['body_ave'])
     memo_all = memo_all + memo_info + "," + memo
-    # print("   ", memo_all)
+    print("   ", memo_all)
 
     return{
         "oldest_ans": oldest_ans,
@@ -394,7 +394,7 @@ def turn2_cal(inspection_condition):
     # 結果をもとに、価格を決定していく
     oa = classOanda.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)  # ★environmentl現在価格の取得
     now_price = oa.NowPrice_exe("USD_JPY")['data']['mid']  # ★現在価格の取得
-    print("  nowPrice", now_price)
+    # print("  nowPrice", now_price)
 
     # 注文情報を算出する
     main = {}  # 初期値を入れておく
@@ -611,7 +611,7 @@ def turnNotReached(ins_condition):
             }
         else:
             # print("   完全 dpr⇒", d, p, r)
-            res_memo = "Trun未遂達成"
+            res_memo = "【Trun未遂達成】"
             latest3_figure = 1
             order = {
                 "name": "ターン未遂",
@@ -628,7 +628,7 @@ def turnNotReached(ins_condition):
                 "memo": " "
             }
     else:
-        res_memo = "Trun未遂未達"
+        res_memo = "【Trun未遂未達】"
         latest3_figure = 0
         order = {
             "base_price": 0,
@@ -641,7 +641,7 @@ def turnNotReached(ins_condition):
     memo1 = " ,Dir:" + str(oldest_d) + str(middle_d) + str(latest_d)
     memo2 = " ,Body:" + str(oldest) + str(middle) + str(latest)
     memo3 = " ,body率" + str(round(oldest / middle, 1))
-    memo4 = ", TargetPrice:" + str(order['base_price'])
+    memo4 = ", Price:" + str(order['base_price'])
     memo5 = "結果dir,pip,ratio:" + str(d) + str(p) + str(r)
     memo_all = "  " + res_memo + memo4 + memo1 + memo2 + memo3 + memo4 + memo5
     print(memo_all)

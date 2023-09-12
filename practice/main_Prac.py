@@ -5,9 +5,7 @@ import datetime
 # 自作ファイルインポート
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as oanda_class
-import programs.classPosition2 as classPosition
-import programs.fTurnInspection as t  # とりあえずの関数集
-import programs.fPeakLineInspection as p
+import programs.practice.classPosition2 as classPosition
 
 
 def peakLineInspection():

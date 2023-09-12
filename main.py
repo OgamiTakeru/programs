@@ -377,7 +377,7 @@ def mode2():
     temp_date = datetime.datetime.now().replace(microsecond=0)
     if 0 <= int(temp_date.second) < 2:  # ＝１分に一回
         mes = classPosition.positions_time_past_info(classes)
-        print("■■■Mode2", datetime.datetime.now().replace(microsecond=0), mes)
+        print("■■■Mode2(各分表示)", f.now(), mes)
 
     order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
     order_delete_function()  # 反対方向のオーダーは持たないことにする
@@ -468,13 +468,13 @@ def exe_manage():
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            jp_time = datetime.datetime(2023, 9, 12, 18, 11, 0)
-            euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-            euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-            param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
-            d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
-            print(d5_df)
-            d5_df = d5_df['data']
+            # jp_time = datetime.datetime(2023, 9, 12, 18, 11, 0)
+            # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+            # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+            # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
+            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            # print(d5_df)
+            # d5_df = d5_df['data']
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用

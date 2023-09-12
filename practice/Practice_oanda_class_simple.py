@@ -20,7 +20,7 @@ from dateutil import tz
 
 # ★必須。Tokenの設定、クラスの実体化⇒これ以降、oa.関数名で呼び出し可能
 print("Start")
-oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
+# oa = oanda_class.Oanda(tk.accountID, tk.access_token, "practice")
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, tk.environmentl)
 # oa = classOanda.Oanda(tk.accountIDl, tk.access_tokenl, "live")
 
@@ -40,35 +40,37 @@ oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラ�
 print("↑ここまで定例")
 
 
+trade_ans = oa.TradeDetails_exe(36432)  # ■■API
+print(trade_ans)
 # 注文テスト
-info = {
-    "units": 10,
-    "direction": 1,
-    "tp_range": 0,
-    "lc_range": 0,
-    "type": "STOP",
-    "price": 147.850,
-    "tp_range": 0.01
-}
-
-info_r = {
-    "units": 5,
-    "direction": -1,
-    "tp_range": 0,
-    "lc_range": 0,
-    "type": "MARKET",
-    "price": 145.500
-}
-
-info_r_big = {
-    "units": 14,
-    "direction": -1,
-    "tp_range": 0,
-    "lc_range": 0,
-    "type": "MARKET",
-    "price": 145.500
-}
-
-order = oa.OrderCreate_dic_exe(info)
-print(order)
-f.print_json(order['data']['json'])
+# info = {
+#     "units": 10,
+#     "direction": 1,
+#     "tp_range": 0,
+#     "lc_range": 0,
+#     "type": "STOP",
+#     "price": 147.850,
+#     "tp_range": 0.01
+# }
+#
+# info_r = {
+#     "units": 5,
+#     "direction": -1,
+#     "tp_range": 0,
+#     "lc_range": 0,
+#     "type": "MARKET",
+#     "price": 145.500
+# }
+#
+# info_r_big = {
+#     "units": 14,
+#     "direction": -1,
+#     "tp_range": 0,
+#     "lc_range": 0,
+#     "type": "MARKET",
+#     "price": 145.500
+# }
+#
+# order = oa.OrderCreate_dic_exe(info)
+# print(order)
+# f.print_json(order['data']['json'])

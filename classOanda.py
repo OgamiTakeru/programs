@@ -668,7 +668,7 @@ class Oanda:
         except Exception as e:
             print(trade_id)
             e_info = error_method("TradeDetails", start_time, e)
-            return e_info
+            return {"data": e_info, "error": 1}
 
     # (14)指定のトレードの変更
     def TradeCRCDO_exe(self, trade_id, data):
@@ -730,7 +730,7 @@ class Oanda:
         else:
             open_df = open_df_dic['data']
             if len(open_df) == 0:
-                print("  @ポジションキャンセル(対象無し/trade)")
+                # print("  @ポジションキャンセル(対象無し/trade)")
                 return {"data":None, "error": 0}
             else:
                 count = 0
@@ -758,7 +758,7 @@ class Oanda:
         else:
             open_df = open_df_dic['data']
             if len(open_df) == 0:
-                print("  @ポジションキャンセル(対象無し/trade)")
+                print("  @tradeCountFunction(0)")
                 return {"data": 0, "error": 0}
             else:
                 return {"data": len(open_df), "error": 0}
@@ -928,65 +928,6 @@ class Oanda:
         print("トランザクションデータ取得完了")
         return for_ans
 
-    # 【Roll等を使い、過去足との平均値等を算出】
-    # def add_roll_info(self, data_df):
-    #     # IBM 当月と前月の差、当月と２か月前の差　直近３カ月比重（これどうしよう）
-    #     data_df['body_pass1'] = data_df['body'] - data_df['body'].shift(1)  # 自身と、一つ前足との差分（自身ーひとつ前）
-    #     data_df['body_pass2'] = data_df['body'] - data_df['body'].shift(2)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     data_df['body_pass3'] = data_df['body'] - data_df['body'].shift(3)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     # data_df['body1'] = data_df['body'].shift(1)  # 自身と、一つ前足との差分（自身ーひとつ前）
-    #     # data_df['body2'] = data_df['body'].shift(2)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     # data_df['body3'] = data_df['body'].shift(3)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #
-    #     data_df['body_abspass1'] = data_df['body_abs'] - data_df['body_abs'].shift(1)  # 自身と、一つ前足との差分（自身ーひとつ前）
-    #     data_df['body_abspass2'] = data_df['body_abs'] - data_df['body_abs'].shift(2)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     data_df['body_abspass3'] = data_df['body_abs'] - data_df['body_abs'].shift(3)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #
-    #     # data_df['up_rod1'] = data_df['up_rod'].shift(1)  # 自身と、一つ前足との差分（自身ーひとつ前）
-    #     # data_df['up_rod2'] = data_df['up_rod'].shift(2)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     # data_df['up_rod3'] = data_df['up_rod'].shift(3)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     # data_df['low_rod1'] = data_df['low_rod'].shift(1)  # 自身と、一つ前足との差分（自身ーひとつ前）
-    #     # data_df['low_rod2'] = data_df['low_rod'].shift(2)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #     # data_df['low_rod3'] = data_df['low_rod'].shift(3)  # 自身と、二つ前足との差分（自身ーふたつ前）
-    #
-    #     # 直近３個の平均値を求める
-    #     data_df['body_3mean'] = data_df['body'].rolling(3, min_periods=1).mean()
-    #
-    #     # 当足と３足前のクローズ価格の変化率（傾き）
-    #     data_df['tilt_close1'] = data_df['close'] - data_df['close'].shift(1)
-    #     data_df['tilt_close2'] = data_df['close'] - data_df['close'].shift(2)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['tilt_close3'] = data_df['close'] - data_df['close'].shift(3)
-    #     data_df['tilt_close6'] = data_df['close'] - data_df['close'].shift(6)
-    #     data_df['tile_3_6'] = data_df['tilt_close3'] + data_df['tilt_close6']
-    #
-    #     # 当月のbodyのBB占有率と、１つ前の占有率の差分
-    #     data_df['tilt_bb_body_ratio1'] = data_df['bb_body_ratio'] - data_df['bb_body_ratio'].shift(1)
-    #     data_df['tilt_bb_body_ratio2'] = data_df['bb_body_ratio'] - data_df['bb_body_ratio'].shift(2)  # 自身と、二つ足前の差分
-    #     data_df['bb_body_ratio1'] = data_df['bb_body_ratio'].shift(1)
-    #     data_df['bb_body_ratio2'] = data_df['bb_body_ratio'].shift(2)
-    #
-    #     # 当月のBB内比率の推移bb_over_ratio
-    #     data_df['bb_over_ratio_1'] = data_df['bb_over_ratio'] - data_df['bb_over_ratio'].shift(1)  # 一つ前足との差分
-    #     data_df['bb_over_ratio_2'] = data_df['bb_over_ratio'] - data_df['bb_over_ratio'].shift(2)  #
-    #     data_df['bb_under_ratio_1'] = data_df['bb_under_ratio'] - data_df['bb_under_ratio'].shift(1)
-    #     data_df['bb_under_ratio_2'] = data_df['bb_under_ratio'] - data_df['bb_under_ratio'].shift(2)  #
-    #
-    #     # Volumeについて
-    #     data_df['volume_tilt1'] = data_df['volume'] - data_df['volume'].shift(1)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['volume_tilt2'] = data_df['volume'] - data_df['volume'].shift(2)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     # data_df['volume_pass2'] = data_df['volume'].shift(1)
-    #     # data_df['volume_pass2'] = data_df['volume'].shift(2)
-    #
-    #     # ema関係について
-    #     data_df['cross_pass1'] = data_df['cross'].shift(1)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['cross_pass2'] = data_df['cross'].shift(2)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['cross_pass3'] = data_df['cross'].shift(3)
-    #     data_df['ema_gap_pass1'] = data_df['ema_gap'].shift(1)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['ema_gap_pass2'] = data_df['ema_gap'].shift(2)  # 自身と、二つ足前のクローズ価格の差分（傾きに近い）
-    #     data_df['ema_gap_pass3'] = data_df['ema_gap'].shift(3)
-    #     data_df['ema_gap_tilt3'] = data_df['ema_gap'] - data_df['ema_gap'].shift(3)
-    #     return data_df
-
 
 ############################################################
 # # 関連する関数
@@ -995,7 +936,7 @@ class Oanda:
 def error_method(name, start_time, e):
     now_time = datetime.datetime.now().replace(microsecond=0)
     past_sec = (now_time - start_time).seconds
-    print("　★API_Error【", name, "】", now_time, past_sec)
+    print("　★API_Error【", name, "】", now_time, past_sec, e)
     if past_sec > 10:
         print("   時間切れエラー？")
     else:

@@ -38,7 +38,7 @@ class order_information:
         self.t_close_time = 0
         self.t_close_price = 0
         # 経過情報
-        self.order_timeout = 10  # 分単位で指定
+        self.order_timeout = 25  # 分単位で指定
         self.win_hold_time = 0
         self.lose_hold_time = 0
         self.win_max_plu = 0
@@ -74,7 +74,7 @@ class order_information:
         self.t_close_time = 0
         self.t_close_price = 0
         # 経過情報
-        self.order_timeout = 10  # 分単位で指定
+        self.order_timeout = 25  # 分単位で指定
         self.win_hold_time = 0
         self.lose_hold_time = 0
         self.win_max_plu = 0
@@ -281,7 +281,7 @@ class order_information:
             else:  # ポジション取得待ち
                 self.o_time_past = order_latest['time_past']  # 経過時間を更新しておく
                 if order_latest['state'] == "PENDING":
-                    print("    時間的な解消を検討", self.o_time_past, self.o_state, "基準", self.order_timeout * 60)
+                    # print("    時間的な解消を検討", self.o_time_past, self.o_state, "基準", self.order_timeout * 60)
                     if self.o_time_past > self.order_timeout * 60 and (self.o_state == "" or self.o_state == "PENDING"):
                         tk.line_send("   時間解消@", self.name, self.o_time_past, ",", self.order_timeout, ",")
                         self.close_order()
@@ -291,6 +291,7 @@ class order_information:
         trade_ans = self.oa.TradeDetails_exe(self.t_id)  # ■■API
         if trade_ans['error'] == 1:
             print("    トレード情報取得Error＠update_information")
+            print(self.t_id)
             return 0
         trade_latest = trade_ans['data']['trade']  # Jsonデータの取得
 
@@ -306,12 +307,12 @@ class order_information:
             self.t_realize_pl = trade_latest['realizedPL']  # 情報更新
             self.t_close_time = trade_latest['closeTime']  # 情報更新
             self.t_close_price = trade_latest['averageClosePrice']
-            order_information.total_yen += round(float(trade_latest['realize_pl']), 2)
+            order_information.total_yen += round(float(trade_latest['realizedPL']), 2)
             # Line送信用
             res1 = "【Unit】" + str(trade_latest['initialUnits'])
             id_info = "【orderID】" + str(self.o_id)
             res2 = "【決:" + str(trade_latest['averageClosePrice']) + ", " + "取:" + str(trade_latest['price']) + "】"
-            res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.win_max_PLu) + "/ー域:" + str(self.lose_max_PLu)
+            res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.win_max_plu) + "/ー域:" + str(self.lose_max_plu)
             res3 = res3 + " 保持時間(秒)" + str(trade_latest['time_past'])
             res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(trade_latest['realizedPL']) + "円\n"
             res5 = "【合計】計" + str(order_information.total_PLu) + ",計" + str(order_information.total_yen) + "円"
@@ -368,7 +369,7 @@ class order_information:
         # 実行しない場合は何もせずに関数終了
         if not lc_exe or self.t_state != "OPEN":
             # エクゼフラグがFalse、または、Open以外の場合、「実行しない」
-            print("    LC_Change実行無し @ lc_change", lc_exe, self.position['state'])
+            print("    LC_Change実行無し @ lc_change", lc_exe, self.t_state)
             return 0
 
         # ■実行処理
@@ -419,7 +420,6 @@ def reset_all_position(classes):
     oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
     oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
     all_update_information(classes)  # 関数呼び出し（アップデート）
-    print("  RESET ALL POSITIONS ◆↑")
 
 
 def life_check(classes):
@@ -460,18 +460,6 @@ def position_check(classes):
     :param classes:
     :return:
     """
-    # main_c = classes[0]
-    # second_c = classes[1]
-    # third_c = classes[2]
-    # fourth_c = classes[3]
-    # # print(main_c.life, second_c.life, third_c.life, fourth_c.life, watch1_c.life, watch2_c.life)
-    # if main_c.position['state'] == "OPEN" or second_c.position['state'] == "OPEN" or \
-    #         third_c.position['state'] == "OPEN" or fourth_c.position['state'] == "OPEN":
-    #     ans = True
-    # else:
-    #     ans = False
-    # print(main_c.life, second_c.life, third_c.life, fourth_c.life)
-    # print(ans)
     open_positions = []
     not_open_positions = []
     for item in classes:
@@ -495,18 +483,6 @@ def positions_time_past_info(classes):
     :param classes:
     :return:
     """
-    # main_c = classes[0]
-    # second_c = classes[1]
-    # third_c = classes[2]
-    # fourth_c = classes[3]
-    # # print(main_c.life, second_c.life, third_c.life, fourth_c.life, watch1_c.life, watch2_c.life)
-    # if main_c.position['state'] == "OPEN" or second_c.position['state'] == "OPEN" or \
-    #         third_c.position['state'] == "OPEN" or fourth_c.position['state'] == "OPEN":
-    #     ans = True
-    # else:
-    #     ans = False
-    # print(main_c.life, second_c.life, third_c.life, fourth_c.life)
-    # print(ans)
     mes = ""
     for item in classes:
         if item.life:
