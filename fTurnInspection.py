@@ -542,17 +542,17 @@ def turnNotReached(ins_condition):
 
     # 下らないエラー対策
     if data_r.iloc[2]['body'] == 0:
-        oldest_body_temp = 0.0000001
+        oldest_body_temp = 0.0001
     else:
         oldest_body_temp = data_r.iloc[2]['body']
 
     if data_r.iloc[1]['body'] == 0:
-        middle_body_temp = 0.0000001
+        middle_body_temp = 0.0001
     else:
         middle_body_temp = data_r.iloc[1]['body']
 
     if data_r.iloc[0]['body'] == 0:
-        latest_body_temp = 0.0000001
+        latest_body_temp = 0.0001
     else:
         latest_body_temp = data_r.iloc[0]['body']
 
@@ -568,7 +568,7 @@ def turnNotReached(ins_condition):
     older_line = 0.01
     later_line = 0.006
     if middle == 0:
-        middle = 0.0000001
+        middle = 0.0001
 
     # print(oldest, oldest_d, middle, middle_d, latest, latest_d)
     # 三つの方向が形式にあっているか（↑↑↓か、↓↓↑）を確認

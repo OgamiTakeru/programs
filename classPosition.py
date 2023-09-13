@@ -545,11 +545,18 @@ def positions_time_past_info(classes):
 
 def position_info(classes):
     ans = ""
+    count = 0
     for item in classes:
         if "W" in item.name:  # Wと未遂は除外
             pass
         else:
             if item.life:
-                temp = item.name + "," + item.t_state + "," + str(item.t_unrealize_pl) + "," + str(item.t_time_past) + "\n"
+                # 文章生成
+                temp = item.name + "," + item.t_state + "," + str(item.t_unrealize_pl) + ","
+                temp = temp + str(item.t_time_past)
+                if count == 0:  # 初回のみ
+                    pass
+                else:
+                    temp = "\n" + temp  # 二個目以降を次の行とするために、改行を入れる
                 ans = ans + temp
     return ans
