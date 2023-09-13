@@ -559,12 +559,12 @@ def turnNotReached(ins_condition):
     # gapサイズを求める（小さい最場合は無効にするため）
     gap = round(data_r.iloc[2]['body_abs'] + data_r.iloc[1]['body_abs'], 3)
 
-    oldest = round(oldest_body_temp, 3)
-    oldest_d = oldest_body_temp / abs(oldest_body_temp)
-    middle = round(middle_body_temp, 3)
-    middle_d = middle_body_temp / abs(middle_body_temp)
-    latest = round(latest_body_temp, 3)
-    latest_d = latest_body_temp / abs(latest_body_temp)
+    oldest = round(oldest_body_temp, 1)
+    oldest_d = round(oldest_body_temp / abs(oldest_body_temp), 0)
+    middle = round(middle_body_temp, 1)
+    middle_d = round(middle_body_temp / abs(middle_body_temp), 0)
+    latest = round(latest_body_temp, 1)
+    latest_d = round(latest_body_temp / abs(latest_body_temp), 0)
     older_line = 0.01
     later_line = 0.006
     if middle == 0:
@@ -642,8 +642,8 @@ def turnNotReached(ins_condition):
     memo2 = " ,Body:" + str(oldest) + str(middle) + str(latest)
     memo3 = " ,body率" + str(round(oldest / middle, 1))
     memo4 = ", Price:" + str(order['base_price'])
-    memo5 = "結果dir,pip,ratio:" + str(d) + str(p) + str(r)
-    memo_all = "  " + res_memo + memo4 + memo1 + memo2 + memo3 + memo4 + memo5
+    memo5 = "結果dir,Bod,ratio:" + str(d) + str(p) + str(r)
+    memo_all = "  " + res_memo + memo4 + memo1 + memo2 + memo3 + memo5
     print(memo_all)
 
     return {"result": latest3_figure, "order_dic": order, "memo": memo_all}

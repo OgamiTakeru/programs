@@ -17,22 +17,5 @@ import programs.fGeneric as f
 # r = instruments.InstrumentsCandles(instrument="USD_JPY", params=params)
 # res = api.request(r)
 
-class test:
-    def __init__(self, name):
-        self.test = "a"
-        self.name = name
-        self.r()
-        print("test")
-
-    def r(self):
-        self.i = "p"
-
-    def p(self):
-        print(self.name)
-        print(self.i)
-
-print(datetime.datetime.now())
-print(type(datetime.datetime.now()))
-print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}')
-print("TEST")
-print(f.now())
+test = {}
+print(len(test))

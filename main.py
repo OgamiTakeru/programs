@@ -110,7 +110,7 @@ def order_link_inspection():
             mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（順思想）", main.name, mini.name, w.t_time_past,
+            tk.line_send("■追加オーダー（順思想））& W↑解除", main.name, mini.name, w.t_time_past,
                          "WinHold:", w.win_hold_time, "PLu:", w.t_pl_u,
                          f.now())
 
@@ -137,7 +137,7 @@ def order_link_inspection():
             mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（レンジ）", main.name, mini.name, w.t_time_past,
+            tk.line_send("■追加オーダー（レンジ）& W↑解除", main.name, mini.name, w.t_time_past,
                          "WinHold:", w.win_max_plu, "PLu:", w.t_pl_u,
                          f.now())
 
@@ -243,27 +243,33 @@ def mode1():
         order['order_permission'] = False  # 即時の取得は行わない
         order['lc_change'] = {
             "lc_change_exe": True,
-            "lc_ensure_range": 0.01,  # 最低限確保するPLu
-            "lc_trigger_range": 0.04,
+            "lc_ensure_range": 0.05,  # 最低限確保するPLu
+            "lc_trigger_range": 0.07,
         }
+        order['cascade_close_map_arr'] = [
+            {"range": 0.02, "close_ratio": 0.1},
+            {"range": 0.04, "close_ratio": 0.3},
+            {"range": 0.06, "close_ratio": 0.3},
+        ]
         main_c.order_plan_registration(order)
+
         # 順思想ミニオーダーの作成
-        order_mini = main_order.copy()
-        order_mini['name'] = order_mini['name'] + "m"
-        # order_mini['direction'] = order['direction'] * -1  # 追加項目
-        order_mini['target_class'] = second_c  # 追加項目　格納するクラス
-        order_mini['price'] = round(order_mini['base_price'] + order_mini['margin'], 3)
-        order_mini['units'] = round(order_mini['units'] * unit_mag * mag_unit_wl, 0)
-        order_mini['tp_range'] = order_mini['lc_range'] * mag_tp * 0.6
-        order_mini['lc_range'] = order_mini['lc_range'] * mag_lc * 0.6
-        order_mini['type'] = "STOP"  # 追加項目
-        order_mini['order_permission'] = False  # 即時の取得は行わない
-        order_mini['lc_change'] = {
-            "lc_change_exe": True,
-            "lc_ensure_range": 0.01,  # 最低限確保するPLu
-            "lc_trigger_range": 0.04,
-        }
-        second_c.order_plan_registration(order_mini)
+        # order_mini = main_order.copy()
+        # order_mini['name'] = order_mini['name'] + "m"
+        # # order_mini['direction'] = order['direction'] * -1  # 追加項目
+        # order_mini['target_class'] = second_c  # 追加項目　格納するクラス
+        # order_mini['price'] = round(order_mini['base_price'] + order_mini['margin'], 3)
+        # order_mini['units'] = round(order_mini['units'] * unit_mag * mag_unit_wl, 0)
+        # order_mini['tp_range'] = order_mini['lc_range'] * mag_tp * 0.6
+        # order_mini['lc_range'] = order_mini['lc_range'] * mag_lc * 0.6
+        # order_mini['type'] = "STOP"  # 追加項目
+        # order_mini['order_permission'] = False  # 即時の取得は行わない
+        # order_mini['lc_change'] = {
+        #     "lc_change_exe": True,
+        #     "lc_ensure_range": 0.005,  # 最低限確保するPLu
+        #     "lc_trigger_range": 0.02,
+        # }
+        # second_c.order_plan_registration(order_mini)
 
         # (2)レンジオーダー群作成
         # レンジオーダーの元を作成
@@ -291,29 +297,36 @@ def mode1():
         order2['order_permission'] = False  # 即時の取得は行わない
         order2['lc_change'] = {
             "lc_change_exe": True,
-            "lc_ensure_range": 0.01,  # 最低限確保するPLu
-            "lc_trigger_range": 0.04,
+            "lc_ensure_range": -0.01,  # 最低限確保するPLu
+            "lc_trigger_range": 0.03,
         }
+        order['cascade_close_map_arr'] = [
+            {"range": 0.02, "close_ratio": 0.2},
+            {"range": 0.04, "close_ratio": 0.4},
+            {"range": 0.06, "close_ratio": 0.2},
+        ]
         third_c.order_plan_registration(order2)
-        # レンジミニオーダーの作成
-        order2_mini = junc_order.copy()
-        order2_mini['name'] = order2_mini['name'] + "m"  # 編集
-        # order2_mini['direction'] = order2_mini['direction'] * -1
-        order2_mini['target_class'] = fourth_c  # 追加項目　格納するクラス
-        order2_mini['price'] = round(order2_mini['base_price'] + order2_mini['margin'], 3)
-        order2_mini['units'] = round(order2_mini['units'] * unit_mag * mag_unit_wl, 3)  # 編集
-        order2_mini['tp_range'] = order2_mini['lc_range'] * mag_tp * 0.4  # 追加項目
-        order2_mini['lc_range'] = order2_mini['lc_range'] * mag_lc * 0.4
-        order2_mini['type'] = "STOP"  # 追加項目
-        order2_mini['order_permission'] = False  # 即時の取得は行わない
-        order2_mini['lc_change'] = {
-            "lc_change_exe": True,
-            "lc_ensure_range": 0.01,  # 最低限確保するPLu
-            "lc_trigger_range": 0.04,
-        }
-        fourth_c.order_plan_registration(order2_mini)
+        # # レンジミニオーダーの作成
+        # order2_mini = junc_order.copy()
+        # order2_mini['name'] = order2_mini['name'] + "m"  # 編集
+        # # order2_mini['direction'] = order2_mini['direction'] * -1
+        # order2_mini['target_class'] = fourth_c  # 追加項目　格納するクラス
+        # order2_mini['price'] = round(order2_mini['base_price'] + order2_mini['margin'], 3)
+        # order2_mini['units'] = round(order2_mini['units'] * unit_mag * mag_unit_wl, 3)  # 編集
+        # order2_mini['tp_range'] = order2_mini['lc_range'] * mag_tp * 0.4  # 追加項目
+        # order2_mini['lc_range'] = order2_mini['lc_range'] * mag_lc * 0.4
+        # order2_mini['type'] = "STOP"  # 追加項目
+        # order2_mini['order_permission'] = False  # 即時の取得は行わない
+        # order2_mini['lc_change'] = {
+        #     "lc_change_exe": True,
+        #     "lc_ensure_range": 0.004,  # 最低限確保するPLu
+        #     "lc_trigger_range": 0.02,
+        # }
+        # fourth_c.order_plan_registration(order2_mini)
+
         # レンジオーダーの集約
-        order_pair = [watch_main, order, order_mini, watch_main2, order2, order2_mini]  # LINE用とか
+        # order_pair = [watch_main, order, order_mini, watch_main2, order2, order2_mini]  #
+        order_pair = [watch_main, order, watch_main2, order2]  # LINE用とか
         order_line_send(order_pair, add_info)
 
     elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）

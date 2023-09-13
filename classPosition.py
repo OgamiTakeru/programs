@@ -45,8 +45,8 @@ class order_information:
         self.lose_max_plu = 0
         # ロスカット変更情報
         self.lc_change_dic = {}  # 空を持っておくだけ
-        # 部分決済情報
-        #
+        # 部分決済マップ
+        self.cascade_close_map_arr = []
 
     def reset(self):
         # 情報の完全リセット（テンプレートに戻す）
@@ -79,6 +79,10 @@ class order_information:
         self.lose_hold_time = 0
         self.win_max_plu = 0
         self.lose_max_plu = 0
+        # ロスカット変更情報
+        self.lc_change_dic = {}  # 空を持っておくだけ
+        # 部分決済マップ
+        self.cascade_close_map_arr = []
 
     def print_info(self):
         print("   <表示>", self.name, datetime.datetime.now().replace(microsecond=0))
@@ -113,7 +117,11 @@ class order_information:
 
         # (4)LC_Change情報を格納する
         if "lc_change" in plan:
-            self.lc_change_dic = self.plan['lc_change']  # 辞書を丸ごと
+            self.lc_change_dic = plan['lc_change']  # 辞書を丸ごと
+
+        # (5)カスケードクローズ情報を格納する
+        if "cascade_close_map_arr" in plan:
+            self.cascade_close_map_arr = plan['cascade_close_map_arr']
 
         # (Final)オーダーを発行する
         if self.order_permission:
@@ -206,11 +214,14 @@ class order_information:
 
         if units is None:  # 全ポジション解除の場合
             print(" 　PositionClose関数", self.name)
-            self.life_set(False)  # LIFEフラグの変更は、APIがエラーデモ実行する
+            self.life_set(False)  # LIFEフラグの変更は、APIがエラーでも実行する
             self.t_state = "CLOSED"
             tk.line_send("  ポジション強制解消", self.t_id, self.t_pl_u)
         else:  # 部分解除の場合
-            print("  PositionClose部分　関数", self.name)
+            if float(units) > self.t_current_units :
+                tk.line_send("    指定されたCloseUnitsが大（Errorになる)", units, ">", self.t_current_units)
+                return 0
+            print("  PositionClose部分　関数", self.name, units, "CurUnits:", self.t_current_units)
             res_json = close_res['data_json']  # jsonデータを取得
             tradeID = res_json['orderFillTransaction']['tradeReduced']['tradeID']
             units = res_json['orderFillTransaction']['tradeReduced']['units']
@@ -228,6 +239,11 @@ class order_information:
             # self.output_res()  # 解析用にポジション情報を収集しておく
 
     def updateWinLoseTime(self, new_pl):
+        """
+        最新の勝ち負け情報（PLu)を渡される。
+        :param new_pl:
+        :return:
+        """
         # (1)pip情報の推移を記録する(プラス域維持時間とマイナス維持時間を求める）
         if new_pl >= 0:  # 今回プラス域である場合
             self.lose_hold_time = 0  # Lose継続時間は必ず０に初期化（すでに０の場合もあるけれど）
@@ -283,7 +299,7 @@ class order_information:
                 if order_latest['state'] == "PENDING":
                     # print("    時間的な解消を検討", self.o_time_past, self.o_state, "基準", self.order_timeout * 60)
                     if self.o_time_past > self.order_timeout * 60 and (self.o_state == "" or self.o_state == "PENDING"):
-                        tk.line_send("   時間解消@", self.name, self.o_time_past, ",", self.order_timeout, ",")
+                        tk.line_send("   時間解消(order)@", self.name, self.o_time_past, ",", self.order_timeout, ",")
                         self.close_order()
                 return 0
 
@@ -296,7 +312,7 @@ class order_information:
         trade_latest = trade_ans['data']['trade']  # Jsonデータの取得
 
         # 変化による通知等を実施する(情報を完全にUpdateする前に実施）
-        if self.o_state == "PENDING" and order_latest['state'] == 'FILLED':  # オーダー達成（Pending⇒Filled）
+        if (self.o_state == "PENDING" or self.o_state == "") and order_latest['state'] == 'FILLED':  # オーダー達成（Pending⇒Filled）
             if trade_latest['state'] == 'OPEN':  # ポジション所持状態
                 tk.line_send("    (取得)", self.name, f.now())
             elif trade_latest['position_state'] == 'CLOSED':  # ポジションクローズ（ポジション取得とほぼ同時にクローズ[異常]）
@@ -307,14 +323,14 @@ class order_information:
             self.t_realize_pl = trade_latest['realizedPL']  # 情報更新
             self.t_close_time = trade_latest['closeTime']  # 情報更新
             self.t_close_price = trade_latest['averageClosePrice']
-            order_information.total_yen += round(float(trade_latest['realizedPL']), 2)
+            order_information.total_yen = round(order_information.total_yen + float(trade_latest['realizedPL']), 2)
             # Line送信用
             res1 = "【Unit】" + str(trade_latest['initialUnits'])
             id_info = "【orderID】" + str(self.o_id)
             res2 = "【決:" + str(trade_latest['averageClosePrice']) + ", " + "取:" + str(trade_latest['price']) + "】"
             res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.win_max_plu) + "/ー域:" + str(self.lose_max_plu)
             res3 = res3 + " 保持時間(秒)" + str(trade_latest['time_past'])
-            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(trade_latest['realizedPL']) + "円\n"
+            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(round(trade_latest['realizedPL']), 2) + "円\n"
             res5 = "【合計】計" + str(order_information.total_PLu) + ",計" + str(order_information.total_yen) + "円"
             tk.line_send(" ▲解消:", self.name, '\n', f.now(), '\n',
                          res4, res5, res1, id_info, res2, res3)
@@ -339,7 +355,7 @@ class order_information:
             self.t_realize_pl = trade_latest['realizedPL']
         self.t_pl_u = trade_latest['PLu']
 
-        # ポジションの時間的な解消を行う
+        # ポジションに対する時間的な解消を行う
         if "W" in self.name:  # ウォッチ用のポジションは時間で消去。ただしCRCDOはしない
             if self.t_time_past > 1200 and self.t_state == "OPEN":
                 tk.line_send("   W-Position時間解消", self.name, self.o_time_past)
@@ -347,20 +363,23 @@ class order_information:
         else:
             # LCの底上げを行う
             self.lc_change()
+            # 部分解消を行う
+            self.cascade_close()
             # トレールの実施を行う
             # self.trail()
 
     def lc_change(self):  # ポジションのLC底上げを実施 (基本的にはUpdateで平行してする形が多いかと）
         """
         ロスカット底上げを実施する。
-        必要変数
-        lc_changeLcExe: Trueの時に実行される。基本一回実行されると自動的にFalseに変更される（２回は実行しない）
-        lc_ensureLine: 個の幅分だけ、LC価格をせり上げる。プラス値でLCせり上げ、マイナス値でLC幅を広げる
-        lc_changeTriggerLine: LCChangeのトリガーとなる価格
-        changedLcPrice: 返される値。変更後の価格（計算値）
-        changedLcPriceTimePast: 何秒経過時にLC変更が入ったか
+        lc_change_dicに格納された情報を元に実施。
+        lc_change_dicはPlanと同時にクラスに渡される。
         :return:
         """
+        if len(self.lc_change_dic) == 0:
+            # 指定がない場合は実行しない。
+            return 0
+
+        # コードの１行を短くするため、置きかておく
         lc_exe = self.lc_change_dic['lc_change_exe']
         lc_ensure_range = self.lc_change_dic['lc_ensure_range']
         lc_trigger_range = self.lc_change_dic['lc_trigger_range']
@@ -389,6 +408,42 @@ class order_information:
                              "Border:", lc_trigger_range, "保証", lc_ensure_range, "Posiprice", self.t_execution_price,
                              "予定価格", self.plan['price'])
 
+    def cascade_close(self):
+        """
+        self.cascade_close_map配列 を元に、部分決済（利確、LC）を行っておく
+        self.cascade_close_map配列はPlanと同時に渡される。
+        配列は辞書の配列で、辞書の中身は
+        {"range":0.01, "close_ratio": 0.1}
+        の辞書形式の配列で、添字０からrangeが小さく、添え字が大きくなるとrangeが大きくなるようにする
+        rangeはPLuが到達したら、InitialUnitsのclose_ratio分(割合指定）をクローズする。
+        close_ratioは配列内の合計は１以下であること。
+        :return:
+        """
+        if len(self.cascade_close_map_arr) == 0:
+            # 設定がない場合、カスケードクローズは実施しない
+            return 0
+
+        # self.cascade_close_map_arrに済フラグを付ける
+        print("CASCAD CLOSE")
+        print(self.cascade_close_map_arr)
+        close_ratio = 0  # 初期値は０
+        for i in len(self.cascade_close_map_arr):
+            if self.cascade_close_map_arr[i]['range'] >= self.t_pl_u:
+                if "done" in self.cascade_close_map_arr[i]:
+                    # 実施済の場合
+                    pass
+                else:
+                    # 実施していない場合、情報格納 & 実施済フラグ追加
+                    over_range = self.cascade_close_map_arr[i]['range']  # 超えた分
+                    close_ratio += self.cascade_close_map_arr[i]['close_ratio']  # 累積の割合
+                    self.cascade_close_map_arr[i]['done'] = "1"
+        print(self.cascade_close_map_arr)
+        print(over_range, close_ratio, self.t_initial_units, str(round(self.t_initial_units * close_ratio, 0)))
+        # Close実行
+        if close_ratio != 0:
+            # クローズ対象が０ではない場合、クローズを実施する
+            self.close_position(str(round(self.t_initial_units * close_ratio, 0)))
+        return 0
 
 
 
@@ -427,16 +482,6 @@ def life_check(classes):
     オーダーが生きているかを確認する。一つでも生きていればＴｒｕｅを返す
     :return:
     """
-    # main_c = classes[0]
-    # second_c = classes[1]
-    # third_c = classes[2]
-    # fourth_c = classes[3]
-    # watch1_c = classes[4]
-    # watch2_c = classes[5]
-    # if main_c.life or second_c.life or third_c.life or fourth_c.life or watch1_c.life or watch2_c.life:
-    #     ans = True
-    # else:
-    #     ans = False
 
     life = []
     unlife = []
