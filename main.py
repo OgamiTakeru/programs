@@ -396,7 +396,9 @@ def mode2():
     temp_date = datetime.datetime.now().replace(microsecond=0)
     if 0 <= int(temp_date.second) < 2:  # ＝１分に一回
         mes = classPosition.positions_time_past_info(classes)
-        print("■■■Mode2(各分表示)", f.now(), mes)
+        classes_info = classPosition.position_info(classes)
+        print("■■■Mode2(各分表示 &　いずれかポジション有)", f.now())
+        print("    ", classes_info)
 
     order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
     order_delete_function()  # 反対方向のオーダーは持たないことにする
@@ -468,7 +470,6 @@ def exe_manage():
             # order_link_inspection()  # watchを活用した場合、watchの状況で残りを確定する場合
             # order_delete_function()  # 反対方向のオーダーは持たないことにする
             if classPosition.life_check(classes):  # いずれかのオーダーのLifeが生きている場合【【高頻度モードの条件】】
-                # print("■■", gl_live, gl_now)  # 表示用（実行時）
                 mode2()
 
         # ■　初回だけ実行と同時に行う

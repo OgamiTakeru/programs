@@ -541,3 +541,15 @@ def positions_time_past_info(classes):
             mes = mes + item.name + ":" + str(item.t_time_past) + ","
 
     return mes
+
+
+def position_info(classes):
+    ans = ""
+    for item in classes:
+        if "W" in item.name:  # Wと未遂は除外
+            pass
+        else:
+            if item.life:
+                temp = item.name + "," + item.t_state + "," + str(item.t_unrealize_pl) + "," + str(item.t_time_past) + "\n"
+                ans = ans + temp
+    return ans
