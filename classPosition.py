@@ -206,28 +206,36 @@ class order_information:
             print("    position既にないが、Close関数呼び出しあり", self.name)
             return 0
 
-        close_res = self.oa.TradeClose_exe(self.t_id, units)  # オーダーを実行
-        if close_res['error'] == -1:  # APIエラーの場合終了。ただし、
-            if units is None:
-                self.life_set(False)  # ★大事　全解除の場合、APIがエラーでもLIFEフラグは取り下げる
-            return 0
-
         if units is None:  # 全ポジション解除の場合
-            print(" 　PositionClose関数", self.name)
             self.life_set(False)  # LIFEフラグの変更は、APIがエラーでも実行する
             self.t_state = "CLOSED"
-            tk.line_send("  ポジション強制解消", self.t_id, self.t_pl_u)
-        else:  # 部分解除の場合
-            if float(units) > self.t_current_units :
-                tk.line_send("    指定されたCloseUnitsが大（Errorになる)", units, ">", self.t_current_units)
+            close_res = self.oa.TradeClose_exe(self.t_id, None)  # ★オーダーを実行
+            if close_res['error'] == -1:  # APIエラーの場合終了。ただし、
+                tk.line_send("  ★ポジション解消ミスNone＠close_position", self.name, self.t_id, self.t_pl_u)
                 return 0
-            print("  PositionClose部分　関数", self.name, units, "CurUnits:", self.t_current_units)
+            tk.line_send("  ポジション解消＠close_position", self.name, self.t_id, self.t_pl_u)
+
+        else:  # 部分解除の場合
+            if float(units) > float(self.t_current_units):
+                # 部分解消が失敗しそうなオーダーになっている場合
+                tk.line_send("    指定されたCloseUnits大（Error)⇒全解除, units", ">", self.t_current_units)
+                self.life_set(False)  # ★大事　全解除の場合、APIがエラーでもLIFEフラグは取り下げる
+                self.t_state = "CLOSED"
+                close_res = self.oa.TradeClose_exe(self.t_id, {"units": None})  # ★オーダーを実行
+                return 0
+            else:
+                # 部分解消が正常に実行できる注文数の場合
+                close_res = self.oa.TradeClose_exe(self.t_id, {"units": units})  # ★オーダーを実行
+
+            if close_res['error'] == -1:  # APIエラーの場合終了。ただし、
+                tk.line_send("  ★ポジション解消ミス部分＠close_position", self.name, self.t_id, self.t_pl_u)
+                return 0
             res_json = close_res['data_json']  # jsonデータを取得
             tradeID = res_json['orderFillTransaction']['tradeReduced']['tradeID']
             units = res_json['orderFillTransaction']['tradeReduced']['units']
             realizedPL = res_json['orderFillTransaction']['tradeReduced']['realizedPL']
             price = res_json['orderFillTransaction']['tradeReduced']['price']
-            tk.line_send("  ポジション部分解消: UNITS", units, "PL", realizedPL, "price", price)
+            tk.line_send("  ポジション部分解消", self.name, self.t_id, self.t_pl_u, "UNITS", units, "PL", realizedPL, "price", price)
 
     def life_set(self, boo):
         self.life = boo
@@ -320,7 +328,7 @@ class order_information:
                 self.life_set(False)
         elif self.t_state == "OPEN" and trade_latest['state'] == "CLOSED":  # 通常の成り行きのクローズ時
             self.life_set(False)  # まずはLifeを終了
-            self.t_realize_pl = trade_latest['realizedPL']  # 情報更新
+            self.t_realize_pl = round(float(trade_latest['realizedPL']), 2)  # 情報更新
             self.t_close_time = trade_latest['closeTime']  # 情報更新
             self.t_close_price = trade_latest['averageClosePrice']
             order_information.total_yen = round(order_information.total_yen + float(trade_latest['realizedPL']), 2)
@@ -330,7 +338,7 @@ class order_information:
             res2 = "【決:" + str(trade_latest['averageClosePrice']) + ", " + "取:" + str(trade_latest['price']) + "】"
             res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.win_max_plu) + "/ー域:" + str(self.lose_max_plu)
             res3 = res3 + " 保持時間(秒)" + str(trade_latest['time_past'])
-            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(round(trade_latest['realizedPL']), 2) + "円\n"
+            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(self.t_realize_pl) + "円\n"
             res5 = "【合計】計" + str(order_information.total_PLu) + ",計" + str(order_information.total_yen) + "円"
             tk.line_send(" ▲解消:", self.name, '\n', f.now(), '\n',
                          res4, res5, res1, id_info, res2, res3)
@@ -354,6 +362,7 @@ class order_information:
         elif trade_latest['state'] == "CLOSED":  # いる？
             self.t_realize_pl = trade_latest['realizedPL']
         self.t_pl_u = trade_latest['PLu']
+        # print(self.t_pl_u, "PL 365行目", self.name, f.now())
 
         # ポジションに対する時間的な解消を行う
         if "W" in self.name:  # ウォッチ用のポジションは時間で消去。ただしCRCDOはしない
@@ -388,7 +397,7 @@ class order_information:
         # 実行しない場合は何もせずに関数終了
         if not lc_exe or self.t_state != "OPEN":
             # エクゼフラグがFalse、または、Open以外の場合、「実行しない」
-            print("    LC_Change実行無し @ lc_change", lc_exe, self.t_state)
+            # print("    LC_Change実行無し @ lc_change", lc_exe, self.t_state)
             return 0
 
         # ■実行処理
@@ -424,11 +433,11 @@ class order_information:
             return 0
 
         # self.cascade_close_map_arrに済フラグを付ける
-        print("CASCAD CLOSE")
-        print(self.cascade_close_map_arr)
+        # print("CASCAD CLOSE")
         close_ratio = 0  # 初期値は０
-        for i in len(self.cascade_close_map_arr):
-            if self.cascade_close_map_arr[i]['range'] >= self.t_pl_u:
+        for i in range(len(self.cascade_close_map_arr)):
+            if self.cascade_close_map_arr[i]['range'] <= self.t_pl_u:  # 今の価値額が基準マップのどこまで超えているかを確認。
+                # print("BIG", self.name ,self.cascade_close_map_arr[i]['range'], self.t_pl_u, self.cascade_close_map_arr[i])
                 if "done" in self.cascade_close_map_arr[i]:
                     # 実施済の場合
                     pass
@@ -437,15 +446,13 @@ class order_information:
                     over_range = self.cascade_close_map_arr[i]['range']  # 超えた分
                     close_ratio += self.cascade_close_map_arr[i]['close_ratio']  # 累積の割合
                     self.cascade_close_map_arr[i]['done'] = "1"
-        print(self.cascade_close_map_arr)
-        print(over_range, close_ratio, self.t_initial_units, str(round(self.t_initial_units * close_ratio, 0)))
+        # print(self.cascade_close_map_arr)
         # Close実行
         if close_ratio != 0:
             # クローズ対象が０ではない場合、クローズを実施する
-            self.close_position(str(round(self.t_initial_units * close_ratio, 0)))
+            target_units = str(int(float(self.t_initial_units) * float(close_ratio)))
+            self.close_position(target_units)
         return 0
-
-
 
 
 def error_end(info):
@@ -470,7 +477,7 @@ def reset_all_position(classes):
     全てのオーダー、ポジションをリセットして、更新する
     :return:
     """
-    print("  RESET ALL POSITIONS ◆↓")
+    print("  RESET ALL POSITIONS")
     oa = classes[0].oa  # とりあえずクラスの一つから。オアンダのクラスを取っておく
     oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
     oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）

@@ -452,7 +452,7 @@ def turn2_cal(inspection_condition):
             "type": "STOP",
             "lc_range": round(lc_range_abs * trend_d * -1, 3),
             "tp_range": round(tp_range_abs * trend_d, 3),
-            "units": 40,
+            "units": 10,
             "max_lc_range": max_range_abs * trend_d * -1,  # 最大LCの許容値（LCとイコールの場合もあり）
             "trigger": "ターン",
             "memo": memo_all,
@@ -509,7 +509,7 @@ def turn2_cal(inspection_condition):
             "type": "STOP",
             "lc_range": round(lc_range2_abs * range_d * -1, 3),
             "tp_range": round(tp_range2_abs * range_d, 3),
-            "units": 40,
+            "units": 10,
             "max_lc_range": max_range2_abs * range_d * -1,  # round(lc_range2 * range_d * -1, 3)  # 最大LCの許容値（LCとイコールになる場合もあり）
             "trigger": "ターン",
             "memo": memo_all,

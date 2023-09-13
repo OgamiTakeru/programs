@@ -102,15 +102,18 @@ def order_link_inspection():
             main.make_order()
 
             # オーダー２
-            mini.order_permission = True
-            if mini.plan['direction'] == 1:
-                mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
-            else:
-                mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
-            mini.make_order()
+            # mini.order_permission = True
+            # if mini.plan['direction'] == 1:
+            #     mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            # else:
+            #     mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
+            # mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（順思想））& W↑解除", main.name, mini.name, w.t_time_past,
+            # tk.line_send("■追加オーダー（順思想））& W↑解除", main.name, mini.name, w.t_time_past,
+            #              "WinHold:", w.win_hold_time, "PLu:", w.t_pl_u,
+            #              f.now())
+            tk.line_send("■追加オーダー（順思想））& W↑解除", main.name, w.t_time_past,
                          "WinHold:", w.win_hold_time, "PLu:", w.t_pl_u,
                          f.now())
 
@@ -119,7 +122,7 @@ def order_link_inspection():
     mini = fourth_c
     # print("★★★", w.position['state'], w.position['time_past'])
     if w.t_state == "OPEN":
-        if w.win_hold_time > 60 or w.self.t_pl_u >= 0.015:
+        if w.win_hold_time > 60 or w.t_pl_u >= 0.015:
             # そこそこのマイナスを経験後、今マイナスの場合
             # オーダー１
             main.order_permission = True
@@ -128,16 +131,19 @@ def order_link_inspection():
             else:
                 main.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             main.make_order()
-            # オーダー２
-            mini.order_permission = True
-            if mini.plan['direction'] == 1:
-                mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
-            else:
-                mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
-            mini.make_order()
+            # # オーダー２
+            # mini.order_permission = True
+            # if mini.plan['direction'] == 1:
+            #     mini.plan['price'] = price_dic['data']['ask']  # 現在価格を取得(買い）
+            # else:
+            #     mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
+            # mini.make_order()
 
             w.close_position(None)
-            tk.line_send("■追加オーダー（レンジ）& W↑解除", main.name, mini.name, w.t_time_past,
+            # tk.line_send("■追加オーダー（レンジ）& W↑解除", main.name, mini.name, w.t_time_past,
+            #              "WinHold:", w.win_max_plu, "PLu:", w.t_pl_u,
+            #              f.now())
+            tk.line_send("■追加オーダー（レンジ）& W↑解除", main.name, w.t_time_past,
                          "WinHold:", w.win_max_plu, "PLu:", w.t_pl_u,
                          f.now())
 
@@ -154,8 +160,8 @@ def mode1():
     inspection_condition = {
         "now_price": gl_now_price_mid,  # 現在価格を渡す
         "data_r": gl_data5r_df,  # 対象となるデータ
-        "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
-        "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 30},
+        "turn_2": {"data_r": gl_data5r_df, "ignore": 1, "latest_n": 2, "oldest_n": 30, "return_ratio": 40},
+        "turn_3": {"data_r": gl_data5r_df, "ignore": 2, "latest_n": 2, "oldest_n": 30, "return_ratio": 40},
         "time_str": gl_now_str,  # 記録用の現在時刻
     }
     ans_dic = t.inspection_candle(inspection_condition)  # 状況を検査する（買いフラグの確認）
@@ -189,9 +195,9 @@ def mode1():
     # ■　条件有でも除外される消すを探す（return 0とする場合）
     if classPosition.position_check(classes):  # ポジション有時は、何もしない
         if result_turn2_result == 1:  # ターン有の場合、LINEする
-            tk.line_send("既にオーダー有の為見送り(ターン）")
+            tk.line_send("既にPosition有の為見送り(ターン）")
         elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）
-            tk.line_send("既にオーダー有の為見送り(ターン未遂）")
+            tk.line_send("既にPosition有の為見送り(ターン未遂）")
         else:
             pass
         # 処理終了
@@ -236,7 +242,7 @@ def mode1():
         order['tp_range'] = 0.1  # 追加項目
         order['target_class'] = main_c  # 追加項目　格納するクラス
         order['price'] = round(order['base_price'] + order['margin'], 3)
-        order['units'] = round(order['units'] * unit_mag * mag_unit_wl / 2, 3)  # 編集
+        order['units'] = round(order['units'] * unit_mag * mag_unit_wl, 3)  # 編集
         order['tp_range'] = order['max_lc_range'] * mag_tp  # 追加項目
         order['lc_range'] = order['max_lc_range'] * mag_lc
         order['type'] = "STOP"  # 追加項目
@@ -290,7 +296,7 @@ def mode1():
         # order2['direction'] = order2['direction'] * -1
         order2['target_class'] = third_c  # 追加項目　格納するクラス
         order2['price'] = round(order2['base_price'] + order2['margin'], 3)
-        order2['units'] = round(order2['units'] * unit_mag * mag_unit_wl / 2, 3)  # 編集
+        order2['units'] = round(order2['units'] * unit_mag * mag_unit_wl, 3)  # 編集
         order2['tp_range'] = order2['max_lc_range'] * mag_tp  # 追加項目
         order2['lc_range'] = order2['max_lc_range'] * mag_lc
         order2['type'] = "STOP"  # 追加項目
@@ -481,7 +487,7 @@ def exe_manage():
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 9, 12, 18, 11, 0)
+            # jp_time = datetime.datetime(2023, 9, 13, 10, 16, 0)
             # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
             # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
             # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
@@ -543,7 +549,7 @@ unit_mag = 10 # 基本本番環境で動かす。unitsを低めに設定して�
 mag_unit_w = 1  # 勝っているときのUnit倍率
 mag_lc_w = 1  # 勝っているときのLC幅の調整
 mag_tp_w = 1  # 勝っているときのLC幅の調整
-mag_unit_l = 2  # 負けている時のUnit倍率
+mag_unit_l = 1  # 負けている時のUnit倍率
 mag_lc_l = 0.8  # 負けているときのLC幅の調整
 mag_tp_l = 1  # 負けているときのLC幅の調整
 

@@ -658,9 +658,9 @@ class Oanda:
             # PL / unit を追加する(Open時はunrealizedPL,Close時はrealizePLを利用する)
             temp = res_json['trade']
             if temp['state'] == "OPEN":
-                res_json['trade']['PLu'] = round(abs(float(temp['unrealizedPL']) / float(temp['initialUnits'])), 3)
+                res_json['trade']['PLu'] = round(float(temp['unrealizedPL']) / abs(float(temp['initialUnits'])), 3)
             elif temp['state'] == "CLOSED":
-                res_json['trade']['PLu'] = round(abs(float(temp['realizedPL']) / float(temp['initialUnits'])), 3)
+                res_json['trade']['PLu'] = round(float(temp['realizedPL']) / abs(float(temp['initialUnits'])), 3)
             else:
                 print("    Tradeの状態を確認＠oandaClass TradeDetails_exe")
                 res_json['trade']['PLu'] == 0
