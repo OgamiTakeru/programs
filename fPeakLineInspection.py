@@ -123,7 +123,6 @@ def calChangeFromPeaks(same_peaks_group):
                     "[" + str(target_peak) + "-" + str(price_min) + "]" + \
                     "方向" + str(same_peaks_group[0]['direction']) + " GAP" + str(gap_min) + " TimeGap" + str(gap_time)
 
-    print(memo_mini_gap)
     return {
         "gap_latest2" : gap_latest2,
         "memo_latest": memo_latest,

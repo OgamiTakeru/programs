@@ -77,31 +77,8 @@ info_r_big = {
 }
 
 ###APIレスポンステスト
-
-test = oa.TradeDetails_exe(35925)
-f.print_json(test['data'])
-
-#
-# #  (3)一部逆方向が入り、打ち消される場合　後からのオーダーが前のオーダーより少ない場合
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()
-# print("■■■■■（３）")
-# print("■■通常オーダー作成")
-# print("■オーダー１")
-order = oa.OrderCreate_dic_exe(info)
-order_id = order['data']['order_id']
-f.print_json(oa.OrderDetails_exe(order_id)['data'])
-
-# # order = oa.OrderCreate_dic_exe(info)
-print("■オーダー２")
-order = oa.OrderCreate_dic_exe(info_r)
-order2_id = order['data']['order_id']
-print("オーダー2結果")
-# # f.print_json(order)  # オーダー結果
-print("オーダー２結果Detail")
-f.print_json(oa.OrderDetails_exe(order2_id)['data'])
-print("■オーダー１情報再表示")
-f.print_json(oa.OrderDetails_exe(order_id)['data'])
+print(oa.OrderDetails_exe(38116))
+print(oa.TradeDetails_exe(38116))
 
 
 

@@ -2,7 +2,7 @@ import datetime  # 日付関係
 import pandas as pd  # add_peaks
 import programs.tokens as tk  # Token等、各自環境の設定ファイル（git対象外）
 import programs.classOanda as classOanda
-import programs.fGeneric as g
+import programs.fGeneric as f
 
 
 def turn_each_support(data_df, direction, ans_info):
@@ -147,7 +147,6 @@ def turn_each_inspection(data_df_origin):
             oldest_peak_price = ans_df.iloc[-1]["low"]
         else:
             # 下り方向の場合
-
             latest_image_price = ans_df.iloc[0]["inner_low"]
             oldest_image_price = ans_df.iloc[-1]["inner_high"]
             latest_peak_price = ans_df.iloc[0]["low"]
@@ -350,7 +349,7 @@ def turn_merge_inspection(figure_condition):
             return_ratio = round((latest_ans['gap_close'] / oldest_ans['gap']) * 100, 3)
             print("  return_ratio", return_ratio, latest_ans['gap_close'], oldest_ans['gap'])
             if return_ratio < max_return_ratio:
-                if oldest_ans['gap'] > 0.08:
+                if oldest_ans['gap'] > 0.03:
                     turn_ans = 1  # 達成
                     memo = "★達成"
                 else:
@@ -401,46 +400,68 @@ def turn2_cal(inspection_condition):
     junc = {}  # 初期値を入れておく
     if turn_ans != 0:
         # ★注文（基準情報の収集）
-        # （１）順思想の値の計算
-        # ① 方向の設定
-        trend_d = latest_ans['direction'] * -1
-        # ②　margin候補1
-        at_least_margin = 0.018  # 最低でも0.2を確保する
-        margin_pattern1 = g.cal_at_least_most(at_least_margin, latest_ans['body_ave'] / 0.7, 0.05)  # 最低でも2.5pipsを確保する
-        # margin候補2　同方向二つの場合、最低でも、最新のボディ分は戻る可能性を見る
-        data = latest_ans['data']
-        if data.iloc[1]['body'] >= 0 and data.iloc[0]['body'] >= 0:
-            margin_pattern2 = data.iloc[1]['body_abs'] + 0.005  # 直近のBody分を取得する
-            # tk.line_send("■たて 1 0 /", data.iloc[1]['body'], data.iloc[0]['body'])
-        elif data.iloc[1]['body'] <= 0 and data.iloc[0]['body'] <= 0:
-            margin_pattern2 = data.iloc[1]['body_abs'] + 0.005
-            # tk.line_send("■した 1 0 /", data.iloc[1]['body'], data.iloc[0]['body'])
-        else:
-            margin_pattern2 = 0
-        # marginの決定(基本はmargin_pattern2 だが、margin_pattern1[latestが２連続同方向の場合]がある場合は大きな方を取得する
-        if margin_pattern2 == 0:  # 直近２つが同方向ではない場合
-            margin_abs = margin_pattern1  # 基本的なmarginを利用
-        else:
-            if margin_pattern1 > margin_pattern2:  # 基本の方が大きい場合、基本を採択
-                margin_abs = margin_pattern1
-            else:
-                margin_abs = margin_pattern2
+        # （1）逆思想(range)の値の計算　 230918　レンジがメインにする
+        # ① 方向の設定　
+        range_d = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
+
+        # ②marginの検討
+        margin2 = 0  # MARKETのため
 
         # ③ base price(システム利用値) & target price(参考値=システム不使用)の調整
-        if latest_ans['gap'] >= 0.06:  # Gapが意外と大
-            base_price = latest_ans['latest_price']  # ベースとなる価格を取得
-        else:
-            base_price = latest_ans['latest_price']  # ベースとなる価格を取得
-        target_price = round(base_price + margin_abs * trend_d, 3)  # target_priceを念のために取得しておく
+        base_price2 = latest_ans['latest_price']
+        target_price2 = latest_ans['latest_price']  # 計算用に直近の価格を取得しておく
 
         # ④　LC_rangeの検討
-        max_range_abs = oldest_ans['gap']  # 一番の理想はoldestのGap。ただ大きすぎる場合も。。
-        middle_range_abs = oldest_ans['gap'] * 0.6  #  0.15  # 現実的にはこのくらい？
-        min_range_abs = 0.06  # 最低でもこのくらい。
-        lc_range_abs = g.cal_at_most(0.12, middle_range_abs)
+        cal_lc = abs(latest_ans['latest_image_price'] - latest_ans['oldest_image_price'])  # ピークまで戻ったらLC
+        lc_range2_abs = cal_lc * 2  # LCはやや広めに取る（とりあえず）
+        # ちょっと狭すぎる場合は、、、最低でも2pips取る。
+        lc_range2_abs = f.cal_at_least(0.02, lc_range2_abs)
+        print(" LC検討", latest_ans['latest_image_price'], latest_ans['oldest_image_price'], abs(latest_ans['latest_image_price'] - latest_ans['oldest_image_price']))
+        print(lc_range2_abs)
+
+        # ⑤ TP_rangeの検討
+        cal_tp = abs(latest_ans['latest_image_price'] - oldest_ans['oldest_image_price'])
+        tp_range2_abs = cal_tp * 1.5
+
+        # ⑥カスケードクローズの１区画分の計算
+        cascade_unit = oldest_ans['gap']
+
+        # ⑥　格納
+        junc = {
+            "name": "レンジ",
+            "base_price": base_price2,
+            "target_price": target_price2,  # 基本渡した先では使わない
+            "margin": 0,  # BasePriceに足せばいい数字（方向もあっている）
+            "direction": range_d,
+            "type": "MARKET",
+            "lc_range": round(lc_range2_abs * range_d * -1, 3),
+            "tp_range": round(tp_range2_abs * range_d, 3),
+            "units": 10,
+            "trigger": "ターン",
+            "memo": memo_all,
+            "data": turn_ans_dic,
+            "cascade_unit": cascade_unit
+        }
+
+        # （2）順思想の値の計算
+        # ① 方向の設定
+        trend_d = latest_ans['direction'] * -1
+        # ②　margin
+        margin_abs = 0.015
+
+        # ③ base price(システム利用値) & target price(参考値=システム不使用)の調整
+        base_price = junc['base_price'] + junc['lc_range']  # BaseはレンジのLC価格。
+        target_price = round(base_price + margin_abs * trend_d, 3)  # target_priceを念のために取得しておく
+        print(base_price, margin_abs)
+
+        # ④　LC_rangeの検討
+        lc_range_abs = round((oldest_ans['latest_image_price'] - oldest_ans['oldest_image_price']) / 2, 3)
 
         # ⑤ TP_rangeの検討
         tp_range_abs = 0.050
+
+        # ⑥カスケードクローズの１区画分の計算
+        cascade_unit = oldest_ans['gap']
 
         # ⑥ 格納
         main = {  # 順思想（この以下の過程で、LCやMarginに方向を持たせる）（oldest方向同方向へのオーダー）今３００００の方
@@ -453,68 +474,12 @@ def turn2_cal(inspection_condition):
             "lc_range": round(lc_range_abs * trend_d * -1, 3),
             "tp_range": round(tp_range_abs * trend_d, 3),
             "units": 10,
-            "max_lc_range": max_range_abs * trend_d * -1,  # 最大LCの許容値（LCとイコールの場合もあり）
             "trigger": "ターン",
+            "cascade_unit": cascade_unit,
             "memo": memo_all,
             'data': turn_ans_dic
         }
 
-        # （2）逆思想(range)の値の計算
-        # ① 方向の設定
-        range_d = latest_ans['direction']  # 方向（Tpとmarginの方向。LCの場合は*-1が必要）
-
-        # ②marginの検討
-        at_least_margin2 = 0.02
-        if oldest_ans['gap'] > 0.15:
-            margin2 = g.cal_at_least_most(at_least_margin2, oldest_ans['body_ave'] / 0.7, 0.05)
-        else:
-            margin2 = g.cal_at_least_most(at_least_margin2, oldest_ans['body_ave'] / 0.7, 0.05)
-
-        # ③ base price(システム利用値) & target price(参考値=システム不使用)の調整
-        # パターン１
-        # if latest_ans['gap'] >= 0.06:  # Gapが意外と大きい場合、
-        #     base_price2 = latest_ans['latest_price']  # 直近価格を利用する
-        # else:
-        #     base_price2 = latest_ans['latest_price']
-        # target_price2 = round(base_price + (margin2 * trend_d), 3)  # target_priceを念のために取得しておく
-        # パターン２
-        if oldest_ans['gap'] >= 0.10:  # レンジを取るにはこのくらいほしい。。
-            # 6割戻しタイミングに設置する
-            remain_pips = oldest_ans['gap'] * 0.5  # 4割分の幅を計算
-            base_price2 = oldest_ans['oldest_image_price'] + (remain_pips * oldest_ans['direction'])  # 頂点から４割戻り
-            print(" 4割戻りレンジ")
-        else:
-            # 小さい場合は、Oldのピーク部分に設定する
-            base_price2 = oldest_ans['oldest_image_price']
-            print(" 頂上レンジ")
-        target_price2 = round(base_price + (margin2 * trend_d), 3)  # target_priceを念のために取得しておく
-
-        # ④　LC_rangeの検討
-        cal_lc = abs(target_price2 - oldest_ans['latest_image_price'])  # ピークまで戻ったらLC
-        max_range2_abs = oldest_ans['gap']  # 一番の理想はoldestのGap。ただ大きすぎる場合も。。
-        middle_range2_abs = oldest_ans['gap'] * 0.6   #0.06  # 現実的にはこのくらい？
-        min_range2_abs = 0.06  # 最低でもこのくらい。
-        lc_range2_abs = g.cal_at_most(0.13, cal_lc)  # middle_range_abs
-
-        # ⑤ TP_rangeの検討
-        tp_range2_abs = 0.050
-
-        # ⑥　格納
-        junc = {
-            "name": "レンジ",
-            "base_price": base_price2,
-            "target_price": target_price2,  # 基本渡した先では使わない
-            "margin": round(margin2 * range_d, 3),  # BasePriceに足せばいい数字（方向もあっている）
-            "direction": range_d,
-            "type": "STOP",
-            "lc_range": round(lc_range2_abs * range_d * -1, 3),
-            "tp_range": round(tp_range2_abs * range_d, 3),
-            "units": 10,
-            "max_lc_range": max_range2_abs * range_d * -1,  # round(lc_range2 * range_d * -1, 3)  # 最大LCの許容値（LCとイコールになる場合もあり）
-            "trigger": "ターン",
-            "memo": memo_all,
-            "data": turn_ans_dic
-        }
 
     # (３)返却用データの作成
     ans_dic = {

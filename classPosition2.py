@@ -330,39 +330,79 @@ class order_information:
         # (3)unlializePL値を更新する
         self.t_pl_u = new_pl  # 結果値を更新する
 
-    def detect_change(self,order_latest, trade_latest):
+    def update_information(self):  # orderとpositionを両方更新する
+        """
+        order "PENDING" "CANCELLED" "FILLED"
+        position "OPEN" "CLOSED"
+        :return:
+        """
+        if not self.life:
+            return 0  # LifeがFalse（＝オーダーが発行されていない状態）では実行しない
+
+        # OrderDetailの確認（必要に応じて）　⇒　TradeIDを取得(その他情報更新無し)　or アップデート処理の終了　を行う
+        order_ans = self.oa.OrderDetails_exe(self.o_id)  # ■■API
+        order_latest = order_ans['data']['order']  # jsonを取得
+        if self.t_id == 0:  # ポジションNoが未登録の場合、オーダー情報詳細から取得する
+            if order_latest['state'] == "FILLED":  # オーダーがFILLEDの場合（ポジションに移行してはいる）
+                if "tradeOpenedID" in order_latest:  # ポジションが存在している場合
+                    self.t_id = order_latest['tradeOpenedID']
+                else:  # ポジションが存在していない（既存ポジションに相殺された）
+                    if "tradeClosedIDs" in order_latest:
+                        print("   ", order_latest['tradeClosedIDs'])  # 自身は既存のオーダーを相殺して消滅。相殺先のTradeID
+                    if "tradeReducedID" in order_latest:
+                        print("   ", order_latest['tradeReducedID'])  # 自身は既存オーダーの一部を相殺して消滅。相殺先のtradeID
+                    self.t_id = 0
+                    self.life_set(False)  # ポジションがない為、LIFE終了
+                    return 0
+            else:  # ポジション取得待ち
+                self.o_time_past = order_latest['time_past']  # 経過時間を更新しておく
+                if order_latest['state'] == "PENDING":
+                    # print("    時間的な解消を検討", self.o_time_past, self.o_state, "基準", self.order_timeout * 60)
+                    if self.o_time_past > self.order_timeout * 60 and (self.o_state == "" or self.o_state == "PENDING"):
+                        tk.line_send("   オーダー解消(時間)@", self.name, self.o_time_past, ",", self.order_timeout)
+                        self.close_order()
+                return 0
+
+        # ポジション情報をAPIで取得する
+        trade_ans = self.oa.TradeDetails_exe(self.t_id)  # ■■API
+        if trade_ans['error'] == 1:
+            print("    トレード情報取得Error＠update_information")
+            print(self.t_id)
+            return 0
+        trade_latest = trade_ans['data']['trade']  # Jsonデータの取得
+
+        # 変化による通知等を実施する(情報を完全にUpdateする前に実施）
         if (self.o_state == "PENDING" or self.o_state == "") and order_latest['state'] == 'FILLED':  # オーダー達成（Pending⇒Filled）
             if trade_latest['state'] == 'OPEN':  # ポジション所持状態
                 tk.line_send("    (取得)", self.name)
-            elif trade_latest['position_state'] == 'CLOSED':  # ポジションクローズ（ポジション取得とほぼ同時にクローズ[異常]）
+            elif trade_latest['state'] == 'CLOSED':  # ポジションクローズ（ポジション取得とほぼ同時にクローズ[異常]）
                 tk.line_send("    (即時)クローズ")
+                self.life_set(False)
         elif self.t_state == "OPEN" and trade_latest['state'] == "CLOSED":  # 通常の成り行きのクローズ時
+            self.life_set(False)  # まずはLifeを終了
+            self.t_realize_pl = round(float(trade_latest['realizedPL']), 2)  # 情報更新
+            self.t_close_time = trade_latest['closeTime']  # 情報更新
+            self.t_close_price = trade_latest['averageClosePrice']
+            self.t_state = trade_latest['state']
             order_information.total_yen = round(order_information.total_yen + float(trade_latest['realizedPL']), 2)
             # Line送信用
             res1 = "【Unit】" + str(trade_latest['initialUnits'])
-            id_info = "【orderID】" + str(self.o_id) + "【tradeID】" + str(self.t_id)
+            id_info = "【orderID】" + str(self.o_id)
             res2 = "【決:" + str(trade_latest['averageClosePrice']) + ", " + "取:" + str(trade_latest['price']) + "】"
             res3 = "【ポジション期間の最大/小の振れ幅】 ＋域:" + str(self.win_max_plu) + "/ー域:" + str(self.lose_max_plu)
             res3 = res3 + " 保持時間(秒)" + str(trade_latest['time_past'])
-            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(trade_latest['realizedPL']) + "円\n"
+            res4 = "【今回結果】" + str(trade_latest['PLu']) + "," + str(self.t_realize_pl) + "円\n"
             res5 = "【合計】計" + str(order_information.total_PLu) + ",計" + str(order_information.total_yen) + "円"
             tk.line_send(" ▲解消:", self.name, '\n', f.now(), '\n',
                          res4, res5, res1, id_info, res2, res3)
             return 0
+        # 変化による情報（勝ち負けの各最大値、継続時間等の取得）
+        self.updateWinLoseTime(trade_latest['PLu'])  # PLU(realizePL / Unit)の推移を記録する
 
-    def order_update(self, order_latest):
-        # 情報の更新
+        # 情報をUpdateする
+        # オーダー情報
         self.o_state = order_latest['state']  # ここで初めて更新
-        self.o_time_past = oanda_class.cal_past_time_single(oanda_class.iso_to_jstdt_single(self.o_time))  # 経過秒
-        self.o_time_past = order_latest['time_past']
-        # オーダーのクローズを検討する
-        if order_latest['state'] == "PENDING":
-            # print("    時間的な解消を検討", self.o_time_past, self.o_state, "基準", self.order_timeout * 60)
-            if self.o_time_past > self.order_timeout * 60 and (self.o_state == "" or self.o_state == "PENDING"):
-                tk.line_send("   オーダー解消(時間)@", self.name, self.o_time_past, ",", self.order_timeout)
-                self.close_order()
-
-    def trade_update(self, trade_latest):
+        self.o_time_past = oanda_class.cal_past_time_single(oanda_class.iso_to_jstdt_single(self.o_time))  # 経過病
         # トレード情報
         self.t_id = trade_latest['id']  # 既に１度入れているけど、念のため
         self.t_state = trade_latest['state']
@@ -376,55 +416,7 @@ class order_information:
         elif trade_latest['state'] == "CLOSED":  # いる？
             self.t_realize_pl = trade_latest['realizedPL']
         self.t_pl_u = trade_latest['PLu']
-        # ウォッチ用の場合は以下を検討
-        # if "W" in self.name:
-        #     if self.t_time_past > 1200 and self.t_state == "OPEN":
-        #         # tk.line_send("   W-Position時間解消", self.name, self.o_time_past)
-        #         self.close_position(None)
-        # tradeのクローズを検討する
-        if trade_latest['state'] == "OPEN":
-            # 規定時間を過ぎ、マイナス継続時間も１分程度ある場合は、もう強制ロスカットにする
-            if self.t_time_past > self.trade_timeout * 60 and self.lose_hold_time > 60:
-                tk.line_send("   Trade解消(時間)@", self.name, "PastTime", self.t_time_past, ",LoseHold", self.lose_hold_time)
-                self.close_order()
-
-    def update_information(self):  # orderとpositionを両方更新する
-        """
-        order "PENDING" "CANCELLED" "FILLED"
-        position "OPEN" "CLOSED"
-        :return:
-        """
-        if not self.life:
-            return 0  # LifeがFalse（＝オーダーが発行されていない状態）では実行しない
-
-        # OrderDetail,TradeDetailの取得（orderId,tradeIdの確保）
-        order_ans = self.oa.OrderDetails_exe(self.o_id)  # ■■API
-        order_latest = order_ans['data']['order']  # jsonを取得
-        if "tradeOpenedID" in order_latest:  # ポジションが存在している場合
-            self.t_id = order_latest['tradeOpenedID']
-            trade_ans = self.oa.TradeDetails_exe(self.t_id)  # ■■API
-            if trade_ans['error'] == 1:
-                print("    トレード情報取得Error＠update_information", self.t_id)
-                return 0
-            trade_latest = trade_ans['data']['trade']  # Jsonデータの取得
-        else:  # ポジションが存在していない（既存ポジションに相殺された）　または、ポジション取得待ち
-            self.t_id = 0
-
-        # ポジション無しの場合、オーダーを更新してドロップ
-        if self.t_id == 0:
-            # tradeが０の場合、オーダーの更新のみ行う。
-            self.order_update(order_latest)
-            return 0
-
-        # (以下トレードありが前提) 変化点を確認する
-        self.detect_change(order_latest, trade_latest)  # LINE等の送信（
-
-        # 情報をUpdateする
-        self.order_update(order_latest)
-        self.trade_update(trade_latest)
-
-        # 変化による情報（勝ち負けの各最大値、継続時間等の取得）
-        self.updateWinLoseTime(trade_latest['PLu'])  # PLU(realizePL / Unit)の推移を記録する
+        # print(self.t_pl_u, "PL 365行目", self.name, f.now())
 
         # ポジションに対する時間的な解消を行う
         if "W" in self.name:  # ウォッチ用のポジションは時間で消去。ただしCRCDOはしない
