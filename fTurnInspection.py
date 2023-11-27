@@ -241,20 +241,24 @@ def turn_each_inspection_skip(df_r):
             next_from = ans_current['count'] - 1
         else:
             next_from = 0  # NextFromのリセット
-        # 次の調査対象（ここの長さは一つの判断材料）
+        # 次の調査対象（ここの長さは一つの判断材料）時系列的には古い
         ans_next_jd = turn_each_inspection(df_r[next_from:])  # 再起用に０渡しておく。。
         next_from = next_from + ans_next_jd['count'] - 1
 
         ans_next_next_jd = turn_each_inspection(df_r[next_from:])  # 再起用に０渡しておく。。
         next_from = next_from + ans_next_next_jd['count'] - 1
 
-
         # 判定(次回の幅が２足分、次々回の方向が現在と同一、次々回のスタート(old)価格が現在のスタート(old)価格より高い)
         merge = 0
         # print("条件", ans_next_jd['count'], ans_next_next_jd['direction'], ans_current['direction'])
 
-        if ans_next_jd['count'] <= 2 and ans_next_next_jd['direction'] == ans_current['direction'] and abs(
-                ans_next_jd['latest_peak_price'] - ans_next_jd['oldest_peak_price']) < 0.03:
+        # 各数字を計算しておく
+        triple_gap = abs(ans_current['latest_iamge_price'] - ans_next_next_jd['oldest_image_price'])
+        next_gap = abs(ans_next_jd['latest_peak_price'] - ans_next_jd['oldest_peak_price'])
+
+        if ans_next_jd['count'] <= 2 and ans_next_next_jd['direction'] == ans_current['direction'] and \
+                next_gap < 0.02 and \
+                    next_gap / triple_gap < 0.1:
             if ans_current['direction'] == 1:  # 上向きの場合
                 if ans_current['oldest_image_price'] > ans_next_next_jd['data'].iloc[-1]["inner_low"]:  # 価格が昔(調査的には次々回のスタート価格)より上昇、
                     # print("上向き")
@@ -413,15 +417,15 @@ def turn2_cal(inspection_condition):
 
         # ④　LC_rangeの検討
         cal_lc = abs(latest_ans['latest_image_price'] - latest_ans['oldest_image_price'])  # ピークまで戻ったらLC
-        lc_range2_abs = cal_lc * 2  # LCはやや広めに取る（とりあえず）
-        # ちょっと狭すぎる場合は、、、最低でも2pips取る。
-        lc_range2_abs = f.cal_at_least(0.02, lc_range2_abs)
+        lc_range2_abs = cal_lc + 0.03
+        lc_range2_abs = f.cal_at_least(0.05, lc_range2_abs)  # ちょっと狭すぎる場合は、、、最低でも2pips取る。
         print(" LC検討", latest_ans['latest_image_price'], latest_ans['oldest_image_price'], abs(latest_ans['latest_image_price'] - latest_ans['oldest_image_price']))
         print(lc_range2_abs)
 
         # ⑤ TP_rangeの検討
         cal_tp = abs(latest_ans['latest_image_price'] - oldest_ans['oldest_image_price'])
         tp_range2_abs = cal_tp * 1.5
+        tp_range2_abs = f.cal_at_most(0.10, tp_range2_abs)  # ちょっと狭すぎる場合は、、、最低でも2pips取る。
 
         # ⑥カスケードクローズの１区画分の計算
         cascade_unit = oldest_ans['gap']

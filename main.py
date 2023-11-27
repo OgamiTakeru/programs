@@ -10,6 +10,7 @@ import programs.classOanda as classOanda
 import programs.classPosition as classPosition  # とりあえずの関数集
 import programs.fTurnInspection as t  # とりあえずの関数集
 import programs.fGeneric as f
+import programs.fPeakLineInspection as p
 
 
 def order_line_send(class_order_arr, add_info):
@@ -50,7 +51,13 @@ def order_line_send(class_order_arr, add_info):
     tk.line_send("■折返Position！", gl_live, gl_trade_num, "回目(", datetime.datetime.now().replace(microsecond=0), ")",
                  "トリガー:", info['trigger'], "指定価格", price, "情報:", info['memo'], ",オーダー:", '\n', o_memo,
                  '\n', "初回時間", gl_first_time, "その他情報⇒", "WL:", add_info['wl_info'])
-
+    # テスト用
+    # peak_information = p.peaks_collect(gl_data5r_df)
+    # tops = p.horizon_line_detect(peak_information['tops'])
+    # bottoms = p.horizon_line_detect(peak_information['bottoms'])
+    # tk.line_send("【TOPS】", tops['ave'], "\n", "【BOTTOMS】", bottoms['ave'], "\n", "【TOPS_info】", tops['info'], "【bottomS_info】", bottoms['info'])
+    peak_inspection = p.inspection_test(gl_data5r_df)
+    tk.line_send(peak_inspection)
 
 def order_delete_function():
     """
@@ -111,7 +118,7 @@ def order_link_inspection():
             #     mini.plan['price'] = price_dic['data']['bid']  # 現在価格を取得(売り)
             # mini.make_order()
 
-            w.close_position(None)
+            w.close_trade(None)
             # tk.line_send("■追加オーダー（順思想））& W↑解除", main.name, mini.name, w.t_time_past,
             #              "WinHold:", w.win_hold_time, "PLu:", w.t_pl_u,
             #              f.now())
@@ -176,11 +183,12 @@ def mode1():
         # 処理終了
         return 0
     else:
-        if classPosition.position_check(classes):
+        trade_exist = classPosition.position_check(classes)
+        if trade_exist['ans']:
             if result_turn2_result == 1:  # ターン有の場合、LINEする
-                tk.line_send("ポジション上書き(ターン）", position_check['open_positions'])
+                tk.line_send("ポジション上書き(ターン）", trade_exist['open_positions'])
             elif result_attempt_turn == 1:  # ターン未遂が確認された場合（早い場合）
-                tk.line_send("ポジション上書き(ターン未遂）", position_check['open_positions'])
+                tk.line_send("ポジション上書き(ターン未遂）", trade_exist['open_positions'])
             else:
                 pass
 
@@ -225,8 +233,8 @@ def mode1():
             "lc_trigger_range": 0.07,
         }
         order['cascade_close_map_arr'] = [
-            {"range": order['cascade_unit'] * 0.3, "close_ratio": 0.3},
-            {"range": order['cascade_unit'] * 0.6, "close_ratio": 0.2},
+            {"range": order['cascade_unit'] * 0.2, "close_ratio": 0.4},
+            {"range": order['cascade_unit'] * 0.6, "close_ratio": 0.3},
             {"range": order['cascade_unit'] * 0.8, "close_ratio": 0.2},
         ]
         main_c.order_plan_registration(order)
@@ -253,9 +261,9 @@ def mode1():
             "lc_trigger_range": 0.10,
         }
         order2['cascade_close_map_arr'] = [
-            {"range": order2['cascade_unit'] * 0.2, "close_ratio": 0.3},
-            {"range": order2['cascade_unit'] * 0.5, "close_ratio": 0.2},
-            {"range": order2['cascade_unit'] * 0.7, "close_ratio": 0.3},
+            {"range": order2['cascade_unit'] * 0.2, "close_ratio": 0.4},
+            {"range": order2['cascade_unit'] * 0.5, "close_ratio": 0.3},
+            {"range": order2['cascade_unit'] * 0.7, "close_ratio": 0.2},
         ]
         third_c.order_plan_registration(order2)
 
@@ -357,7 +365,7 @@ def exe_manage():
 
         gl_now_price_mid = price_dic['mid']  # 念のために保存しておく（APIの回数減らすため）
         if price_dic['spread'] > gl_arrow_spread:
-            # print("    ▲スプレッド異常", gl_now, price_dic['spread'])
+            print("    ▲スプレッド異常", gl_now, price_dic['spread'])
             return -1  # 強制終了
 
         # ■直近の検討データの取得　　　メモ：data_format = '%Y/%m/%d %H:%M:%S'
@@ -404,13 +412,13 @@ def exe_manage():
             #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
 
             # ↓時間指定
-            # jp_time = datetime.datetime(2023, 9, 19, 17, 18, 0)
-            # euro_time_datetime = jp_time - datetime.timedelta(hours=9)
-            # euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-            # param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
-            # d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
-            # print(d5_df)
-            # d5_df = d5_df['data']
+            jp_time = datetime.datetime(2023, 9, 20, 12, 39, 0)
+            euro_time_datetime = jp_time - datetime.timedelta(hours=9)
+            euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
+            param = {"granularity": "M5", "count": 50, "to": euro_time_datetime_iso}
+            d5_df = oa.InstrumentsCandles_exe("USD_JPY", param)
+            print(d5_df)
+            d5_df = d5_df['data']
             # ↑時間指定
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用

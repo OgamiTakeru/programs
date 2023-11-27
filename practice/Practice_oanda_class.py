@@ -35,8 +35,8 @@ param = {"granularity": "M5", "count": 10, "to": euro_iso}
 print(oa.InstrumentsCandles_exe("USD_JPY", param))
 
 print(oanda_class.str_to_time_hms(str(datetime.datetime.now().replace(microsecond=0))))
-oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
-oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+# oa.OrderCancel_All_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
+# oa.TradeAllClose_exe()  # 露払い(classesに依存せず、オアンダクラスで全部を消す）
 print("↑ここまで定例")
 
 
@@ -77,8 +77,13 @@ info_r_big = {
 }
 
 ###APIレスポンステスト
-print(oa.OrderDetails_exe(38116))
-print(oa.TradeDetails_exe(38116))
+# print(oa.OrderDetails_exe(38116))
+print(oa.TradeDetails_exe(38528))
+print()
+test = oa.TradeClose_exe(38528,None)
+print(test)
+print()
+f.print_json(test['data_json'])
 
 
 

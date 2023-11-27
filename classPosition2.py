@@ -385,6 +385,7 @@ class order_information:
             self.t_close_price = trade_latest['averageClosePrice']
             self.t_state = trade_latest['state']
             order_information.total_yen = round(order_information.total_yen + float(trade_latest['realizedPL']), 2)
+            order_information.total_PLu = round(order_information.total_PLu + trade_latest['PLu'], 3)
             # Line送信用
             res1 = "【Unit】" + str(trade_latest['initialUnits'])
             id_info = "【orderID】" + str(self.o_id)

@@ -10,7 +10,6 @@ import programs.fTurnInspection as t  # とりあえずの関数集
 import programs.fPeakLineInspection as p  # とりあえずの関数集
 import programs.fTurnInspection as fTurn
 import programs.fGeneric as f
-import statistics
 
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
 
@@ -140,7 +139,7 @@ def inspection_block(df_r):
 
 
 def block_inspection_main(df_r):
-    print("BlockInspection")
+    print("TurnInspection")
     df_r_part = df_r[:140]
     peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
     peaks = peaks_info['all_peaks']
@@ -148,6 +147,7 @@ def block_inspection_main(df_r):
     while len(peaks)>3:
         temp = block_inspection_each(peaks)
         peaks = temp['next_peaks']
+
 
 
 def block_inspection_each(peaks):
@@ -221,70 +221,6 @@ def block_inspection_each(peaks):
     return informations
 
 
-def add_stdev(peaks):
-    """
-    引数として与えられたPeaksに対して、偏差値を付与する
-    :return:
-    """
-    # Gapのみを配列に置き換え（いい方法他にある？）
-    targets = []
-    for i in range(len(peaks)):
-        targets.append(peaks[i]['gap'])
-    print(targets)
-    # 平均と標準偏差を算出
-    ave = statistics.mean(targets)
-    stdev = statistics.stdev(targets)
-    print(" 平均値", ave, "標準偏差", stdev)
-    # 各偏差値を算出し、Peaksに追加しておく
-    for i, item in enumerate(targets):
-        peaks[i]["stdev"] = round((targets[i]-ave)/stdev*10+50, 0)
-
-    return peaks
-
-
-def turn_inspection_main(df_r):
-    print("TurnInspection")
-    df_r_part = df_r[:140]
-    peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
-    peaks = peaks_info['all_peaks']
-
-    #  ##直近と１つ前、２個前の３個で確認する
-    # 直近の長さが１（１足分）の場合は折り返し直後。この場合は２個目と３個目を確認する
-    # 直近の長さが２以上の場合は、折り返し後少し経過。この場合は、直近と２個目を確認する
-
-    if peaks[0]['count'] <= 2:
-        # こっちは３段階での調査をしても良い？（Current）
-        later = peaks[1]
-        older = peaks[2]
-        print("直近短い", peaks[0]['count'])
-    else:
-        later = peaks[0]
-        older = peaks[1]
-        print("直近長い", peaks[0]['count'])
-
-    # Olderとlaterを確認する
-    print(turn_inspection_cal_retio(later, older))
-
-    # ##Peakの偏差値を求める
-    peaks = add_stdev(peaks)  # 偏差値を付与して、Peaksを上書きする
-
-
-
-def turn_inspection_cal_retio(later, older):
-    """
-    100以上の値は、戻りすぎ。
-    100-60は結構戻ってるがこれから戻る？　
-    60以下の値が、適正。
-    :param later:
-    :param older:
-    :return:
-    """
-    print(later)
-    print(older)
-    print(later['gap'], older['gap'])
-    return (later['gap'] / older['gap']) * 100
-
-
 def turn_inspection_sub(latest, second):
     print("Latest")
     print(latest)
@@ -312,8 +248,9 @@ def turn_inspection_sub(latest, second):
         print(" 突き抜け中")
 
 
-# res = block_inspection_main(df_r[0:60])
-turn_inspection_main(df_r[0:60])
+
+res = block_inspection_main(df_r[0:60])
+# turn_inspection(df_r[0:20])
 
 # print(fTurn.turn_each_inspection(df_r))
 

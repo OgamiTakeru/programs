@@ -1229,7 +1229,8 @@ def add_basic_data(data_df):
     data_df['up_rod'] = data_df.apply(lambda x: for_upper(x), axis=1)  # 上髭の長さを取得
     data_df['low_rod'] = data_df.apply(lambda x: for_lower(x), axis=1)  # 下髭の長さを取得
     data_df['highlow'] = data_df['high'] - data_df['low']  # 最高値と再低値の長さ
-    data_df['middle_price'] = round(data_df['inner_low'] + (data_df['body_abs'] / 2), 3)  # 最高値と再低値の長さ
+    # data_df['middle_price'] = round(data_df['inner_low'] + (data_df['body_abs'] / 2), 3)  # 最高値と再低値の長さ
+    data_df['middle_price'] = round((data_df['inner_low'] + data_df['inner_high']) / 2, 3)  # 最高値と再低値の長さ
 
     # 不要項目の削除（timeは連続取得時に利用するため、削除+ない）
     # print(data_df.columns.values)

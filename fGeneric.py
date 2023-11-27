@@ -36,6 +36,14 @@ def delYear(original_time):
     return str(day_time)
 
 
+def delYearDay(original_time):
+    # 2023/01/01 09:10:12
+    day = original_time[5:10]  # 01/01
+    day = day.replace("0", "")  # 1/1
+    time = original_time[11:16]  # 09:10
+    return str(time)
+
+
 def cal_at_least(min_value, now_value):
     # 基本的にはnow_valueを返したいが、min_valueよりnow_valueが小さい場合はmin_vauleを返す
     # min_value = 2pips  now_value=3の場合は、３、min_value = 2pips  now_value=1 の場合　２を。
@@ -66,7 +74,9 @@ def cal_at_least_most(min_value, now_value, most_value):
 
 def print_arr(arr):
     for i in range(len(arr)):
+        # print("ー", i, "ーーーーーーーーーーーーーーーーー")
         print(arr[i])
+    # print("↑ーーーーーーーーーーーーーーーーーーーーーーー")
 
 
 def print_json(dic):

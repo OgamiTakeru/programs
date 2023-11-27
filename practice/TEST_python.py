@@ -17,5 +17,16 @@ import programs.fGeneric as f
 # r = instruments.InstrumentsCandles(instrument="USD_JPY", params=params)
 # res = api.request(r)
 
-test = {}
-print(len(test))
+
+def dels(temp):
+    del temp['1']
+    return temp
+
+def main():
+    temp = {"1":1, "2":2}
+    print(temp)
+    ans = dels(temp)
+    print(temp)
+    print("ans", ans)
+
+main()
