@@ -14,7 +14,7 @@ import statistics
 
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
 
-jp_time = datetime.datetime(2023, 11, 10, 10, 5, 6)
+jp_time = datetime.datetime(2023, 11, 24, 15, 20, 6)
 euro_time_datetime = jp_time - datetime.timedelta(hours=9)
 euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
 param = {"granularity": "M5", "count": 200, "to": euro_time_datetime_iso}  # 最低５０行
@@ -122,23 +122,6 @@ def inspection(df_r):
     print(tilt)
 
 
-def inspection_block(df_r):
-    """
-
-    :param df_r:
-    :return:
-    """
-
-    df_r = df_r[:30]
-    print(df_r.head(1))
-    print(df_r.tail(1))
-    # 調査幅を取得する（最高値最低値の２０分の１？）
-    highest = df_r["high"].max()
-    lowest = df_r["low"].min()
-    range = (highest - lowest)/20
-    print(highest,lowest, range)
-
-
 def block_inspection_main(df_r):
     print("BlockInspection")
     df_r_part = df_r[:140]
@@ -169,25 +152,27 @@ def block_inspection_each(peaks):
         if i == 0:
             continue
 
-        # peakとpeak_oldestどちらが大きいかを確認する
+        # ###ループで必ず実行するもの
+        # peakとpeak_oldestどちらが大きいかを確認する(範囲の上限と下限を設定する）
         if item['peak'] > item['peak_oldest']:
             high = item['peak']
             low = item['peak_oldest']
         else:
             high = item['peak_oldest']
             low = item['peak']
-        # print(" ", item, base_price)
+        # peakのサイズ感を取得しておく
+
 
         # ベースがピーク範囲にあるか
         if low < base_price < high:
-            # 範囲内の場合
-            # print(" 　〇")
+            # 範囲内に存在する場合
             in_range_count += 1  # カウンター
-            rest = 0  # リセット
-            end_peak = item  # 直近から昔に向かってサーチしているので、Endは逆を言えばレンジが始まった時間ともいえる
-            end_index = i
+            rest = 0  # 範囲外カウントのリセット（N回まで範囲外でも許容するカウンター）
+            end_peak = item  # 直近から昔に向かってサーチしているので、Endは逆を言えばレンジが始まった時のPeak情報ともいえる
+            end_index = i  # Peakが始まった時のインデックス
+            if
         else:
-            # 範囲外の場合
+            # 範囲内に存在しない場合（範囲外）
             if rest <= rest_max:
                 # 4連続以内の範囲外であれば、次のループへ
                 rest += 1
@@ -216,8 +201,10 @@ def block_inspection_each(peaks):
         "oldest_time": end_peak['time_oldest'],
         "oldest_price": end_peak["peak_oldest"]
     }
-    print(" ", base_price, "," , informations['latest_time'], "(", informations['latest_price'], ")-", informations['oldest_time'], "(",
-          informations['oldest_price'], ")", informations['peaks_num'])
+    print(" ", base_price, "," , informations['latest_time'],
+          "(", informations['latest_price'], ")-", informations['oldest_time'], "(",
+          informations['oldest_price'], ")", informations['peaks_num'],
+          )
     return informations
 
 
@@ -230,14 +217,12 @@ def add_stdev(peaks):
     targets = []
     for i in range(len(peaks)):
         targets.append(peaks[i]['gap'])
-    print(targets)
     # 平均と標準偏差を算出
     ave = statistics.mean(targets)
     stdev = statistics.stdev(targets)
-    print(" 平均値", ave, "標準偏差", stdev)
     # 各偏差値を算出し、Peaksに追加しておく
     for i, item in enumerate(targets):
-        peaks[i]["stdev"] = round((targets[i]-ave)/stdev*10+50, 0)
+        peaks[i]["stdev"] = round((targets[i]-ave)/stdev*10+50, 2)
 
     return peaks
 
@@ -247,26 +232,71 @@ def turn_inspection_main(df_r):
     df_r_part = df_r[:140]
     peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
     peaks = peaks_info['all_peaks']
+    # f.print_arr(peaks[0:10])
+    # ##Peakの偏差値を求める
+    peaks = add_stdev(peaks)  # 偏差値を付与して、Peaksを上書きする
+    print(" 偏差値")
+    f.print_arr(peaks[0:15])
 
     #  ##直近と１つ前、２個前の３個で確認する
     # 直近の長さが１（１足分）の場合は折り返し直後。この場合は２個目と３個目を確認する
     # 直近の長さが２以上の場合は、折り返し後少し経過。この場合は、直近と２個目を確認する
-
     if peaks[0]['count'] <= 2:
         # こっちは３段階での調査をしても良い？（Current）
+        print("直近短い", peaks[0]['count'], peaks[0])
         later = peaks[1]
-        older = peaks[2]
-        print("直近短い", peaks[0]['count'])
+        mid = peaks[2]
+        older = peaks[3]
+        peaks = peaks[1:].copy()
+
     else:
+        print("直近長い", peaks[0]['count'], peaks[0])
         later = peaks[0]
-        older = peaks[1]
-        print("直近長い", peaks[0]['count'])
+        mid = peaks[1]
+        older = peaks[2]
 
     # Olderとlaterを確認する
-    print(turn_inspection_cal_retio(later, older))
+    # print(turn_inspection_cal_retio(later, mid))
+    # ▲フラッグ形状のまとめ
+    # 直近３個のピーク要素を比較した際、各GAP値が (⇒偏差値の±２で再検討中）
+    # 大⇒中⇒小　となっているものは「両フラッグ形状」（上下とも中央に向かう）
+    # 大⇒大⇒中　となっているものは「片フラッグ形状」（上下のいずれかが水平の抵抗線）
+    # GAPバージョン
+    # ud = 0.8  # under
+    # ov = 1.2  # over
+    # if older['gap'] * ud > mid['gap'] and mid['gap'] * ud > later['gap']:
+    #     print(" 両フラッグ形状", older['gap'], mid['gap'], later['gap'])
+    # elif mid['gap']*ud <= later['gap'] <= mid['gap']*ov and later['gap']*ud <= mid['gap'] <= later['gap']*ov:
+    #     if older['gap'] >= mid['gap']:
+    #         print(" 片フラッグ形状", older['gap'], mid['gap'], later['gap'])
+    #     else:
+    #         print(" 片フラッグ形状未遂", older['gap'], mid['gap'], later['gap'])
+    # else:
+    #     print(" 特徴無し", older['gap'], mid['gap'], later['gap'])
+    # 偏差値バージョン
+    margin = 1  # under
+    if older['stdev'] - margin > mid['stdev'] and mid['stdev'] - margin > later['stdev']:
+        print(" 両フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
+    elif mid['stdev']-1 <= later['stdev'] <= mid['stdev']+1 and later['stdev']-1 <= mid['stdev'] <= later['stdev']+1:
+        if older['stdev'] >= mid['stdev']:
+            print(" 片フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
+        else:
+            print(" 片フラッグ形状未遂", older['stdev'], mid['stdev'], later['stdev'])
+    else:
+        print(" 特徴無し", older['stdev'], mid['stdev'], later['stdev'])
 
-    # ##Peakの偏差値を求める
-    peaks = add_stdev(peaks)  # 偏差値を付与して、Peaksを上書きする
+
+    print("　偏差値andカウントでフィルタ済↓")
+    filtered_peaks = list(filter(lambda item: not (item['stdev'] <= 45 and item['count'] <= 2), peaks))
+    f.print_arr(filtered_peaks)
+    # 上方向のピーク、下方向のピーク、それぞれ直近２ポイントづつを取得する(小さいうねりは偏差値で除外)
+    top_peaks = list(filter(lambda item: item['direction'] == 1, filtered_peaks))
+    print(" TOP peaks")
+    f.print_arr(top_peaks[0:2])
+    bottom_peaks = list(filter(lambda item: item['direction'] == -1, filtered_peaks))
+    print(" BOTTOM peaks")
+    f.print_arr(bottom_peaks[0:2])
+
 
 
 
@@ -312,8 +342,8 @@ def turn_inspection_sub(latest, second):
         print(" 突き抜け中")
 
 
-# res = block_inspection_main(df_r[0:60])
-turn_inspection_main(df_r[0:60])
+res = block_inspection_main(df_r[0:60])
+# turn_inspection_main(df_r[0:60])
 
 # print(fTurn.turn_each_inspection(df_r))
 
