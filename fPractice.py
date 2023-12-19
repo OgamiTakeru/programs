@@ -227,75 +227,82 @@ def add_stdev(peaks):
 
 
 def turn_inspection_main(df_r):
-    print("TurnInspection")
-    df_r_part = df_r[:140]
+    print("TurnInspectionMAIN")
+    df_r_part = df_r[:140]  # 検証に必要な分だけ抜き取る
     peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
     peaks = peaks_info['all_peaks']
     # f.print_arr(peaks[0:10])
-    # ##Peakの偏差値を求める
+
+    # （１）Peakの偏差値を求める
     peaks = add_stdev(peaks)  # 偏差値を付与して、Peaksを上書きする
-    print(" 偏差値")
+    print(" ①偏差値調査")
     f.print_arr(peaks[0:15])
 
     #  ##直近と１つ前、２個前の３個で確認する
     # 直近の長さが１（１足分）の場合は折り返し直後。この場合は２個目と３個目を確認する
     # 直近の長さが２以上の場合は、折り返し後少し経過。この場合は、直近と２個目を確認する
-    if peaks[0]['count'] <= 2:
+    if peaks[0]['count'] <= 1:
         # こっちは３段階での調査をしても良い？（Current）
-        print("直近短い", peaks[0]['count'], peaks[0])
+        print("  直近短い", peaks[0]['count'], peaks[0])
         later = peaks[1]
         mid = peaks[2]
         older = peaks[3]
         peaks = peaks[1:].copy()
-
     else:
-        print("直近長い", peaks[0]['count'], peaks[0])
+        print("  直近長い", peaks[0]['count'], peaks[0])
         later = peaks[0]
         mid = peaks[1]
         older = peaks[2]
+        peaks = peaks[0:].copy()
+    print("  直３ later:", later['time'], "mid", mid['time'], "older",older['time'])
 
     # Olderとlaterを確認する
-    # print(turn_inspection_cal_retio(later, mid))
-    # ▲フラッグ形状のまとめ
-    # 直近３個のピーク要素を比較した際、各GAP値が (⇒偏差値の±２で再検討中）
-    # 大⇒中⇒小　となっているものは「両フラッグ形状」（上下とも中央に向かう）
-    # 大⇒大⇒中　となっているものは「片フラッグ形状」（上下のいずれかが水平の抵抗線）
-    # GAPバージョン
-    # ud = 0.8  # under
-    # ov = 1.2  # over
-    # if older['gap'] * ud > mid['gap'] and mid['gap'] * ud > later['gap']:
-    #     print(" 両フラッグ形状", older['gap'], mid['gap'], later['gap'])
-    # elif mid['gap']*ud <= later['gap'] <= mid['gap']*ov and later['gap']*ud <= mid['gap'] <= later['gap']*ov:
-    #     if older['gap'] >= mid['gap']:
-    #         print(" 片フラッグ形状", older['gap'], mid['gap'], later['gap'])
-    #     else:
-    #         print(" 片フラッグ形状未遂", older['gap'], mid['gap'], later['gap'])
-    # else:
-    #     print(" 特徴無し", older['gap'], mid['gap'], later['gap'])
     # 偏差値バージョン
     margin = 1  # under
     if older['stdev'] - margin > mid['stdev'] and mid['stdev'] - margin > later['stdev']:
-        print(" 両フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
+        print("  両フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
     elif mid['stdev']-1 <= later['stdev'] <= mid['stdev']+1 and later['stdev']-1 <= mid['stdev'] <= later['stdev']+1:
         if older['stdev'] >= mid['stdev']:
-            print(" 片フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
+            print("  片フラッグ形状", older['stdev'], mid['stdev'], later['stdev'])
         else:
-            print(" 片フラッグ形状未遂", older['stdev'], mid['stdev'], later['stdev'])
+            print("  片フラッグ形状未遂", older['stdev'], mid['stdev'], later['stdev'])
     else:
         print(" 特徴無し", older['stdev'], mid['stdev'], later['stdev'])
 
+    # UpperLower
+    turn_upper_lower(df_r_part, peaks)
 
-    print("　偏差値andカウントでフィルタ済↓")
-    filtered_peaks = list(filter(lambda item: not (item['stdev'] <= 45 and item['count'] <= 2), peaks))
-    f.print_arr(filtered_peaks)
-    # 上方向のピーク、下方向のピーク、それぞれ直近２ポイントづつを取得する(小さいうねりは偏差値で除外)
-    top_peaks = list(filter(lambda item: item['direction'] == 1, filtered_peaks))
-    print(" TOP peaks")
-    f.print_arr(top_peaks[0:2])
-    bottom_peaks = list(filter(lambda item: item['direction'] == -1, filtered_peaks))
-    print(" BOTTOM peaks")
-    f.print_arr(bottom_peaks[0:2])
 
+def turn_upper_lower(df_r, peaks):
+    """
+    検証対象のデータフレームとピーク集を受け取る。
+    ただし大きすぎる変動を検知すると、それはどうしようか迷う
+    :param df_r:
+    :return:
+    """
+    print("upper_lower Inspection")
+    #  何時間の情報を範囲にするか　1時間当たり12足分。５時間は６０足分、２時間は２４足分
+    hour = 2
+    feet = hour * 12
+    target_df = df_r[:feet]
+
+    # シンプルな最大値最小値を求める
+    high = target_df["high"].max()
+    low = target_df["low"].min()
+    inner_high = target_df["inner_high"].max()
+    inner_low = target_df["inner_low"].min()
+
+    print(target_df)
+    print("High-low(inner_high-inner_low)", high, low, inner_high, inner_low)
+
+    # 大きなピークを持っているかを確認する(hour以内のpeaksに、偏差値７０以上があるかどうか)
+    now_time = df_r.iloc[0]['time_jp']
+    test = peaks[0]["time"]
+    print(now_time, test, f.seek_time_gap(now_time, test))
+
+    # for i, item in enumerate(peaks):
+    #     print(item)
+    #     if item['time']
 
 
 
@@ -341,7 +348,7 @@ def turn_inspection_sub(latest, second):
         print(" 突き抜け中")
 
 
-res = block_inspection_main(df_r[0:60])
+# res = block_inspection_main(df_r[0:60])
 # turn_inspection_main(df_r[0:60])
 
 # print(fTurn.turn_each_inspection(df_r))

@@ -18,7 +18,29 @@ def str_to_time(str_time):
     return time_dt
 
 
+def seek_time_gap(time1, time2):
+    """
+    time1 と　time2の時間差を求める（time1とtime2の大小はこの関数で確認する）
+    必ず正の値で返却する
+    :param time1:
+    :param time2:
+    :return:
+    """
+    time1_time = str_to_time(time1)
+    time2_time = str_to_time(time2)
+    if time1_time > time2_time:
+        time_gap = time1_time - time2_time
+    else:
+        time_gap = time2_time - time1_time
+
+    return time_gap
+
+
 def now():
+    """
+    現在時刻を短縮系で返す
+    :return:
+    """
     now_str = f'{datetime.datetime.now():%Y/%m/%d %H:%M:%S}'
     day = now_str[5:10]  # 0101
     day = day.replace("0", "")  # 1/1
@@ -28,6 +50,11 @@ def now():
 
 
 def delYear(original_time):
+    """
+    現在時刻を短縮系で返す（年を消す）
+    :param original_time: 年月日をあらわした文字配列
+    :return:
+    """
     # 2023/01/01 09:10:12
     day = original_time[5:10]  # 01/01
     day = day.replace("0", "")  # 1/1
@@ -37,11 +64,37 @@ def delYear(original_time):
 
 
 def delYearDay(original_time):
+    """
+    現在時刻を短縮系で返す（年月を消す）
+    :param original_time: 年月日をあらわした文字配列
+    :return:
+    """
     # 2023/01/01 09:10:12
     day = original_time[5:10]  # 01/01
     day = day.replace("0", "")  # 1/1
     time = original_time[11:16]  # 09:10
     return str(time)
+
+
+def print_arr(arr):
+    """
+    配列型を渡すと、それをわかりやすく表示する
+    :param arr:
+    :return:
+    """
+    for i in range(len(arr)):
+        # print("ー", i, "ーーーーーーーーーーーーーーーーー")
+        print(arr[i])
+    # print("↑ーーーーーーーーーーーーーーーーーーーーーーー")
+
+
+def print_json(dic):
+    """
+    Jsonを渡すと、わかりやすく表示する
+    :param dic:
+    :return:
+    """
+    print(json.dumps(dic, indent=2, ensure_ascii=False))
 
 
 def cal_at_least(min_value, now_value):
