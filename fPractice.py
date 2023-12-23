@@ -23,9 +23,9 @@ df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 2
 df = df["data"]
 df.to_csv(tk.folder_path + 'TEST.csv', index=False, encoding="utf-8")  # 直近保存用
 df_r = df.sort_index(ascending=False)
-print(df_r.head(5))
-print(df_r.tail(5))
-print("↓↓")
+# print(df_r.head(5))
+# print(df_r.tail(5))
+# print("↓↓")
 ### ↑これより上は消さない
 
 def inspection(df_r):
@@ -276,33 +276,99 @@ def turn_inspection_main(df_r):
 def turn_upper_lower(df_r, peaks):
     """
     検証対象のデータフレームとピーク集を受け取る。
-    ただし大きすぎる変動を検知すると、それはどうしようか迷う
+    メインとしては指定の範囲の中で、動く最大値最小値の候補を算出する
     :param df_r:
     :return:
     """
     print("upper_lower Inspection")
+    now_time = df_r.iloc[0]['time_jp']
+
+    # （１）各区分での大小の値を求める
+    # 2時間以内の最大値最小値を求める
+    mid_range = turn_upper_lower_sub(df_r, peaks, 2)
+    print("2hour")
+    print(mid_range)
+    # 5時間以内の最大値最小値を求める
+    wide_range = turn_upper_lower_sub(df_r, peaks, 5)
+    print("5hour")
+    print(wide_range)
+
+    # (2)各区分を統合していく
+    # 上の値を模索する
+    arrow_gap = 0.1  # 10pipsを許容範囲とする
+    if wide_range['high'] - arrow_gap < mid_range['high'] < wide_range['high'] + arrow_gap:
+        # MidとWideがほぼ同値　（wideの方が広いほうにはないはず。⇒< wide_range['high'] + arrow_gap不要）
+        upper_confidence = 100  #
+    else:
+        upper_confidence = 0
+
+    # 下の値を模索する
+    if wide_range['low'] - arrow_gap < mid_range['low'] < wide_range['low'] + arrow_gap:
+        # MidとWideがほぼ同値　（wideの方が広いほうにはないはず。⇒< wide_range['high'] + arrow_gap不要）
+        lower_confidence = 100
+    else:
+        lower_confidence = 0
+
+    # (3)直近が最大や最小の場合
+    # 最大値更新中の場合
+    if f.seek_time_gap_seconds(wide_range['high_time'], now_time)/60 < 10:  #10分以内の発生の場合
+        high_breaking = 1
+    else:
+        high_breaking = 0
+    # 最小値更新中の場合
+    if f.seek_time_gap_seconds(wide_range['low_time'], now_time)/60 < 10:  #10分以内の発生の場合
+        low_breaking = 1
+    else:
+        low_breaking = 0
+
+
+
+def turn_upper_lower_sub(df_r, peaks, hour):
+    """
+    データフレームとピークス、データフレームに対する足数の指定用の「時間」受け取る
+    その足数の指定内で、最大値最小値を求める
+    :param df_r:
+    :param peaks:
+    :return:
+    """
+    print("  upper_lower SUB")
     #  何時間の情報を範囲にするか　1時間当たり12足分。５時間は６０足分、２時間は２４足分
-    hour = 2
     feet = hour * 12
     target_df = df_r[:feet]
 
     # シンプルな最大値最小値を求める
     high = target_df["high"].max()
+    high_index = target_df["high"].idxmax()
     low = target_df["low"].min()
+    low_index = target_df["low"].idxmin()
     inner_high = target_df["inner_high"].max()
     inner_low = target_df["inner_low"].min()
 
-    print(target_df)
-    print("High-low(inner_high-inner_low)", high, low, inner_high, inner_low)
-
     # 大きなピークを持っているかを確認する(hour以内のpeaksに、偏差値７０以上があるかどうか)
     now_time = df_r.iloc[0]['time_jp']
-    test = peaks[0]["time"]
-    print(now_time, test, f.seek_time_gap(now_time, test))
+    for i, item in enumerate(peaks):
+        if f.seek_time_gap_seconds(now_time, item['time'])/3600 > hour:
+            break  # Out
+        else:
+            # 規定時間以内のPeaksの各アイテムに対する調査
+            last_peak = item
+            last_i = i
+            if item['stdev'] > 80:
+                print("偏差値大が存在", item['stdev'], item['time'])
+    peaks = peaks[:i]  # 規定時間以内のピークス
 
-    # for i, item in enumerate(peaks):
-    #     print(item)
-    #     if item['time']
+    # print("test")
+    # print(high_index)
+    # print(target_df)
+    return {
+        "high": high,
+        "low": low,
+        "inner_high": inner_high,
+        "inner_low": inner_low,
+        "high_time": target_df.loc[high_index]['time_jp'],  # index指定はloc
+        "low_time": target_df.loc[low_index]['time_jp']
+    }
+
 
 
 

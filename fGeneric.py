@@ -18,10 +18,10 @@ def str_to_time(str_time):
     return time_dt
 
 
-def seek_time_gap(time1, time2):
+def seek_time_gap_seconds(time1, time2):
     """
     time1 と　time2の時間差を求める（time1とtime2の大小はこの関数で確認する）
-    必ず正の値で返却する
+    必ず正の値の秒で返却する　（時に直す場合は/3600、分に直す場合は/60)
     :param time1:
     :param time2:
     :return:
@@ -33,7 +33,10 @@ def seek_time_gap(time1, time2):
     else:
         time_gap = time2_time - time1_time
 
-    return time_gap
+    return time_gap.seconds
+
+
+
 
 
 def now():
