@@ -16,11 +16,12 @@ import statistics
 
 # グローバルでの宣言
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
+gl_start_time = datetime.datetime.now()
 
 
-# 検証パート
+# 解析パート
 def analysis_part(df_r):
-    print("★★検証パート")
+    print("★★解析パート")
     return mk.turn3Rule(df_r)
     # prac.turn_inspection_main(df_r)
 
@@ -161,14 +162,15 @@ def main():
     """
     # (１)情報の取得
     now_time = True  # 現在時刻実行するかどうか False True
-    count = 4500  # 取得する行数 217
+    count = 230  # 取得する行数 215 で一回（１５足で確認、２００足で解析の場合）
+    times = 1
     print('###')
     if now_time:
         # 直近の時間で検証
-        df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": count}, 1)
+        df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": count}, times)
     else:
-        # 時間を指定して検証
-        jp_time = datetime.datetime(2023, 12, 22, 0, 25, 6)  # ループ利用の場合、５０を検証とする場合、対象の４時間１５分後をセット。15の場合１時間２０分
+        # 時間を指定して検証 15足の場合 (2023, 12, 22, 23, 40, 6)と、ループ(2023, 12, 22, 0, 55, 6)
+        jp_time = datetime.datetime(2023, 12, 23, 0, 55, 6)  # ループ利用の場合、５０を検証とする場合、対象の４時間１５分後をセット。15の場合１時間15分
         euro_time_datetime = jp_time - datetime.timedelta(hours=9)
         euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
         param = {"granularity": "M5", "count": count, "to": euro_time_datetime_iso}  # 最低５０行
@@ -222,13 +224,22 @@ def main():
 
     # 結果の簡易表示用
     print("★★★RESULT★★★")
+    fin_time = datetime.datetime.now()
     fd_forview = ans_df[ans_df["ans"] == True]  # 取引有のみを抽出
     print(fd_forview)
+    if len(fd_forview) == 0:
+        return 0
+    print("startTime", gl_start_time)
+    print("finTime", fin_time)
+
     print("maxPlus", fd_forview['max_plus'].sum())
     print("maxMinus", fd_forview['max_minus'].sum())
     print("realPlus", fd_forview['tp_res'].sum())
     print("realMinus", fd_forview['lc_res'].sum())
-
+    # 回数
+    print("TotalTimes", len(fd_forview))
+    print("tpTimes", len(fd_forview[fd_forview["tp"] == True]))
+    print("lcTimes", len(fd_forview[fd_forview["lc"] == True]))
 
 main()
 

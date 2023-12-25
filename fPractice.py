@@ -14,12 +14,12 @@ import statistics
 
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
 
-jp_time = datetime.datetime(2023, 11, 24, 15, 20, 6)
+jp_time = datetime.datetime(2023, 12, 23, 6, 50, 6)
 euro_time_datetime = jp_time - datetime.timedelta(hours=9)
 euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
 param = {"granularity": "M5", "count": 200, "to": euro_time_datetime_iso}  # 最低５０行
 df = oa.InstrumentsCandles_exe("USD_JPY", param)  # 時間指定
-df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 200}, 1)  # 直近の場合
+# df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 200}, 1)  # 直近の場合
 df = df["data"]
 df.to_csv(tk.folder_path + 'TEST.csv', index=False, encoding="utf-8")  # 直近保存用
 df_r = df.sort_index(ascending=False)
@@ -417,7 +417,12 @@ def turn_inspection_sub(latest, second):
 # res = block_inspection_main(df_r[0:60])
 # turn_inspection_main(df_r[0:60])
 
-# print(fTurn.turn_each_inspection(df_r))
+# print(df_r.head(5))
+# print(df_r.tail(5))
+# ans = p.peaks_collect_main(df_r)
+# # f.print_json(ans)
+# f.print_arr(ans['all_peaks'])
+# print(t.turn_each_inspection_skip_del(df_r))
 
 
 

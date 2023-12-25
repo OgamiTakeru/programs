@@ -34,10 +34,10 @@ def peaks_collect_all(df_r):
     for i in range(22):
         if len(df_r) == 0:
             break
-        ans = fTurn.turn_each_inspection(df_r)
-        # ans = fTurn.turn_each_inspection_skip(df_r)
+        # answers = fTurn.turn_each_inspection(df_r)
+        answers = fTurn.turn_each_inspection_skip(df_r)
+        ans = answers['ans_dic']  # 返り値には色々な値があるので、指定の返却値を取る（簡易版ではない）
         df_r = df_r[ans['count']-1:]
-        # print(" ■", ans['data'].iloc[0]['time_jp'])
         if ans['direction'] == 1:
             # 上向きの場合
             peak_latest = ans['data'].iloc[0]["inner_high"]
@@ -57,18 +57,7 @@ def peaks_collect_all(df_r):
             'body_ave': ans['body_ave'],
             'count': len(ans["data"]),
             'gap': round(abs(peak_latest-peak_oldest), 3),
-            # 'data': ans['data'],
             'ans': ans,
-            # 'peak_info_right': {  # 表示の時、表示しやすいように簡易版も格納しておく
-            #     'time': ans['data'].iloc[0]['time_jp'],
-            #     'peak': peak_latest,
-            #     'time_oldest': ans['data'].iloc[-1]['time_jp'],
-            #     'peak_oldest': peak_oldest,
-            #     'direction': ans['direction'],
-            #     'body_ave': ans['body_ave'],
-            #     'count': len(ans["data"]),
-            #     'gap': round(abs(peak_latest - peak_oldest), 3),
-            # }
         }
         if len(peaks) != 0:
             if peaks[-1]['time'] == peak_info['time']:

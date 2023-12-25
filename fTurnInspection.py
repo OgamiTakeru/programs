@@ -118,9 +118,6 @@ def turn_each_inspection(data_df_origin):
         for i in range(len(data_df)-1):
             tilt = data_df.iloc[i]['middle_price'] - data_df.iloc[i+1]['middle_price']
             if tilt == 0:
-                # tiltが０になるケースは、商不可の為仮値を代入する
-                # print("  TILT0発生", data_df.iloc[i]['middle_price'], data_df.iloc[i]['time_jp'], data_df.iloc[i+1]['time_jp'])
-                # print(data_df)
                 tilt = 0.001
             tilt_direction = round(tilt / abs(tilt), 0)  # 方向のみ（念のためラウンドしておく）
             # ■初回の場合の設定。１行目と２行目の変化率に関する情報を取得、セットする
@@ -174,7 +171,7 @@ def turn_each_inspection(data_df_origin):
         # 表示等で利用する用（機能としては使わない
         memo_time = classOanda.str_to_time_hms(ans_df.iloc[-1]["time_jp"]) + "_" + classOanda.str_to_time_hms(
             ans_df.iloc[0]["time_jp"])
-        # 返却用
+        # 返却用(Simple データを持たない表示用)
         ans_dic = {
             "direction": base_direction,
             "count": counter+1,  # 最新時刻からスタートして同じ方向が何回続いているか
@@ -195,6 +192,9 @@ def turn_each_inspection(data_df_origin):
             "move_abs": move_ave,
             "memo_time": memo_time
         }
+        # 返却用（シンプルでデータフレームがないものを作成する）
+        ans_dic_simple = ans_dic.pop('data')
+        ans_dic_simple = ans_dic_simple.pop('data_remain')
 
         # ■　形状を判定する（テスト）
         type_info_dic = turn_each_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
@@ -222,11 +222,156 @@ def turn_each_inspection(data_df_origin):
             "memo_time": 0,
             "support_info":{}
         }
+        # 返却用（シンプルでデータフレームがないものを作成する）
+        ans_dic_simple = ans_dic.pop('data')
+        ans_dic_simple = ans_dic_simple.pop('data_remain')
     # ■　形状からターゲットラインを求める。
     return ans_dic
 
 
-def turn_each_inspection_skip(df_r):
+def turn_each_inspection_skip(data_df_origin):
+    """
+    渡された範囲で、何連続で同方向に進んでいるかを検証する
+    ただし方向が異なる１つ（N個）を除去しても方向が変わらない場合、延長する
+    :param data_df_origin: 直近が上側（日付降順/リバース）のデータを利用
+    :return: Dict形式のデータを返伽
+    """
+    # コピーウォーニングのための入れ替え
+    data_df = data_df_origin.copy()
+    if len(data_df) < 1:  # データが存在してい無ければ、仮のデータを入れて終了
+        # 返却用
+        ans_dic = {
+            "direction": 1,
+            "count": 0,  # 最新時刻からスタートして同じ方向が何回続いているか
+            "data": data_df,  # 対象となるデータフレーム（元のデータフレームではない）
+            "data_remain": data_df,  # 対象以外の残りのデータフレーム
+            "data_size": len(data_df),  # (注)元のデータサイズ
+            "latest_image_price": 0,
+            "oldest_image_price": 0,
+            "oldest_time_jp": 0,
+            "latest_time_jp": 0,
+            "latest_price": 0,
+            "oldest_price": 0,
+            "latest_peak_price": 0,
+            "oldest_peak_price": 0,
+            "gap": 0.0001,
+            "gap_close": 0.00001,
+            "body_ave": 0.000001,
+            "move_abs": 0.00001,
+            "memo_time": 0,
+            "support_info":{}
+        }
+        # 返却用（シンプルでデータフレームがないものを作成する）
+        ans_dic_simple = ans_dic.copy()
+        ans_dic_simple.pop('data')
+        ans_dic_simple.pop('data_remain')
+        return {"ans_dic": ans_dic, "ans_dic_simple": ans_dic_simple}
+
+    # 通常の処理
+    base_direction = 0
+    counter = 0
+    skip_num = 1
+    for i in range(len(data_df)-1):
+        tilt = data_df.iloc[i]['middle_price'] - data_df.iloc[i+1]['middle_price']
+        if tilt == 0:
+            tilt = 0.001
+        tilt_direction = round(tilt / abs(tilt), 0)  # 方向のみ（念のためラウンドしておく）
+        # ■初回の場合の設定。１行目と２行目の変化率に関する情報を取得、セットする
+        if counter == 0:
+            base_direction = tilt_direction
+        else:
+            pass
+        # ■カウントを進めていく
+        if tilt_direction == base_direction:  # 今回の検証変化率が、初回と動きの方向が同じ場合
+            counter += 1
+        else:
+            # ■SKIPを考慮したうえで、skipしても成立するか確認する。
+            if i + 1 + skip_num < len(data_df):
+                # 超えてしまう場合はスキップ
+                break
+            else:
+                tilt_cal = data_df.iloc[i]['middle_price'] - data_df.iloc[i + 1 + skip_num]['middle_price']
+                tilt_direction_skip = round(tilt_cal / abs(tilt_cal), 0) if tilt_cal != 0 else 0.001  # 傾きが継続判断基準
+                if tilt_direction_skip == base_direction:
+                    # 規定数抜いてもなお、同方向の場合
+                    counter = counter + skip_num
+                else:
+                    break
+            # break  # 連続が途切れた場合、ループを抜ける
+    # ■対象のDFを取得し、情報を格納していく
+    ans_df = data_df[0:counter+1]  # 同方向が続いてる範囲のデータを取得する
+    ans_other_df = data_df[counter:]  # 残りのデータ
+
+    if base_direction == 1:
+        # 上り方向の場合、直近の最大価格をlatest_image価格として取得(latest価格とは異なる可能性あり）
+        latest_image_price = ans_df.iloc[0]["inner_high"]
+        oldest_image_price = ans_df.iloc[-1]["inner_low"]
+        latest_peak_price = ans_df.iloc[0]["high"]
+        oldest_peak_price = ans_df.iloc[-1]["low"]
+    else:
+        # 下り方向の場合
+        latest_image_price = ans_df.iloc[0]["inner_low"]
+        oldest_image_price = ans_df.iloc[-1]["inner_high"]
+        latest_peak_price = ans_df.iloc[0]["low"]
+        oldest_peak_price = ans_df.iloc[-1]["high"]
+    #
+    # ■平均移動距離等を考える
+    body_ave = round(data_df["body_abs"].mean(),3)
+    move_ave = round(data_df["moves"].mean(),3)
+
+    # ■GAPを計算する（０の時は割る時とかに困るので、最低0.001にしておく）
+    # gap = round(abs(latest_image_price - oldest_image_price), 3)  # MAXのサイズ感
+    gap_close = round(abs(latest_image_price - ans_df.iloc[-1]["close"]), 3)  # 直近の価格（クローズの価格&向き不問）
+    if gap_close == 0:
+        gap_close = 0.001
+    else:
+        gap_close = gap_close
+
+    gap = round(abs(latest_image_price - oldest_image_price), 3)  # 直近の価格（クローズの価格&向き不問）
+    if gap == 0:
+        gap = 0.001
+    else:
+        gap = gap
+
+    # ■　一旦格納する
+    # 表示等で利用する用（機能としては使わない
+    memo_time = classOanda.str_to_time_hms(ans_df.iloc[-1]["time_jp"]) + "_" + classOanda.str_to_time_hms(
+        ans_df.iloc[0]["time_jp"])
+    # 返却用(Simple データを持たない表示用)
+    ans_dic = {
+        "direction": base_direction,
+        "count": counter+1,  # 最新時刻からスタートして同じ方向が何回続いているか
+        "data": ans_df,  # 対象となるデータフレーム（元のデータフレームではない）
+        "data_remain": ans_other_df,  # 対象以外の残りのデータフレーム
+        "data_size": len(data_df),  # (注)元のデータサイズ
+        "latest_image_price": latest_image_price,
+        "oldest_image_price": oldest_image_price,
+        "oldest_time_jp": ans_df.iloc[-1]["time_jp"],
+        "latest_time_jp": ans_df.iloc[0]["time_jp"],
+        "latest_price": ans_df.iloc[0]["close"],
+        "oldest_price": ans_df.iloc[-1]["open"],
+        "latest_peak_price": latest_peak_price,
+        "oldest_peak_price": oldest_peak_price,
+        "gap": gap,
+        "gap_close": gap_close,
+        "body_ave": body_ave,
+        "move_abs": move_ave,
+        "memo_time": memo_time
+    }
+    # 返却用（シンプルでデータフレームがないものを作成する）
+    ans_dic_simple = ans_dic.copy()
+    ans_dic_simple.pop('data')
+    ans_dic_simple.pop('data_remain')
+
+    # ■　形状を判定する（テスト）
+    type_info_dic = turn_each_support(ans_df, base_direction, ans_dic)  # 対象のデータフレームと、方向を渡す
+    ans_dic["support_info"] = type_info_dic  # あくまでメイン解析の要素の一つとして渡す
+
+    # ■　形状からターゲットラインを求める。
+    return {"ans_dic": ans_dic, "ans_dic_simple": ans_dic_simple}
+
+
+def turn_each_inspection_skip_sub(df_r):
     """
     最低でも５０行程度渡さないとエラー発生。
     渡された範囲で、何連続で同方向に進んでいるかを検証する（ただし、skipありは、２つのみの戻りはスキップして検討する）
