@@ -22,7 +22,7 @@ gl_start_time = datetime.datetime.now()
 # 解析パート
 def analysis_part(df_r):
     print("★★解析パート")
-    return mk.turn3Rule(df_r)
+    return mk.turn1Rule(df_r)
     # prac.turn_inspection_main(df_r)
 
 
@@ -37,8 +37,8 @@ def confirm_part(df_r, ana_ans):
     start_price = ana_ans['start_price']  # 検証の基準の価格
     start_time = df.iloc[0]['time_jp']
     expect_direction = ana_ans['expect_direction']  # 進むと予想した方向(1の場合high方向がプラス。
-    lc = abs(start_price - ana_ans['lc_price'])  # ロスカの幅（正の値）
-    tp = ana_ans['tp_price']  # 利確の幅（正の値）
+    lc_r = ana_ans['lc_range']  # ロスカの幅（正の値）
+    tp_r = ana_ans['tp_range']  # 利確の幅（正の値）
 
     # 検証する
     max_upper = 0
@@ -70,20 +70,20 @@ def confirm_part(df_r, ana_ans):
             max_lower_past_sec = f.seek_time_gap_seconds(item['time_jp'], start_time)
 
         # ロスカ分を検討する
-        if lc != 0:  # ロスカ設定ありの場合、ロスカに引っかかるかを検討
+        if lc_r != 0:  # ロスカ設定ありの場合、ロスカに引っかかるかを検討
             lc_jd = lower if expect_direction == 1 else upper  # 方向が買(expect=1)の場合、LCはLower方向。
-            if lc_jd > lc:  # ロスカが成立する場合
+            if lc_jd > lc_r:  # ロスカが成立する場合
                 lc_out = True
                 lc_time = item['time_jp']
                 lc_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
-                lc_res = lc
-        if tp != 0:  # TP設定あるの場合、利確に引っかかるかを検討
+                lc_res = lc_r
+        if tp_r != 0:  # TP設定あるの場合、利確に引っかかるかを検討
             tp_jd = upper if expect_direction == 1 else lower  # 方向が買(expect=1)の場合、LCはLower方向。
-            if tp_jd > tp:
+            if tp_jd > tp_r:
                 tp_out = True
                 tp_time = item['time_jp']
                 tp_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
-                tp_res = tp
+                tp_res = tp_r
         # ループの終了判定
         if lc_out or tp_out:
             break
@@ -145,11 +145,12 @@ def check_main(df_r):
     print(analysis_part_df.tail(2))
 
     # 検証パート　todo
-    ana_ans = analysis_part(analysis_part_df)
+    ana_ans = analysis_part(analysis_part_df)  # ana_ans={"ans": bool(結果照合要否必須）, "price": }
     # 結果照合パート todo
     if ana_ans['ans']:  # ポジション判定ある場合のみ
-        conf_ans = confirm_part(res_part_df, ana_ans)
         # 検証と結果の関係性の確認　todo
+        conf_ans = confirm_part(res_part_df, ana_ans)
+        # 検証結果と確認結果の結合
         ana_ans = dict(**ana_ans, **conf_ans)
     return ana_ans
 
@@ -168,7 +169,7 @@ def main():
     count = 216  # 取得する行数。単発実行の場合はこの数で調整⇒ need_analysis_num + 1
     # ■■取得時間の指定
     now_time = False  # 現在時刻実行するかどうか False True
-    target_time = datetime.datetime(2023, 12, 27, 8, 50, 6)  # 本当に欲しい時間
+    target_time = datetime.datetime(2023, 12, 27, 10, 20, 6)  # 本当に欲しい時間 (以後ループの有無で調整が入る）
     # ■■方法の指定
     inspection_only = False  # Trueの場合、Inspectionのみの実行（検証等は実行せず）
 
@@ -180,7 +181,7 @@ def main():
         df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": count}, times)
     else:
         # jp_timeは解析のみはダイレクト、解析＋検証の場合は検証の時間を考慮(検証分を後だしした時刻)して解析を取得する。
-        jp_time = target_time if inspection_only else target_time + datetime.timedelta(minutes=res_part_low*5)
+        jp_time = target_time if inspection_only else target_time + datetime.timedelta(minutes=(res_part_low+1)*5)
         euro_time_datetime = jp_time - datetime.timedelta(hours=9)
         euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
         param = {"granularity": "M5", "count": count, "to": euro_time_datetime_iso}  # 最低５０行

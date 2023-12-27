@@ -62,7 +62,7 @@ def delYear(original_time):
     day = original_time[5:10]  # 01/01
     day = day.replace("0", "")  # 1/1
     time = original_time[11:16]  # 09:10
-    day_time = day + "_" + time
+    day_time = day + " " + time
     return str(day_time)
 
 

@@ -51,8 +51,8 @@ def peaks_collect_all(df_r):
         peak_info = {
             'time': ans['data'].iloc[0]['time_jp'],
             'peak': peak_latest,
-            'time_oldest': ans['data'].iloc[-1]['time_jp'],
-            'peak_oldest': peak_oldest,
+            'time_old': ans['data'].iloc[-1]['time_jp'],
+            'peak_old': peak_oldest,
             'direction': ans['direction'],
             'body_ave': ans['body_ave'],
             'count': len(ans["data"]),

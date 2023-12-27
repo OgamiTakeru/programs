@@ -106,7 +106,7 @@ def turn3Rule(df_r):
         "ans": ans,
         "s_time": df_r_part.iloc[0]['time_jp'],
         "start_price": start_price,
-        "peakBIG_start": peak_big['time_oldest'],
+        "peakBIG_start": peak_big['time_old'],
         "peakBIG_end": peak_big['time'],
         "peakBIG_Gap": peak_big['gap'],
         "BIG": peak_big['stdev'],
@@ -121,8 +121,73 @@ def turn3Rule(df_r):
         "PEAK_GAP": peak3['peak']-peak_big['peak'],
         "PEAK_GAP_JD": jd_double,
         "expect_direction": expect_direction,
-        "lc_price": round(lc_price, 3),
-        "tp_price": round(tp_price, 3)  # 今は幅がそのまま入っている
+        "lc_price": round(abs(lc_price), 3),
+        "lc_range": round(abs(lc_price - start_price), 3),
+        "tp_price": round(tp_price, 3),  # 今は幅がそのまま入っている
+        "tp_range": round(tp_price, 3)  # 今は幅がそのまま入っている
     }
+
+
+def turn1Rule(df_r):
+    """
+    １、
+    :return:
+    """
+    print("TURN1　ルール")
+    df_r_part = df_r[:90]  # 検証に必要な分だけ抜き取る
+    peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
+    peaks = peaks_info['all_peaks']
+    peaks = add_stdev(peaks)  # 偏差値を付与する
+    f.print_arr(peaks)
+    print("PEAKS↑")
+
+    # 必要なピークを出す
+    peak_l = peaks[0]  # 最新のピーク
+    peak_o = peaks[1]
+    peaks_times = "Old:" + f.delYear(peak_l['time_old']) + "-" + f.delYear(peak_o['time']) + "_" + \
+                  "Latest:" + f.delYear(peak_o['time_old']) + "-" + f.delYear(peak_o['time'])
+    print("対象")
+    print(peak_o)
+    print(peak_l)
+
+    # 条件ごとにフラグを立てていく
+    # ①カウントの条件
+    if peak_l['count'] == 2 and peak_o['count'] >= 4:
+        f_count = True
+        print("  カウント達成")
+    else:
+        f_count = False
+        print(" カウント未達")
+
+    # ②戻り割合の条件
+    if peak_l['gap'] / peak_o['gap'] < 0.5:
+        f_return = True
+        print("  割合達成", peak_l['gap'], peak_o['gap'], round(peak_l['gap'] / peak_o['gap'], 1))
+    else:
+        f_return = False
+        print("  割合未達", peak_l['gap'], peak_o['gap'], round(peak_l['gap'] / peak_o['gap'], 1))
+
+    # ③偏差値の条件
+    if peak_o['stdev'] > 50:
+        f_size = True
+        print("  偏差値達成", peak_o['stdev'])
+    else:
+        f_size = False
+        print("  偏差値未達", peak_o['stdev'])
+
+    if f_count and f_return and f_size:
+        ans = True
+    else:
+        ans = False
+
+    return {
+        "ans": ans,
+        "start_price": peak_l['peak'],
+        "lc_range": peak_o['gap']/4,
+        "tp_range": 0.05,
+        "expect_direction": peak_o['direction'],
+    }
+
+
 
 
