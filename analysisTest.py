@@ -166,15 +166,15 @@ def main():
     analysis_part_low = 200  # 解析には200行必要(逆順DFで直近N行を結果パートに取られた後の為、[R:R+A])。check_mainと同値であること。
     need_analysis_num = res_part_low + analysis_part_low  # 検証パートと結果参照パートの合計。count<=need_analysis_num。
     # ■■取得する足数
-    count = 216  # 取得する行数。単発実行の場合はこの数で調整⇒ need_analysis_num + 1
+    count = 4000  # need_analysis_num + 1  # 取得する行数。単発実行の場合はこの数で調整⇒ need_analysis_num + 1
+    times = 3  # Count(最大5000件）を何セット取るか
     # ■■取得時間の指定
-    now_time = False  # 現在時刻実行するかどうか False True
+    now_time = True  # 現在時刻実行するかどうか False True
     target_time = datetime.datetime(2023, 12, 27, 10, 20, 6)  # 本当に欲しい時間 (以後ループの有無で調整が入る）
     # ■■方法の指定
     inspection_only = False  # Trueの場合、Inspectionのみの実行（検証等は実行せず）
 
     # (１)情報の取得
-    times = 1
     print('###')
     if now_time:
         # 直近の時間で検証
@@ -185,7 +185,8 @@ def main():
         euro_time_datetime = jp_time - datetime.timedelta(hours=9)
         euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
         param = {"granularity": "M5", "count": count, "to": euro_time_datetime_iso}  # 最低５０行
-        df = oa.InstrumentsCandles_exe("USD_JPY", param)  # 時間指定
+        df = oa.InstrumentsCandles_multi_exe("USD_JPY", param, times)
+        # df = oa.InstrumentsCandles_exe("USD_JPY", param)  # 時間指定
     # データの成型と表示
     df = df["data"]  # data部のみを取得
     df.to_csv(tk.folder_path + 'analisysTEST.csv', index=False, encoding="utf-8")  # 直近保存用

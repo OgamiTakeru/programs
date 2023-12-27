@@ -168,7 +168,7 @@ def turn1Rule(df_r):
         print("  割合未達", peak_l['gap'], peak_o['gap'], round(peak_l['gap'] / peak_o['gap'], 1))
 
     # ③偏差値の条件
-    if peak_o['stdev'] > 50:
+    if peak_o['stdev'] > 55:
         f_size = True
         print("  偏差値達成", peak_o['stdev'])
     else:
@@ -182,6 +182,7 @@ def turn1Rule(df_r):
 
     return {
         "ans": ans,
+        "s_time": df_r_part.iloc[0]['time_jp'],
         "start_price": peak_l['peak'],
         "lc_range": peak_o['gap']/4,
         "tp_range": 0.05,
