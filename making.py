@@ -48,20 +48,21 @@ def turn3Rule(df_r):
     :return:
     """
     print("TURN3　ルール")
-    df_r_part = df_r[:140]  # 検証に必要な分だけ抜き取る
+    df_r_part = df_r[:90]  # 検証に必要な分だけ抜き取る
     peaks_info = p.peaks_collect_main(df_r_part)  # Peaksの算出
     peaks = peaks_info['all_peaks']
     peaks = add_stdev(peaks)  # 偏差値を付与する
+    f.print_arr(peaks)
 
     # ピークの設定
-    peak1 = peaks[3]  # 一番長いピーク（起点）
+    peak_big = peaks[3]  # 一番長いピーク（起点）
     peak2 = peaks[2]
     peak3 = peaks[1]
     latest = peaks[0]
     print(latest)
     print(peak3)
     print(peak2)
-    print(peak1)
+    print(peak_big)
 
     # 折り返し出来たてを狙う（ピーク③の発見）
     jd_time = True if latest['count'] <= 2 else False
@@ -69,17 +70,17 @@ def turn3Rule(df_r):
 
     # ピーク１の変動が大きいかどうか (かつ３本以上のあしで構成される: １つだけが長いのではなく、継続した移動を捉えたい）
     big_border = 58
-    jd_big = True if peak1['stdev'] > big_border else False
-    print(" BIG", jd_big, peak1['stdev'])
+    jd_big = True if peak_big['stdev'] > big_border else False
+    print(" BIG", jd_big, peak_big['stdev'])
 
     # 大きなピーク(1)後のピーク(2)が、大きなピークの半分以下か。
-    jd_ratio = True if peak2['gap'] < (peak1['gap'] / 2) else False
-    print(" RATIO", jd_ratio, peak2['gap'], (peak1['gap'] / 2))
+    jd_ratio = True if peak2['gap'] < (peak_big['gap'] / 2) else False
+    print(" RATIO", jd_ratio, peak2['gap'], (peak_big['gap'] / 2))
 
     # ピーク(3)の終了価格が、大きなピーク(1)の終了価格の前後の場合（ダブルトップ）  上と下で分けた方がよい？
     range = 0.05  # 許容される最初のピークとの差（小さければ小さいほど理想のダブルトップ形状となる）
-    jd_double = True if peak1['peak'] - range < peak3['peak'] < peak1['peak'] + range else False
-    print(" DOUBLE", jd_double, peak1['peak'], peak3['peak'], peak3['peak']-peak1['peak'])
+    jd_double = True if peak_big['peak'] - range < peak3['peak'] < peak_big['peak'] + range else False
+    print(" DOUBLE", jd_double, peak_big['peak'], peak3['peak'], peak3['peak']-peak_big['peak'])
 
     if jd_big and jd_time and jd_ratio and jd_double:
         start_price = latest['peak']
@@ -95,7 +96,7 @@ def turn3Rule(df_r):
 
     # LC【価格】を確定する（ピーク２(大きいものからの戻りのピーク）の３分の１だけの移動距離　±　ピーク１の直近価格)
     lc_range_temp = peak2['gap'] / 3
-    lc_price = peak1['peak'] + (lc_range_temp * peak1['direction'])
+    lc_price = peak_big['peak'] + (lc_range_temp * peak_big['direction'])
     print(" LCcal", peak2['gap'], lc_range_temp)
 
     # TP【価格】を確定する
@@ -105,19 +106,19 @@ def turn3Rule(df_r):
         "ans": ans,
         "s_time": df_r_part.iloc[0]['time_jp'],
         "start_price": start_price,
-        "peakBIG_start": peak1['time_oldest'],
-        "peakBIG_end": peak1['time'],
-        "peakBIG_Gap": peak1['gap'],
+        "peakBIG_start": peak_big['time_oldest'],
+        "peakBIG_end": peak_big['time'],
+        "peakBIG_Gap": peak_big['gap'],
+        "BIG": peak_big['stdev'],
         "peakBigNext_END": peak2['time'],
         "peakReturn": peak3['time'],
-        "BIG": peak1['stdev'],
         "BIG_JD": jd_big,
         "2FEET": latest['count'],
         "2FEET_JD": jd_time,
-        "RETURN_big": peak1['gap'],
+        "RETURN_big": peak_big['gap'],
         "RETUEN_big_next": peak2['gap'],
         "RETURN_JD": jd_ratio,
-        "PEAK_GAP": peak3['peak']-peak1['peak'],
+        "PEAK_GAP": peak3['peak']-peak_big['peak'],
         "PEAK_GAP_JD": jd_double,
         "expect_direction": expect_direction,
         "lc_price": round(lc_price, 3),

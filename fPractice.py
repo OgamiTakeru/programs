@@ -14,12 +14,12 @@ import statistics
 
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
 
-jp_time = datetime.datetime(2023, 12, 23, 6, 50, 6)
+jp_time = datetime.datetime(2023, 12, 23, 5, 5, 6)
 euro_time_datetime = jp_time - datetime.timedelta(hours=9)
 euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
 param = {"granularity": "M5", "count": 200, "to": euro_time_datetime_iso}  # 最低５０行
 df = oa.InstrumentsCandles_exe("USD_JPY", param)  # 時間指定
-# df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 200}, 1)  # 直近の場合
+df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 200}, 1)  # 直近の場合
 df = df["data"]
 df.to_csv(tk.folder_path + 'TEST.csv', index=False, encoding="utf-8")  # 直近保存用
 df_r = df.sort_index(ascending=False)

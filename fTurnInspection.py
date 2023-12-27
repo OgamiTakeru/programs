@@ -286,7 +286,7 @@ def turn_each_inspection_skip(data_df_origin):
             counter += 1
         else:
             # ■SKIPを考慮したうえで、skipしても成立するか確認する。
-            if i + 1 + skip_num < len(data_df):
+            if i + 1 + skip_num >= len(data_df):
                 # 超えてしまう場合はスキップ
                 break
             else:
