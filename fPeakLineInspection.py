@@ -27,11 +27,11 @@ def peaks_collect_all(df_r):
     df_r = df_r[1:]
 
     # 時間的な範囲を決める（３時間）⇒36足分50
-    df_r = df_r[:70]  # ★★
+    # df_r = df_r[:70]  # ★★
     # print(" 最終時刻,",df_r.iloc[-1]["time_jp"])
 
     peaks = []  # 結果格納用
-    for i in range(22):
+    for i in range(222):
         if len(df_r) == 0:
             break
         # answers = fTurn.turn_each_inspection(df_r)

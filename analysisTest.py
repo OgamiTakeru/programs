@@ -16,6 +16,7 @@ import statistics
 
 # グローバルでの宣言
 oa = oanda_class.Oanda(tk.accountIDl, tk.access_tokenl, "live")  # クラスの定義
+print(oa.NowPrice_exe("USD_JPY"))
 gl_start_time = datetime.datetime.now()
 
 
@@ -23,6 +24,7 @@ gl_start_time = datetime.datetime.now()
 def analysis_part(df_r):
     print("★★解析パート")
     return mk.turn1Rule(df_r)
+    # return mk.now_position(df_r)
     # prac.turn_inspection_main(df_r)
 
 
@@ -32,13 +34,27 @@ def confirm_part(df_r, ana_ans):
     # 検証パートは古いのから順に並び替える（古いのが↑、新しいのが↓）
     df = df_r.sort_index(ascending=True)  # 逆順に並び替え（直近が上側に来るように）
     df = df[:10]
+    confirm_start_price = df.iloc[0]['open']
+    print("検証開始価格", confirm_start_price)
 
     # 設定 (150スタート、方向1の場合、DFを巡回して150以上どのくらい行くか)
-    start_price = ana_ans['start_price']  # 検証の基準の価格
+    trigger_price = ana_ans['trigger_price']  # 検証の基準の価格
     start_time = df.iloc[0]['time_jp']
     expect_direction = ana_ans['expect_direction']  # 進むと予想した方向(1の場合high方向がプラス。
     lc_r = ana_ans['lc_range']  # ロスカの幅（正の値）
     tp_r = ana_ans['tp_range']  # 利確の幅（正の値）
+
+    # 即時のポジションかを判定する
+    if confirm_start_price - 0.03 < trigger_price < confirm_start_price + 0.03:
+        print(" 即時ポジション", trigger_price, expect_direction)
+        position_price = trigger_price
+        position_time = df.iloc[0]['time_jp']
+        position = True
+    else:
+        print(" ポジション取得待ち", trigger_price, expect_direction)
+        position_price = 0  # 念のため。。
+        position = False
+        position_time = 0
 
     # 検証する
     max_upper = 0
@@ -56,38 +72,49 @@ def confirm_part(df_r, ana_ans):
     tp_time_past = 0
     tp_res = 0
     for i, item in df.iterrows():
-        # スタートよりも最高値が高い場合、それはプラス域。逆にマイナス域分も求めておく
-        upper = item['high'] - start_price if start_price < item['high'] else 0
-        lower = start_price - item['low'] if start_price > item['low'] else 0
-        if upper > max_upper:
-            max_upper = upper
-            max_upper_time = item['time_jp']
-            max_upper_past_sec = f.seek_time_gap_seconds(item['time_jp'], start_time)
+        if position:
+            # ■　ポジションがある場合の処理
+            # スタートよりも最高値が高い場合、それはプラス域。逆にマイナス域分も求めておく
+            upper = item['high'] - position_price if position_price < item['high'] else 0
+            lower = position_price - item['low'] if position_price > item['low'] else 0
+            if upper > max_upper:
+                max_upper = upper
+                max_upper_time = item['time_jp']
+                max_upper_past_sec = f.seek_time_gap_seconds(item['time_jp'], start_time)
 
-        if lower > max_lower:
-            max_lower = lower
-            max_lower_time = item['time_jp']
-            max_lower_past_sec = f.seek_time_gap_seconds(item['time_jp'], start_time)
+            if lower > max_lower:
+                max_lower = lower
+                max_lower_time = item['time_jp']
+                max_lower_past_sec = f.seek_time_gap_seconds(item['time_jp'], start_time)
 
-        # ロスカ分を検討する
-        if lc_r != 0:  # ロスカ設定ありの場合、ロスカに引っかかるかを検討
-            lc_jd = lower if expect_direction == 1 else upper  # 方向が買(expect=1)の場合、LCはLower方向。
-            if lc_jd > lc_r:  # ロスカが成立する場合
-                lc_out = True
-                lc_time = item['time_jp']
-                lc_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
-                lc_res = lc_r
-        if tp_r != 0:  # TP設定あるの場合、利確に引っかかるかを検討
-            tp_jd = upper if expect_direction == 1 else lower  # 方向が買(expect=1)の場合、LCはLower方向。
-            if tp_jd > tp_r:
-                tp_out = True
-                tp_time = item['time_jp']
-                tp_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
-                tp_res = tp_r
-        # ループの終了判定
-        if lc_out or tp_out:
-            break
-    # 情報整理（マイナス方向の整理）
+            # ロスカ分を検討する
+            if lc_r != 0:  # ロスカ設定ありの場合、ロスカに引っかかるかを検討
+                lc_jd = lower if expect_direction == 1 else upper  # 方向が買(expect=1)の場合、LCはLower方向。
+                if lc_jd > lc_r:  # ロスカが成立する場合
+                    print(" 　LC★", item['time_jp'], lc_r)
+                    lc_out = True
+                    lc_time = item['time_jp']
+                    lc_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
+                    lc_res = lc_r
+            if tp_r != 0:  # TP設定あるの場合、利確に引っかかるかを検討
+                tp_jd = upper if expect_direction == 1 else lower  # 方向が買(expect=1)の場合、LCはLower方向。
+                if tp_jd > tp_r:
+                    print(" 　TP★", item['time_jp'], tp_r)
+                    tp_out = True
+                    tp_time = item['time_jp']
+                    tp_time_past = f.seek_time_gap_seconds(item['time_jp'], start_time)
+                    tp_res = tp_r
+            # ループの終了判定
+            if lc_out or tp_out:
+                break
+        else:
+            # ■ポジションがない場合の動き(ポジションを取得する）
+            if item['low'] < trigger_price < item['high']:
+                position = True
+                position_price = trigger_price
+                print(" 　取得★", item['time_jp'], position_price)
+
+    # 情報整理＠ループ終了後（マイナス方向の整理）
     if expect_direction == 1:  # 買い方向を想定した場合
         max_minus = round(max_lower, 3)
         max_minus_time = max_lower_time
@@ -106,6 +133,8 @@ def confirm_part(df_r, ana_ans):
     print("買い方向", expect_direction, "最大プラス",max_plus, max_plus_time,  "最大マイナス", max_minus, max_minus_time)
 
     return {
+        "position": position,
+        "position_time": position_time,
         "max_plus": max_plus,
         "max_plus_time": max_plus_time,
         "max_plus_past_time": max_plus_past_sec,
@@ -166,11 +195,13 @@ def main():
     analysis_part_low = 200  # 解析には200行必要(逆順DFで直近N行を結果パートに取られた後の為、[R:R+A])。check_mainと同値であること。
     need_analysis_num = res_part_low + analysis_part_low  # 検証パートと結果参照パートの合計。count<=need_analysis_num。
     # ■■取得する足数
-    count = 4000  # need_analysis_num + 1  # 取得する行数。単発実行の場合はこの数で調整⇒ need_analysis_num + 1
-    times = 3  # Count(最大5000件）を何セット取るか
+    count = 4000
+    # count = need_analysis_num + 1  # need_analysis_num + 1  # 取得する行数。単発実行の場合はこの数で調整⇒ need_analysis_num + 1
+    times = 1# Count(最大5000件）を何セット取るか
     # ■■取得時間の指定
-    now_time = True  # 現在時刻実行するかどうか False True
-    target_time = datetime.datetime(2023, 12, 27, 10, 20, 6)  # 本当に欲しい時間 (以後ループの有無で調整が入る）
+    now_time =True  # 現在時刻実行するかどうか False True
+    target_time = datetime.datetime(2023, 12, 29, 16, 50, 6)  # 本当に欲しい時間 (以後ループの有無で調整が入る）
+    gr = "M5"
     # ■■方法の指定
     inspection_only = False  # Trueの場合、Inspectionのみの実行（検証等は実行せず）
 
@@ -178,13 +209,13 @@ def main():
     print('###')
     if now_time:
         # 直近の時間で検証
-        df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": count}, times)
+        df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": gr, "count": count}, times)
     else:
         # jp_timeは解析のみはダイレクト、解析＋検証の場合は検証の時間を考慮(検証分を後だしした時刻)して解析を取得する。
         jp_time = target_time if inspection_only else target_time + datetime.timedelta(minutes=(res_part_low+1)*5)
         euro_time_datetime = jp_time - datetime.timedelta(hours=9)
         euro_time_datetime_iso = str(euro_time_datetime.isoformat()) + ".000000000Z"  # ISOで文字型。.0z付き）
-        param = {"granularity": "M5", "count": count, "to": euro_time_datetime_iso}  # 最低５０行
+        param = {"granularity": gr, "count": count, "to": euro_time_datetime_iso}  # 最低５０行
         df = oa.InstrumentsCandles_multi_exe("USD_JPY", param, times)
         # df = oa.InstrumentsCandles_exe("USD_JPY", param)  # 時間指定
     # データの成型と表示

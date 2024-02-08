@@ -1,5 +1,7 @@
 import datetime  # 日付関係
 import json
+from plotly.subplots import make_subplots  # draw_graph
+import plotly.graph_objects as go  # draw_graph
 
 
 def str_to_time(str_time):
@@ -22,7 +24,7 @@ def seek_time_gap_seconds(time1, time2):
     """
     time1 と　time2の時間差を求める（time1とtime2の大小はこの関数で確認する）
     必ず正の値の秒で返却する　（時に直す場合は/3600、分に直す場合は/60)
-    :param time1:
+    :param time1: 文字列型の日付（time_jpと同形式）
     :param time2:
     :return:
     """
@@ -34,9 +36,6 @@ def seek_time_gap_seconds(time1, time2):
         time_gap = time2_time - time1_time
 
     return time_gap.seconds
-
-
-
 
 
 def now():
@@ -86,8 +85,8 @@ def print_arr(arr):
     :return:
     """
     for i in range(len(arr)):
-        # print("ー", i, "ーーーーーーーーーーーーーーーーー")
-        print(arr[i])
+        # print("ー",  i,"ーーーーーーーーーーーーーーーーー")
+        print(i, arr[i])
     # print("↑ーーーーーーーーーーーーーーーーーーーーーーー")
 
 
@@ -128,13 +127,65 @@ def cal_at_least_most(min_value, now_value, most_value):
     return ans
 
 
-def print_arr(arr):
-    for i in range(len(arr)):
-        # print("ー", i, "ーーーーーーーーーーーーーーーーー")
-        print(arr[i])
-    # print("↑ーーーーーーーーーーーーーーーーーーーーーーー")
-
 
 def print_json(dic):
     print(json.dumps(dic, indent=2, ensure_ascii=False))
+
+
+def draw_graph(mid_df):
+    """
+    ローソクチャーを表示する関数。
+    引数にはDataFrameをとり、最低限Open,hitg,low,Close,Time_jp,が必要。その他は任意。
+    """
+    order_num = 2  # 極値調査の粒度  gl['p_order']  ⇒基本は３。元プログラムと同じ必要がある（従来Globalで統一＝引数で渡したいけど。。）
+    fig = make_subplots(specs=[[{"secondary_y": True}]])  # 二軸の宣言
+    # ローソクチャートを表示する
+    graph_trace = go.Candlestick(x=mid_df["time_jp"], open=mid_df["open"], high=mid_df["high"],
+                                 low=mid_df["low"], close=mid_df["close"], name="OHLC")
+    fig.add_trace(graph_trace)
+
+    # PeakValley情報をグラフ化する
+    col_name = 'peak_' + str(order_num)
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df['peak_' + str(order_num)], mode="markers",
+                               marker={"size": 10, "color": "red", "symbol": "circle"}, name="peak")
+        fig.add_trace(add_graph)
+    col_name = 'valley_' + str(order_num)
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df['valley_' + str(order_num)], mode="markers",
+                               marker={"size": 10, "color": "blue", "symbol": "circle"}, name="valley")
+        fig.add_trace(add_graph)
+    # 移動平均線を表示する
+    col_name = "ema_l"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        fig.add_trace(add_graph)
+    col_name = "ema_s"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        fig.add_trace(add_graph)
+    col_name = "cross_price"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name],  mode="markers",
+                               marker={"size": 5, "color": "black", "symbol": "cross"}, name=col_name)
+        fig.add_trace(add_graph)
+    # ボリンジャーバンドを追加する
+    col_name = "bb_upper"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        fig.add_trace(add_graph)
+    col_name = "bb_lower"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        fig.add_trace(add_graph)
+    col_name = "bb_middle"
+    if col_name in mid_df:
+        add_graph = go.Scatter(x=mid_df["time_jp"], y=mid_df[col_name], name=col_name)
+        fig.add_trace(add_graph)
+
+    fig.show()
+    # 参考＜マーカーの種類＞
+    # symbols = ('circle', 'circle-open', 'circle-dot', 'circle-open-dot','square', 'diamond', 'cross', 'triangle-up')
+
+
 

@@ -401,16 +401,12 @@ def exe_manage():
             gl_first = 1
             gl_first_time = gl_now
             print("■■■初回", gl_now, gl_exe_mode, gl_live)  # 表示用（実行時）
-            classPosition.all_update_information(classes)  # 情報アップデート
+            # classPosition.all_update_information(classes)  # 情報アップデート
             d5_df = oa.InstrumentsCandles_multi_exe("USD_JPY", {"granularity": "M5", "count": 50}, 1)  # 時間昇順
             if d5_df['error'] == -1:
                 print("error Candle First")
             else:
                 d5_df = d5_df['data']
-            # tc = (datetime.datetime.now().replace(microsecond=0) - classOanda.str_to_time(d5_df.iloc[-1]['time_jp'])).seconds
-            # if tc > 420:  # 何故か直近の時間がおかしい時がる
-            #     print(" ★★直近データがおかしい", d5_df.iloc[-1]['time_jp'], datetime.datetime.now().replace(microsecond=0))
-
             # ↓時間指定
             jp_time = datetime.datetime(2023, 9, 20, 12, 39, 0)
             euro_time_datetime = jp_time - datetime.timedelta(hours=9)
@@ -420,6 +416,7 @@ def exe_manage():
             print(d5_df)
             d5_df = d5_df['data']
             # ↑時間指定
+
             gl_data5r_df = d5_df.sort_index(ascending=False)  # 対象となるデータフレーム（直近が上の方にある＝時間降順）をグローバルに
             d5_df.to_csv(tk.folder_path + 'main_data5.csv', index=False, encoding="utf-8")  # 直近保存用
             mode1()
